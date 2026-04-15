@@ -1,90 +1,42 @@
 # GenLeadAI Lead Management System — PRD
 
-## Original Problem Statement
-Build a full-stack Lead Management System (LMS) for a growth marketing agency that handles both B2B and B2C leads across multiple acquisition channels. Extended with ARIA — an autonomous AI Sales Agent. White+purple design overhaul applied.
-
 ## Architecture
-- **Frontend:** React + TailwindCSS + shadcn/ui + Recharts + react-beautiful-dnd
-- **Backend:** FastAPI (Python)
-- **Database:** MongoDB
-- **AI:** Claude API via Emergent LLM Key (claude-4-sonnet-20250514)
-- **Email:** Resend API (re_jCACp6PS...)
-- **Calendar:** Calendly API v2 (PAT auth, Megha Agarwal's account)
-- **Storage:** Emergent Object Storage
-- **Auth:** JWT-based with bcrypt password hashing
+- **Frontend:** React + TailwindCSS + Recharts + react-beautiful-dnd
+- **Backend:** FastAPI (Python) + MongoDB
+- **AI:** Claude API via Emergent LLM Key
+- **Email:** Resend API | **Calendar:** Calendly API v2 | **Storage:** Emergent Object Storage
+- **Auth:** JWT + bcrypt | **Design:** White+Purple (#7C35DC) theme
 
-## Design System (Implemented Feb 2026)
-- **Theme:** White-first UI with purple (#7C35DC) as dominant accent
-- **Background:** #FAFAFA (page) / #FFFFFF (cards)
-- **Borders:** #E8E0F5 (standard) / #F0ECF9 (subtle)
-- **Text:** #1A0A2E (primary) / #5A4A7A (secondary) / #9B8AB0 (muted)
-- **Gradient:** linear-gradient(135deg, #C044E0, #7C35DC, #5B28D4)
-- **Typography:** Plus Jakarta Sans (headings), Inter (body), JetBrains Mono (code)
-- **Shadows:** Purple-tinted card shadows and hover effects
+## All Implemented Features (Feb 2026)
 
-## What's Been Implemented
+### Core LMS
+- Auth (login/register/JWT), Lead CRUD with search/filters/pagination
+- Pipeline Kanban (drag-drop, B2B/B2C), Campaign CRUD, Analytics (6 chart types)
+- AI ICP scoring, summarization, email generation, chat assistant
+- CSV import, Team management, Settings, 50 leads seed data
 
-### Phase 1 — Core LMS
-- [x] Auth (login, register, JWT)
-- [x] Lead CRUD with search, filters, pagination
-- [x] Lead detail with ICP score, activity timeline
-- [x] Pipeline Kanban (drag-drop, B2B/B2C)
-- [x] Campaign CRUD with metrics
-- [x] Analytics (6 chart types)
-- [x] Team management, Settings
-- [x] AI ICP scoring, summarization, email generation
-- [x] CSV import, Resend email
-- [x] 50 leads, 3 campaigns, 3 users seed data
+### ARIA AI Sales Agent
+- Claude-powered conversation engine with state machine
+- First touch + follow-up, reply processing, qualification
+- Calendly integration (real booking), Object Storage (assets)
+- Conversation panel, Control Panel, Live Feed, Analytics
+- Human takeover/resume, handoff email alerts
 
-### Phase 2 — ARIA AI Sales Agent
-- [x] Claude-powered conversation engine
-- [x] State machine (PENDING→AWAITING→ACTIVE→BOOKED/DNC)
-- [x] First touch + follow-up generation
-- [x] Reply processing with qualification
-- [x] Calendly integration (real booking links)
-- [x] Object Storage for brand deck/portfolio
-- [x] Conversation panel on Lead Detail
-- [x] ARIA Control Panel in Settings
-- [x] Asset Library with upload/toggle
-- [x] Live Feed page + Analytics
-- [x] Human takeover/resume
-- [x] Handoff email alerts
+### New Modules (Phase 3)
+- [x] **Your 5 Today** — AI-ranked top 5 leads with reasons, actions, mark-done
+- [x] **Sleeping Leads + Revival Engine** — 14+ days inactive, segment tabs, bulk revival campaign with 4 angles + channel picker
+- [x] **No-Show Recovery** — 3-step follow-up with Calendly re-booking
+- [x] **Referral Capture** — Auto-ask after Won status
+- [x] **Intent Signals** — Email opens, link clicks with +10 score boosts
+- [x] **Broadcast Personalizer** — Filter→Template→Preview→Send with {{tokens}}
+- [x] **WhatsApp + Email dual channel** — Email real (Resend), WhatsApp simulated (pluggable)
 
-### Phase 3 — White + Purple Design Overhaul
-- [x] Complete redesign from dark mode to white+purple
-- [x] All pages: Login, Register, Dashboard, LeadInbox, LeadDetail, Pipeline, Campaigns, Analytics, AriaFeed, AriaAnalytics, Settings
-- [x] Layout: White sidebar with purple active states
-- [x] Plus Jakarta Sans + Inter + JetBrains Mono fonts
-- [x] Purple gradient buttons, ICP gauges, chart palettes
-- [x] Consistent shadow-card and shadow-hover effects
-- [x] Badge system: hot (purple), warm (amber), cold (slate)
+### Design System
+- White-first UI with purple gradient accents
+- Plus Jakarta Sans / Inter / JetBrains Mono typography
+- Full badge system, shadow-card effects, consistent color palette
 
-## Prioritized Backlog
-
-### P0 (Next Sprint)
-- Your 5 Today page (AI daily picks)
-- Sleeping Leads + Revival Engine
-- No-Show Recovery flow
-- Referral Capture
-- Automated background scheduler for ARIA touches
-
-### P1
-- Daily Brief (WhatsApp + email morning briefing)
-- Intent Signals tracking + score boosts
-- Score Decay rules engine
-- Bulk Personalization Engine (CSV import → AI personalize → send)
-- WhatsApp Broadcast Personalizer
-
-### P2
-- Sequence builder with conditional branching
-- WebSocket real-time feed
-- CSV/PDF export
-- WhatsApp Business API real integration
-- Notification center
-
-## Next Tasks
-1. Build "Your 5 Today" page with AI ranking algorithm
-2. Build Sleeping Leads page with Revival Campaign launcher
-3. Implement No-Show Recovery flow (Calendly webhook integration)
-4. Add Referral Capture (auto-trigger after Won status)
-5. Implement automated background scheduler for ARIA delayed touches
+## Backlog
+### P0: Automated background scheduler for ARIA delayed touches
+### P1: Daily Brief (morning WhatsApp+email), Score Decay engine, Sequence builder
+### P2: Real WhatsApp Business API, WebSocket live feed, CSV/PDF export
