@@ -1,32 +1,26 @@
 # GenLeadAI Lead Management System — PRD
 
 ## Original Problem Statement
-Build a full-stack Lead Management System (LMS) for a growth marketing agency that handles both B2B and B2C leads across multiple acquisition channels. Production-grade application.
+Build a full-stack Lead Management System (LMS) for a growth marketing agency that handles both B2B and B2C leads across multiple acquisition channels. Extended with ARIA — an autonomous AI Sales Agent that qualifies leads, handles objections, and books Calendly meetings.
 
 ## Architecture
 - **Frontend:** React + TailwindCSS + shadcn/ui + Recharts
-- **Backend:** FastAPI (Python) 
+- **Backend:** FastAPI (Python)
 - **Database:** MongoDB
 - **AI:** Claude API via Emergent LLM Key (claude-4-sonnet-20250514)
 - **Email:** Resend API
+- **Calendar:** Calendly API v2 (PAT auth)
+- **Storage:** Emergent Object Storage
 - **Auth:** JWT-based with bcrypt password hashing
 
 ## User Personas
-- **Admin (Megha):** Full access, manages workspace, campaigns, team
-- **Sales Rep (Sarah, James):** Manages assigned leads, logs activities
+- **Admin (Megha):** Full access, manages workspace, ARIA settings, campaigns, team
+- **Sales Rep (Sarah, James):** Manages assigned leads, logs activities, monitors ARIA
 - **Viewer:** Read-only access to dashboard and reports
 
-## Core Requirements (Static)
-1. Lead CRUD with B2B/B2C types and multi-channel acquisition tracking
-2. AI-powered ICP scoring (0-100, hot/warm/cold tiers)
-3. Pipeline Kanban boards with drag-and-drop
-4. Campaign management with metrics
-5. Analytics dashboard with charts
-6. Team management with RBAC
-7. Activity timeline per lead
-8. Email integration via Resend
-
 ## What's Been Implemented (Feb 2026)
+
+### Phase 1 — Core LMS
 - [x] Auth system (login, register, JWT tokens)
 - [x] Complete lead CRUD with search, filters, pagination
 - [x] Lead detail page with profile, ICP score, activity timeline
@@ -35,42 +29,53 @@ Build a full-stack Lead Management System (LMS) for a growth marketing agency th
 - [x] Analytics dashboard (channel, funnel, pie charts, status distribution)
 - [x] Team management page
 - [x] Settings page with workspace config
-- [x] AI ICP scoring via Claude API
-- [x] AI lead summarization
-- [x] AI email copy generation
-- [x] AI chat assistant
+- [x] AI ICP scoring, summarization, email generation, chat assistant
 - [x] CSV lead import
 - [x] Email sending via Resend
 - [x] Seed data (50 leads, 3 campaigns, 3 users, 120 activities)
-- [x] Dark mode enterprise SaaS design
+
+### Phase 2 — ARIA AI Sales Agent
+- [x] ARIA agent engine (Claude-powered conversational AI)
+- [x] Conversation state machine (PENDING → AWAITING → ACTIVE → BOOKED/ESCALATED/DNC)
+- [x] First touch generation (personalized, warm messages)
+- [x] Follow-up generation (different angle, value-add)
+- [x] Reply processing (qualification, objection handling)
+- [x] Action execution (send email, update status, book meeting, escalate, DNC)
+- [x] Calendly integration (fetch event types, availability, create scheduling links)
+- [x] Emergent Object Storage for asset uploads (brand deck, portfolio)
+- [x] ARIA conversation panel on Lead Detail page
+- [x] ARIA Control Panel in Settings (persona, timing, founder config)
+- [x] Asset Library with upload, toggle first-touch, soft-delete
+- [x] ARIA Live Feed page with active conversation threads
+- [x] ARIA Analytics page with conversion funnel, state distribution
+- [x] Human takeover / resume ARIA functionality
+- [x] Handoff email alerts to founder via Resend
 
 ## Prioritized Backlog
 
 ### P0 (Next Sprint)
-- Real-time live feed via WebSocket
-- Lead deduplication on email + phone
-- Sequence builder with multi-step drip campaigns
+- Automated background job scheduler (cron-like) for delayed first touch and follow-ups
+- WebSocket real-time updates for ARIA feed
+- Sequence builder with conditional branching
 
 ### P1
-- CSV/Excel export functionality
-- PDF report generation
+- Slack webhook integration for handoff alerts
+- CSV/PDF export
 - Notification center (in-app + email)
-- Lead assignment rules (round-robin, capacity caps)
+- Lead assignment rules (round-robin)
 - Embeddable web form generator
 
 ### P2
-- WhatsApp webhook receiver
+- WhatsApp Business API real integration (360dialog/Twilio)
 - Email thread viewer
 - Custom fields builder
-- Pipeline stage editor
 - Score history chart
 - Daily digest email
 - Saved filter presets
-- Bulk actions (assign, tag, status change)
 
 ## Next Tasks
-1. Add WebSocket for real-time lead feed
-2. Build sequence builder with conditional branching
-3. Implement notification center
-4. Add CSV/PDF export
-5. Build embeddable form generator
+1. Implement background scheduler for automated ARIA touches
+2. Add WebSocket for real-time ARIA feed updates
+3. Build sequence builder with conditional branching
+4. Add Slack webhook for handoff notifications
+5. Implement CSV/PDF export functionality
