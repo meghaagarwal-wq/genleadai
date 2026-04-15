@@ -13,6 +13,8 @@ import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import AriaFeed from './pages/AriaFeed';
 import AriaAnalytics from './pages/AriaAnalytics';
+import YourFiveToday from './pages/YourFiveToday';
+import SleepingLeads from './pages/SleepingLeads';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -58,8 +60,10 @@ function App() {
                   <Layout>
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
+                      <Route path="/your-5-today" element={<YourFiveToday />} />
                       <Route path="/leads" element={<LeadInbox />} />
                       <Route path="/leads/:id" element={<LeadDetail />} />
+                      <Route path="/sleeping-leads" element={<SleepingLeads />} />
                       <Route path="/pipeline" element={<Pipeline />} />
                       <Route path="/campaigns" element={<Campaigns />} />
                       <Route path="/analytics" element={<Analytics />} />

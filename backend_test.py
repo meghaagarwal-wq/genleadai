@@ -285,6 +285,218 @@ class GenLeadAITester:
             return True
         return False
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # NEW MODULE TESTS
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    def test_your_five_today(self):
+        """Test Your 5 Today endpoint"""
+        success, response = self.run_test(
+            "Your 5 Today",
+            "GET",
+            "api/leads/your-five-today",
+            200
+        )
+        
+        if success and 'leads' in response:
+            leads = response['leads']
+            print(f"⚡ Your 5 Today: {len(leads)} leads returned")
+            
+            # Verify each lead has required AI fields
+            for i, lead in enumerate(leads[:3]):  # Check first 3
+                if '_reason' not in lead:
+                    self.log_test(f"Your 5 Today - Lead {i+1} missing _reason", False, "Missing AI reason field")
+                    return False
+                if '_suggested_action' not in lead:
+                    self.log_test(f"Your 5 Today - Lead {i+1} missing _suggested_action", False, "Missing suggested action field")
+                    return False
+                print(f"  Lead {i+1}: {lead.get('first_name', 'Unknown')} - {lead.get('_reason', 'No reason')[:50]}...")
+            
+            return True
+        return False
+
+    def test_sleeping_leads(self):
+        """Test Sleeping Leads endpoint"""
+        success, response = self.run_test(
+            "Sleeping Leads",
+            "GET",
+            "api/leads/sleeping?threshold_days=14",
+            200
+        )
+        
+        if success and 'leads' in response:
+            leads = response['leads']
+            segments = response.get('segments', {})
+            print(f"😴 Sleeping Leads: {len(leads)} total")
+            print(f"  Segments: sleeping={segments.get('sleeping', 0)}, at_risk={segments.get('at_risk', 0)}, cold_vault={segments.get('cold_vault', 0)}")
+            
+            # Verify leads have required fields
+            for i, lead in enumerate(leads[:2]):  # Check first 2
+                if '_days_asleep' not in lead:
+                    self.log_test(f"Sleeping Leads - Lead {i+1} missing _days_asleep", False, "Missing days asleep field")
+                    return False
+                if '_segment' not in lead:
+                    self.log_test(f"Sleeping Leads - Lead {i+1} missing _segment", False, "Missing segment field")
+                    return False
+            
+            return True
+        return False
+
+    def test_revival_campaign(self, lead_ids):
+        """Test Revival Campaign endpoint"""
+        if not lead_ids:
+            print("⚠️  No lead IDs available for revival campaign test")
+            return True
+        
+        campaign_data = {
+            "lead_ids": lead_ids[:2],  # Test with max 2 leads
+            "angle": "check_in",
+            "channel": "email"
+        }
+        
+        success, response = self.run_test(
+            "Revival Campaign",
+            "POST",
+            "api/leads/revival-campaign",
+            200,
+            data=campaign_data
+        )
+        
+        if success:
+            sent = response.get('sent', 0)
+            failed = response.get('failed', 0)
+            print(f"🚀 Revival Campaign: {sent} sent, {failed} failed")
+            return True
+        return False
+
+    def test_intent_signals(self, lead_id):
+        """Test Intent Signals endpoint"""
+        if not lead_id:
+            print("⚠️  No lead ID available for intent signals test")
+            return True
+        
+        # Test firing an intent signal
+        signal_data = {
+            "lead_id": lead_id,
+            "signal_type": "email_opened",
+            "metadata": {"campaign_id": "test_campaign"}
+        }
+        
+        success, response = self.run_test(
+            "Fire Intent Signal",
+            "POST",
+            "api/intent-signals",
+            200,
+            data=signal_data
+        )
+        
+        if success:
+            print(f"📡 Intent Signal fired: {response.get('message', 'Success')}")
+            
+            # Test getting recent signals
+            success2, response2 = self.run_test(
+                "Get Recent Intent Signals",
+                "GET",
+                "api/intent-signals/recent",
+                200
+            )
+            
+            if success2 and 'signals' in response2:
+                signals = response2['signals']
+                print(f"📊 Recent signals: {len(signals)} found")
+                return True
+        
+        return False
+
+    def test_broadcast_preview(self):
+        """Test Broadcast Preview endpoint"""
+        preview_data = {
+            "name": "Test Broadcast Campaign",
+            "template": "Hi {{first_name}}, checking in about {{company_name}}",
+            "channel": "email",
+            "filters": {"icp_tier": "hot", "status": "contacted"}
+        }
+        
+        success, response = self.run_test(
+            "Broadcast Preview",
+            "POST",
+            "api/broadcasts/preview",
+            200,
+            data=preview_data
+        )
+        
+        if success and 'previews' in response:
+            previews = response['previews']
+            total = response.get('total_in_segment', 0)
+            print(f"📢 Broadcast Preview: {len(previews)} previews generated, {total} total in segment")
+            for i, preview in enumerate(previews[:2]):
+                print(f"  Preview {i+1}: {preview.get('message', 'No message')[:50]}...")
+            return True
+        return False
+
+    def test_no_show_recovery(self, lead_id):
+        """Test No-Show Recovery endpoint"""
+        if not lead_id:
+            print("⚠️  No lead ID available for no-show recovery test")
+            return True
+        
+        recovery_data = {
+            "lead_id": lead_id,
+            "step": 1,
+            "meeting_type": "discovery_call"
+        }
+        
+        success, response = self.run_test(
+            "No-Show Recovery",
+            "POST",
+            "api/leads/no-show-recovery",
+            200,
+            data=recovery_data
+        )
+        
+        if success:
+            print(f"🔄 No-Show Recovery: {response.get('message', 'Success')}")
+            return True
+        return False
+
+    def test_aria_endpoints(self, lead_id):
+        """Test ARIA endpoints"""
+        if not lead_id:
+            print("⚠️  No lead ID available for ARIA tests")
+            return True
+        
+        # Test ARIA trigger
+        trigger_data = {
+            "lead_id": lead_id,
+            "touch_type": "first_touch"
+        }
+        
+        success, response = self.run_test(
+            "ARIA Trigger",
+            "POST",
+            "api/aria/trigger",
+            200,
+            data=trigger_data
+        )
+        
+        if success:
+            print(f"🤖 ARIA Trigger: {response.get('message', 'No message')[:50]}...")
+            
+            # Test ARIA conversation
+            success2, response2 = self.run_test(
+                "ARIA Conversation",
+                "GET",
+                f"api/aria/conversation/{lead_id}",
+                200
+            )
+            
+            if success2:
+                conversation = response2.get('conversation', [])
+                print(f"💬 ARIA Conversation: {len(conversation)} messages")
+                return True
+        
+        return False
+
     def run_comprehensive_test(self):
         """Run all tests in sequence"""
         print("🚀 Starting GenLeadAI LMS Backend Tests")
@@ -328,6 +540,44 @@ class GenLeadAITester:
         # Users and Analytics
         self.test_get_users()
         self.test_dashboard_analytics()
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # NEW MODULE TESTS
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        print("\n🆕 Testing New Modules...")
+        print("-" * 30)
+        
+        # Test Your 5 Today
+        self.test_your_five_today()
+        
+        # Test Sleeping Leads
+        self.test_sleeping_leads()
+        
+        # Get some lead IDs for testing
+        lead_ids = []
+        if leads_data and 'leads' in leads_data:
+            lead_ids = [lead.get('id') for lead in leads_data['leads'][:3] if lead.get('id')]
+        if create_success and lead_id:
+            lead_ids.append(lead_id)
+        
+        # Test Revival Campaign
+        if lead_ids:
+            self.test_revival_campaign(lead_ids)
+        
+        # Test Intent Signals
+        if lead_ids:
+            self.test_intent_signals(lead_ids[0])
+        
+        # Test Broadcast Preview
+        self.test_broadcast_preview()
+        
+        # Test No-Show Recovery
+        if lead_ids:
+            self.test_no_show_recovery(lead_ids[0])
+        
+        # Test ARIA endpoints
+        if lead_ids:
+            self.test_aria_endpoints(lead_ids[0])
         
         # Print summary
         print("\n" + "=" * 50)

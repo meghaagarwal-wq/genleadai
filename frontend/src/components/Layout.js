@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   House, Tray, ChartBar, MegaphoneSimple, ChartLineUp, UsersThree,
-  Gear, SignOut, Bell, MagnifyingGlass, Robot, Moon, List,
+  Gear, SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning,
 } from '@phosphor-icons/react';
 
 const Layout = ({ children }) => {
@@ -15,7 +15,9 @@ const Layout = ({ children }) => {
 
   const navItems = [
     { icon: House, label: 'Dashboard', path: '/' },
+    { icon: Lightning, label: 'Your 5 Today', path: '/your-5-today' },
     { icon: Tray, label: 'Lead Inbox', path: '/leads' },
+    { icon: Moon, label: 'Sleeping Leads', path: '/sleeping-leads' },
     { icon: ChartBar, label: 'Pipeline', path: '/pipeline' },
     { icon: MegaphoneSimple, label: 'Campaigns', path: '/campaigns' },
     { icon: Robot, label: 'ARIA Agent', path: '/aria' },

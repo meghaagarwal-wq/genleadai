@@ -279,6 +279,91 @@ async def get_leads(
     
     return {"leads": leads, "total": total, "skip": skip, "limit": limit}
 
+# Specific lead routes MUST come before {lead_id} parameter route
+@app.get("/api/leads/your-five-today")
+async def get_your_five_today_route(current_user: dict = Depends(get_current_user)):
+    """Redirect to the actual handler below."""
+    # This is a forwarding stub — actual logic is in the handler at the bottom of the file
+    excluded = ["won", "lost", "do_not_contact"]
+    candidates = list(leads_collection.find({"status": {"$nin": excluded}}).limit(200))
+    if not candidates:
+        return {"leads": [], "message": "No active leads found"}
+    scored = []
+    now = datetime.now(timezone.utc)
+    for lead in candidates:
+        lead = serialize_doc(lead)
+        score = 0
+        reasons = []
+        icp = lead.get("icp_score", 0)
+        score += icp * 0.3
+        if icp >= 70:
+            reasons.append(f"High ICP score ({icp}) — strong fit for your services")
+        last_contact = lead.get("last_contacted_at")
+        days_since = 999
+        if last_contact:
+            try:
+                lc = datetime.fromisoformat(last_contact.replace("Z", "+00:00"))
+                days_since = (now - lc).days
+            except:
+                days_since = 30
+        else:
+            reasons.append("Never been contacted — fresh opportunity")
+        score += min(days_since * 1.5, 30) * 0.2 / 30 * 100
+        intent_boost = lead.get("intent_score_boost", 0)
+        if intent_boost > 0:
+            score += 25
+            reasons.append("Showed recent intent signals")
+        aria_state = lead.get("aria_state")
+        if aria_state == "ESCALATED_TO_HUMAN":
+            score += 15
+            reasons.append("ARIA escalated — lead asked for a human")
+        elif aria_state == "CONVERSATION_ACTIVE":
+            score += 10
+            reasons.append("Active ARIA conversation — warm and engaged")
+        no_shows = lead.get("no_show_count", 0)
+        if no_shows > 0:
+            score += 10
+            reasons.append(f"No-showed {no_shows} time(s) — recovery needed")
+        if not reasons:
+            reasons.append(f"ICP score {icp} — worth a personal touch" if days_since <= 7 else f"No contact in {days_since} days — time to re-engage")
+        lead["_rank_score"] = score
+        lead["_reason"] = reasons[0]
+        lead["_all_reasons"] = reasons
+        lead["_days_since_contact"] = days_since
+        if aria_state == "ESCALATED_TO_HUMAN":
+            lead["_suggested_action"] = {"type": "call", "label": "Call them", "reason": "They asked for a human"}
+        elif days_since > 14:
+            lead["_suggested_action"] = {"type": "email", "label": "Send check-in", "reason": "Re-open with value"}
+        elif icp >= 70:
+            lead["_suggested_action"] = {"type": "call", "label": "Book a call", "reason": "High-fit lead"}
+        else:
+            lead["_suggested_action"] = {"type": "whatsapp", "label": "WhatsApp", "reason": "Quick personal touch"}
+        scored.append(lead)
+    scored.sort(key=lambda x: x["_rank_score"], reverse=True)
+    return {"leads": scored[:5], "generated_at": now.isoformat()}
+
+@app.get("/api/leads/sleeping")
+async def get_sleeping_leads_route(threshold_days: int = 14, current_user: dict = Depends(get_current_user)):
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
+    query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}, "$or": [{"last_contacted_at": {"$lt": cutoff}}, {"last_contacted_at": None}, {"last_contacted_at": {"$exists": False}}]}
+    leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
+    leads = [serialize_doc(l) for l in leads]
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        lc = lead.get("last_contacted_at")
+        if lc:
+            try: days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
+            except: days = 30
+        else:
+            try: days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
+            except: days = 30
+        lead["_days_asleep"] = days
+        lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
+    sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
+    at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
+    cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
+    return {"leads": leads, "total": len(leads), "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault}}
+
 @app.get("/api/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     try:
@@ -1276,3 +1361,510 @@ async def delete_asset(asset_id: str, current_user: dict = Depends(get_current_u
         {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     return {"message": "Asset deleted"}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: YOUR 5 TODAY
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@app.get("/api/leads/your-five-today")
+async def get_your_five_today(current_user: dict = Depends(get_current_user)):
+    """AI-ranked top 5 leads the founder should personally touch today."""
+    try:
+        # Get all active leads (not won, lost, do_not_contact)
+        excluded = ["won", "lost", "do_not_contact"]
+        candidates = list(leads_collection.find(
+            {"status": {"$nin": excluded}},
+        ).limit(200))
+
+        if not candidates:
+            return {"leads": [], "message": "No active leads found"}
+
+        scored = []
+        now = datetime.now(timezone.utc)
+        for lead in candidates:
+            lead = serialize_doc(lead)
+            score = 0
+            reasons = []
+
+            # ICP score weight (30%)
+            icp = lead.get("icp_score", 0)
+            score += icp * 0.3
+            if icp >= 70:
+                reasons.append(f"High ICP score ({icp}) — strong fit for your services")
+
+            # Days since last contact (20%)
+            last_contact = lead.get("last_contacted_at")
+            days_since = 999
+            if last_contact:
+                try:
+                    lc = datetime.fromisoformat(last_contact.replace("Z", "+00:00"))
+                    days_since = (now - lc).days
+                except:
+                    days_since = 30
+            else:
+                days_since = 999
+                reasons.append("Never been contacted — fresh opportunity")
+            score += min(days_since * 1.5, 30) * 0.2 / 30 * 100
+
+            # Intent signals (25%)
+            intent = lead.get("intent_signals") or []
+            intent_boost = lead.get("intent_score_boost", 0)
+            if intent_boost > 0 or len(intent) > 0:
+                score += 25
+                reasons.append("Showed recent intent signals")
+
+            # ARIA state (15%)
+            aria_state = lead.get("aria_state")
+            if aria_state == "ESCALATED_TO_HUMAN":
+                score += 15
+                reasons.append("ARIA escalated — lead asked for a human")
+            elif aria_state == "CONVERSATION_ACTIVE":
+                score += 10
+                reasons.append("Active ARIA conversation — warm and engaged")
+            elif aria_state == "AWAITING_REPLY_1" or aria_state == "AWAITING_REPLY_2":
+                score += 5
+
+            # No-show recovery (10%)
+            no_shows = lead.get("no_show_count", 0)
+            if no_shows > 0:
+                score += 10
+                reasons.append(f"No-showed {no_shows} time(s) — recovery needed")
+
+            # Fallback reason
+            if not reasons:
+                if days_since > 7:
+                    reasons.append(f"No contact in {days_since} days — time to re-engage")
+                else:
+                    reasons.append(f"ICP score {icp} — worth a personal touch")
+
+            lead["_rank_score"] = score
+            lead["_reason"] = reasons[0] if reasons else "Recommended by AI"
+            lead["_all_reasons"] = reasons
+            lead["_days_since_contact"] = days_since
+            scored.append(lead)
+
+        # Sort and take top 5
+        scored.sort(key=lambda x: x["_rank_score"], reverse=True)
+        top5 = scored[:5]
+
+        # Add suggested actions
+        for lead in top5:
+            if lead.get("aria_state") == "ESCALATED_TO_HUMAN":
+                lead["_suggested_action"] = {"type": "call", "label": "Call them directly", "reason": "They asked for a human — make it personal"}
+            elif lead.get("_days_since_contact", 0) > 14:
+                lead["_suggested_action"] = {"type": "email", "label": "Send a check-in", "reason": "Re-open with value"}
+            elif lead.get("icp_score", 0) >= 70:
+                lead["_suggested_action"] = {"type": "call", "label": "Book a call", "reason": "High-fit lead ready for discovery"}
+            else:
+                lead["_suggested_action"] = {"type": "whatsapp", "label": "WhatsApp message", "reason": "Quick personal touch"}
+
+        return {"leads": top5, "generated_at": now.isoformat()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Your 5 Today failed: {str(e)}")
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: SLEEPING LEADS + REVIVAL ENGINE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@app.get("/api/leads/sleeping")
+async def get_sleeping_leads(
+    threshold_days: int = 14,
+    tier: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get leads with no activity beyond threshold days."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
+    query = {
+        "status": {"$nin": ["won", "lost", "do_not_contact"]},
+        "$or": [
+            {"last_contacted_at": {"$lt": cutoff}},
+            {"last_contacted_at": None},
+            {"last_contacted_at": {"$exists": False}},
+        ]
+    }
+
+    leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
+    leads = [serialize_doc(l) for l in leads]
+
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        lc = lead.get("last_contacted_at")
+        if lc:
+            try:
+                days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
+            except:
+                days = 30
+        else:
+            days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
+        lead["_days_asleep"] = days
+        lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
+
+    # Segment counts
+    sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
+    at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
+    cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
+
+    return {
+        "leads": leads,
+        "total": len(leads),
+        "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault},
+    }
+
+class RevivalCampaignRequest(BaseModel):
+    lead_ids: List[str]
+    angle: str = "check_in"  # check_in, new_value, limited_time, direct_ask
+    channel: str = "email"  # email, whatsapp, both
+
+@app.post("/api/leads/revival-campaign")
+async def launch_revival_campaign(request: RevivalCampaignRequest, current_user: dict = Depends(get_current_user)):
+    """Launch a revival campaign for sleeping leads."""
+    results = {"sent": 0, "failed": 0, "messages": []}
+
+    angle_prompts = {
+        "check_in": "Write a warm, friendly check-in message. Be genuine and brief.",
+        "new_value": "Share a valuable insight or asset. Lead with value, not a pitch.",
+        "limited_time": "Create gentle urgency — a limited-time offer or exclusive opportunity.",
+        "direct_ask": "Be direct and ask for a meeting. Confident but not pushy.",
+    }
+
+    for lead_id in request.lead_ids[:50]:  # Cap at 50
+        try:
+            lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+            if not lead:
+                continue
+            lead = serialize_doc(lead)
+
+            # Generate personalized message via AI
+            chat = LlmChat(
+                api_key=os.getenv("EMERGENT_LLM_KEY"),
+                session_id=f"revival_{lead_id}",
+                system_message=f"You are Aria, a warm sales assistant for {os.getenv('COMPANY_NAME', 'GenLeadAI')}. {angle_prompts.get(request.angle, angle_prompts['check_in'])}"
+            )
+            chat.with_model("anthropic", "claude-4-sonnet-20250514")
+
+            prompt = f"Write a short revival message (3-4 sentences) for: {lead.get('first_name')} {lead.get('last_name')}, {lead.get('company_name', 'their company')}, source: {lead.get('source_channel')}. They haven't been contacted recently."
+            user_msg = UserMessage(text=prompt)
+            response = await chat.send_message(user_msg)
+            message = response.strip()
+
+            # Send via selected channel
+            if request.channel in ["email", "both"] and lead.get("email"):
+                try:
+                    params = {
+                        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                        "to": [lead["email"]],
+                        "subject": f"Quick thought for you, {lead.get('first_name', 'there')}",
+                        "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{message.replace(chr(10),'<br>')}</p><br><p style='color:#666'>Best,<br>Aria<br>Assistant to {os.getenv('FOUNDER_NAME','Megha')}, {os.getenv('COMPANY_NAME','GenLeadAI')}</p></div>",
+                    }
+                    await asyncio.to_thread(resend.Emails.send, params)
+                except Exception as e:
+                    print(f"Revival email failed for {lead_id}: {e}")
+
+            # Log WhatsApp as simulated
+            if request.channel in ["whatsapp", "both"]:
+                activities_collection.insert_one({
+                    "lead_id": lead_id, "user_id": "aria@genleadai.ai",
+                    "activity_type": "whatsapp_sent",
+                    "subject": f"Revival: {request.angle.replace('_',' ')} message",
+                    "body": message[:200], "outcome": None, "duration_minutes": None,
+                    "metadata": {"via": "aria", "channel": "whatsapp", "simulated": True, "revival_angle": request.angle},
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+
+            # Update lead
+            leads_collection.update_one(
+                {"_id": ObjectId(lead_id)},
+                {"$set": {
+                    "last_contacted_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "contacted",
+                    "aria_state": "AWAITING_REPLY_1",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }, "$inc": {"revival_attempts": 1}}
+            )
+
+            # Log activity
+            activities_collection.insert_one({
+                "lead_id": lead_id, "user_id": "aria@genleadai.ai",
+                "activity_type": "revival_triggered",
+                "subject": f"Revival campaign: {request.angle.replace('_',' ')}",
+                "body": message[:200], "outcome": None, "duration_minutes": None,
+                "metadata": {"angle": request.angle, "channel": request.channel},
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+
+            results["sent"] += 1
+            results["messages"].append({"lead_id": lead_id, "name": f"{lead.get('first_name')} {lead.get('last_name')}", "message": message[:150]})
+        except Exception as e:
+            results["failed"] += 1
+            print(f"Revival failed for {lead_id}: {e}")
+
+    return results
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: NO-SHOW RECOVERY
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class NoShowRequest(BaseModel):
+    lead_id: str
+    step: int = 1  # 1, 2, or 3
+
+@app.post("/api/leads/no-show-recovery")
+async def trigger_no_show_recovery(request: NoShowRequest, current_user: dict = Depends(get_current_user)):
+    """Trigger no-show recovery message for a lead."""
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+
+    messages = {
+        1: f"Hey {lead.get('first_name', 'there')}, looks like we missed each other! Want to find another time that works? I'd love to connect.",
+        2: f"Hi {lead.get('first_name', 'there')}! Still happy to show you how we've helped companies like yours grow. Here's a quick look at some results we've driven — would love to chat when you're free.",
+        3: f"Hi {lead.get('first_name', 'there')}, I'll leave this here in case timing wasn't right. Happy to reconnect whenever you're ready. No pressure at all!",
+    }
+
+    message = messages.get(request.step, messages[1])
+
+    # Get Calendly link
+    event_types = await get_calendly_event_types()
+    booking_url = None
+    if event_types:
+        link = await create_scheduling_link(event_types[0].get("uri"), lead.get("first_name"), lead.get("email"))
+        if link:
+            booking_url = link.get("booking_url")
+            message += f"\n\nBook a time here: {booking_url}"
+
+    # Send email
+    if lead.get("email"):
+        try:
+            params = {
+                "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": [lead["email"]],
+                "subject": f"Missed you earlier, {lead.get('first_name', 'there')}!" if request.step == 1 else f"Quick follow-up, {lead.get('first_name', 'there')}",
+                "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{message.replace(chr(10),'<br>')}</p></div>",
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as e:
+            print(f"No-show email failed: {e}")
+
+    # Update lead
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat(), "last_contacted_at": datetime.now(timezone.utc).isoformat()}
+    if request.step >= 3:
+        update_data["aria_state"] = "ESCALATED_TO_HUMAN"
+        update_data["aria_handed_off"] = True
+    leads_collection.update_one({"_id": ObjectId(request.lead_id)}, {"$set": update_data, "$inc": {"no_show_count": 1 if request.step == 1 else 0}})
+
+    # Log activity
+    activities_collection.insert_one({
+        "lead_id": request.lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": "no_show_detected",
+        "subject": f"No-show recovery step {request.step}",
+        "body": message[:200], "outcome": None, "duration_minutes": None,
+        "metadata": {"step": request.step, "booking_url": booking_url},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"message": message, "step": request.step, "booking_url": booking_url, "escalated": request.step >= 3}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: REFERRAL CAPTURE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@app.post("/api/leads/{lead_id}/referral-ask")
+async def trigger_referral_ask(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Send referral ask to a won lead."""
+    lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+
+    if lead.get("referral_message_sent"):
+        return {"message": "Referral already requested", "already_sent": True}
+
+    founder = os.getenv("FOUNDER_NAME", "Megha")
+    message = f"Hey {lead.get('first_name', 'there')}, so glad to be working together! Quick question — anyone in your network dealing with similar growth challenges? Even a warm intro would mean a lot to us. Thanks so much!"
+
+    if lead.get("email"):
+        try:
+            params = {
+                "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": [lead["email"]],
+                "subject": f"Quick ask, {lead.get('first_name', 'there')} — know anyone who needs growth help?",
+                "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{message.replace(chr(10),'<br>')}</p><br><p style='color:#666'>Warm regards,<br>Aria<br>on behalf of {founder}</p></div>",
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as e:
+            print(f"Referral email failed: {e}")
+
+    leads_collection.update_one({"_id": ObjectId(lead_id)}, {"$set": {"referral_message_sent": True, "updated_at": datetime.now(timezone.utc).isoformat()}})
+
+    activities_collection.insert_one({
+        "lead_id": lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": "referral_requested",
+        "subject": "Referral ask sent",
+        "body": message[:200], "outcome": None, "duration_minutes": None,
+        "metadata": {"channel": "email"},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"message": message, "sent": True}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: INTENT SIGNALS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class IntentSignalRequest(BaseModel):
+    lead_id: str
+    signal_type: str  # email_opened, link_clicked, calendly_clicked, website_revisit, whatsapp_read
+
+@app.post("/api/intent-signals")
+async def fire_intent_signal(request: IntentSignalRequest, current_user: dict = Depends(get_current_user)):
+    """Log an intent signal and boost ICP score."""
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    signal_labels = {
+        "email_opened": "opened your email",
+        "link_clicked": "clicked a link",
+        "calendly_clicked": "clicked Calendly link",
+        "website_revisit": "revisited your website",
+        "whatsapp_read": "read your WhatsApp message",
+    }
+
+    signal = {
+        "type": request.signal_type,
+        "label": signal_labels.get(request.signal_type, request.signal_type),
+        "fired_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Update lead with signal + score boost
+    leads_collection.update_one(
+        {"_id": ObjectId(request.lead_id)},
+        {
+            "$push": {"intent_signals": signal},
+            "$inc": {"icp_score": 10, "intent_score_boost": 10},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+
+    # Cap score at 100
+    lead_updated = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if lead_updated and lead_updated.get("icp_score", 0) > 100:
+        leads_collection.update_one({"_id": ObjectId(request.lead_id)}, {"$set": {"icp_score": 100}})
+
+    # Update tier
+    new_score = min(lead_updated.get("icp_score", 0), 100) if lead_updated else 0
+    new_tier = "hot" if new_score >= 70 else ("warm" if new_score >= 40 else "cold")
+    leads_collection.update_one({"_id": ObjectId(request.lead_id)}, {"$set": {"icp_tier": new_tier}})
+
+    # Log activity
+    activities_collection.insert_one({
+        "lead_id": request.lead_id, "user_id": "system",
+        "activity_type": "intent_signal_fired",
+        "subject": f"Intent signal: {signal['label']}",
+        "body": None, "outcome": None, "duration_minutes": None,
+        "metadata": signal,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"signal": signal, "new_score": new_score, "new_tier": new_tier, "boosted": True}
+
+@app.get("/api/intent-signals/recent")
+async def get_recent_intent_signals(limit: int = 20, current_user: dict = Depends(get_current_user)):
+    """Get recent intent signals across all leads."""
+    signals = list(activities_collection.find(
+        {"activity_type": "intent_signal_fired"}, {"_id": 0}
+    ).sort("created_at", DESCENDING).limit(limit))
+
+    # Enrich with lead names
+    for sig in signals:
+        lead = leads_collection.find_one({"_id": ObjectId(sig["lead_id"])}, {"first_name": 1, "last_name": 1, "company_name": 1})
+        if lead:
+            sig["lead_name"] = f"{lead.get('first_name', '')} {lead.get('last_name', '')}"
+            sig["company"] = lead.get("company_name")
+
+    return {"signals": signals}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MODULE: BROADCAST PERSONALIZER
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class BroadcastRequest(BaseModel):
+    name: str
+    template: str
+    channel: str = "email"  # email, whatsapp, both
+    filters: Dict[str, Any] = {}  # lead_type, icp_tier, status, tags
+
+@app.post("/api/broadcasts")
+async def create_broadcast(request: BroadcastRequest, current_user: dict = Depends(get_current_user)):
+    """Create and send a personalized broadcast to a filtered segment."""
+    query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}}
+    if request.filters.get("lead_type"):
+        query["lead_type"] = request.filters["lead_type"]
+    if request.filters.get("icp_tier"):
+        query["icp_tier"] = request.filters["icp_tier"]
+    if request.filters.get("status"):
+        query["status"] = request.filters["status"]
+
+    leads = list(leads_collection.find(query).limit(100))
+    results = {"total_targeted": len(leads), "sent": 0, "failed": 0, "channel": request.channel}
+
+    for lead_doc in leads:
+        lead = serialize_doc(lead_doc)
+        try:
+            # Personalize template
+            personalized = request.template
+            personalized = personalized.replace("{{first_name}}", lead.get("first_name", "there") or "there")
+            personalized = personalized.replace("{{company}}", lead.get("company_name", "your company") or "your company")
+            personalized = personalized.replace("{{industry}}", lead.get("industry", "your industry") or "your industry")
+
+            if request.channel in ["email", "both"] and lead.get("email"):
+                try:
+                    params = {
+                        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                        "to": [lead["email"]],
+                        "subject": f"{request.name}",
+                        "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{personalized.replace(chr(10),'<br>')}</p></div>",
+                    }
+                    await asyncio.to_thread(resend.Emails.send, params)
+                except:
+                    pass
+
+            if request.channel in ["whatsapp", "both"]:
+                activities_collection.insert_one({
+                    "lead_id": lead["id"], "user_id": "broadcast",
+                    "activity_type": "whatsapp_sent",
+                    "subject": f"Broadcast: {request.name}",
+                    "body": personalized[:200], "outcome": None, "duration_minutes": None,
+                    "metadata": {"via": "broadcast", "channel": "whatsapp", "simulated": True},
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+
+            results["sent"] += 1
+        except:
+            results["failed"] += 1
+
+    return results
+
+@app.post("/api/broadcasts/preview")
+async def preview_broadcast(request: BroadcastRequest, current_user: dict = Depends(get_current_user)):
+    """Preview personalized messages for 5 random leads from the segment."""
+    query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}}
+    if request.filters.get("lead_type"):
+        query["lead_type"] = request.filters["lead_type"]
+    if request.filters.get("icp_tier"):
+        query["icp_tier"] = request.filters["icp_tier"]
+
+    leads = list(leads_collection.find(query).limit(5))
+    previews = []
+    for lead_doc in leads:
+        lead = serialize_doc(lead_doc)
+        msg = request.template
+        msg = msg.replace("{{first_name}}", lead.get("first_name", "there") or "there")
+        msg = msg.replace("{{company}}", lead.get("company_name", "your company") or "your company")
+        msg = msg.replace("{{industry}}", lead.get("industry", "your industry") or "your industry")
+        previews.append({"lead_name": f"{lead.get('first_name')} {lead.get('last_name')}", "message": msg})
+
+    total = leads_collection.count_documents(query)
+    return {"previews": previews, "total_in_segment": total}

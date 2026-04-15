@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-04-15T10:57:41.998342",
-  "tests_run": 14,
-  "tests_passed": 14,
+  "timestamp": "2026-04-15T11:17:48.243933",
+  "tests_run": 23,
+  "tests_passed": 23,
   "success_rate": 1.0,
   "results": [
     {
@@ -71,6 +71,51 @@
     },
     {
       "test": "Dashboard Analytics",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Your 5 Today",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Sleeping Leads",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Revival Campaign",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Fire Intent Signal",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Recent Intent Signals",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Broadcast Preview",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "No-Show Recovery",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "ARIA Trigger",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "ARIA Conversation",
       "success": true,
       "details": ""
     }
