@@ -1868,3 +1868,512 @@ async def preview_broadcast(request: BroadcastRequest, current_user: dict = Depe
 
     total = leads_collection.count_documents(query)
     return {"previews": previews, "total_in_segment": total}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ARIA SALES PA — 3-PHASE LIFECYCLE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOUNDER_PROFILE = {
+    "name": os.getenv("FOUNDER_NAME", "Megha"),
+    "company": os.getenv("COMPANY_NAME", "GenLeadAI"),
+    "role": "Founder & CEO",
+    "what_we_do": "AI-first growth marketing and fractional CMO services for B2B and B2C businesses",
+    "ideal_client": "Founders and CMOs sitting on leads but with no time or system to convert them",
+    "tone": "Warm, founder-to-founder. Sounds like Megha wrote it herself — never corporate, never scripted, never salesy. Like a smart friend who knows marketing.",
+    "signature_sign_off": "Warm regards, Megha",
+    "timezone": "Asia/Kolkata",
+    "working_hours": "9 AM – 7 PM IST",
+    "calendly_event": "20-min Discovery Call with Megha",
+}
+
+# ─── Pre-Call Research ───
+
+class PreCallResearchRequest(BaseModel):
+    lead_id: str
+
+@app.post("/api/aria/research")
+async def pre_call_research(request: PreCallResearchRequest, current_user: dict = Depends(get_current_user)):
+    """Run pre-call research on a lead using AI inference."""
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+
+    chat = LlmChat(
+        api_key=os.getenv("EMERGENT_LLM_KEY"),
+        session_id=f"research_{request.lead_id}",
+        system_message="You are a senior B2B sales researcher. Generate comprehensive pre-call research based on the lead's profile data. Be specific, actionable, and focused on what a founder needs to know before a discovery call."
+    )
+    chat.with_model("anthropic", "claude-4-sonnet-20250514")
+
+    is_b2b = lead.get("lead_type") == "B2B"
+    prompt = f"""Research this lead for a pre-call briefing:
+
+Name: {lead.get('first_name')} {lead.get('last_name')}
+Email: {lead.get('email')}
+Company: {lead.get('company_name', 'Unknown')}
+Job Title: {lead.get('job_title', 'Unknown')}
+Industry: {lead.get('industry', 'Unknown')}
+Revenue Range: {lead.get('revenue_range', 'Unknown')}
+City: {lead.get('city', 'Unknown')}, Country: {lead.get('country', 'Unknown')}
+Source Channel: {lead.get('source_channel')}
+ICP Score: {lead.get('icp_score')}
+Notes: {lead.get('notes', 'None')}
+
+Generate a JSON research object with these keys:
+- company_summary: 2-3 sentences about the company
+- person_summary: 2-3 sentences about the person's likely role and priorities
+- industry_context: Current challenges and trends in their industry
+- pain_hypothesis: The most likely problem they want solved (2-3 sentences)
+- recommended_opener: A specific first question for the founder to ask
+- potential_objections: Array of 2-3 likely objections with suggested responses
+- relevant_case_studies: What type of past work would resonate most
+- deal_value_estimate: Estimated potential deal value reasoning
+- red_flags: Any concerns to watch for
+- talking_points: Array of 3-4 key points to cover on the call
+
+Return ONLY valid JSON."""
+
+    user_msg = UserMessage(text=prompt)
+    response = await chat.send_message(user_msg)
+
+    try:
+        txt = response.strip()
+        if "```json" in txt:
+            txt = txt.split("```json")[1].split("```")[0].strip()
+        elif "```" in txt:
+            txt = txt.split("```")[1].split("```")[0].strip()
+        research = json.loads(txt)
+    except:
+        research = {
+            "company_summary": f"{lead.get('company_name', 'The company')} operates in {lead.get('industry', 'their')} industry.",
+            "person_summary": f"{lead.get('first_name')} is {lead.get('job_title', 'a decision maker')} focused on growth.",
+            "pain_hypothesis": "They likely need a systematic approach to converting their lead pipeline.",
+            "recommended_opener": f"What's the biggest growth challenge you're facing right now?",
+            "potential_objections": [{"objection": "Budget concerns", "response": "Reframe as ROI investment"}],
+            "relevant_case_studies": "Growth system implementations for similar companies",
+            "red_flags": [],
+            "talking_points": ["Their current marketing approach", "Lead conversion challenges", "Growth timeline"]
+        }
+
+    leads_collection.update_one(
+        {"_id": ObjectId(request.lead_id)},
+        {"$set": {"research_data": research, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    activities_collection.insert_one({
+        "lead_id": request.lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": "note_added", "subject": "Pre-call research completed",
+        "body": research.get("pain_hypothesis", "")[:200],
+        "outcome": None, "duration_minutes": None,
+        "metadata": {"type": "pre_call_research"},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"research": research, "lead_id": request.lead_id}
+
+# ─── Pre-Call Brief ───
+
+@app.post("/api/aria/pre-call-brief/{lead_id}")
+async def send_pre_call_brief(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Generate and send pre-call brief to the founder."""
+    lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+    research = lead.get("research_data", {})
+    convo = list(aria_conversations_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(5))
+    qual = lead.get("aria_qualification_data", {})
+    founder = FOUNDER_PROFILE["name"]
+
+    # WhatsApp-style brief (short)
+    whatsapp_brief = f"""Pre-call brief — {lead.get('first_name')} {lead.get('last_name')}
+
+{lead.get('first_name')}, {lead.get('job_title', 'Lead')} at {lead.get('company_name', 'N/A')}
+{lead.get('city', '')}, {lead.get('country', '')}
+
+Why they reached out:
+{research.get('pain_hypothesis', 'Interested in growth marketing services')}
+
+What to lead with:
+{research.get('recommended_opener', 'Ask about their biggest growth challenge')}
+
+Watch out for:
+{', '.join([r.get('objection','') for r in research.get('potential_objections', [])[:2]]) or 'No specific concerns flagged'}
+
+ICP Score: {lead.get('icp_score', 0)}/100
+Source: {lead.get('source_channel', 'unknown')}"""
+
+    # Email brief (detailed)
+    email_html = f"""<div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:700px;margin:0 auto;">
+<div style="background:linear-gradient(135deg,#C044E0,#5B28D4);padding:20px 24px;border-radius:12px 12px 0 0;">
+<h1 style="color:white;margin:0;font-size:20px;">Pre-Call Brief: {lead.get('first_name')} {lead.get('last_name')}</h1>
+<p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">{lead.get('company_name', 'N/A')} — {lead.get('job_title', 'Lead')}</p>
+</div>
+<div style="background:white;padding:24px;border:1px solid #E8E0F5;border-top:none;border-radius:0 0 12px 12px;">
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:0 0 8px;">WHO ARE THEY</h2>
+<p style="color:#5A4A7A;font-size:14px;line-height:1.6;">{research.get('company_summary', 'Company information pending research.')}</p>
+<p style="color:#5A4A7A;font-size:14px;line-height:1.6;"><strong>The Person:</strong> {research.get('person_summary', f'{lead.get("first_name")} — details pending')}</p>
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:20px 0 8px;">WHY THEY'RE TALKING TO US</h2>
+<p style="color:#5A4A7A;font-size:14px;">Source: <strong>{lead.get('source_channel', 'N/A')}</strong> | ICP Score: <strong>{lead.get('icp_score', 0)}/100</strong> ({lead.get('icp_tier', 'N/A')})</p>
+{f"<p style='color:#5A4A7A;font-size:14px;'>Budget: {qual.get('budget','N/A')} | Timeline: {qual.get('timeline','N/A')}</p>" if qual else ""}
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:20px 0 8px;">PAIN HYPOTHESIS</h2>
+<p style="color:#7C35DC;font-size:14px;font-weight:600;background:#F4F0FF;padding:12px;border-radius:8px;border:1px solid #E0D4F7;">{research.get('pain_hypothesis', 'Needs growth marketing support')}</p>
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:20px 0 8px;">RECOMMENDED OPENING</h2>
+<p style="color:#5A4A7A;font-size:14px;font-style:italic;">"{research.get('recommended_opener', 'What is your biggest growth challenge right now?')}"</p>
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:20px 0 8px;">POTENTIAL OBJECTIONS</h2>
+{''.join([f"<p style='color:#5A4A7A;font-size:13px;margin:4px 0;'><strong>{o.get('objection','')}</strong> → {o.get('response','')}</p>" for o in research.get('potential_objections', [])])}
+
+<h2 style="color:#1A0A2E;font-size:16px;margin:20px 0 8px;">TALKING POINTS</h2>
+<ul style="color:#5A4A7A;font-size:14px;">{''.join([f"<li>{tp}</li>" for tp in research.get('talking_points', [])])}</ul>
+
+</div></div>"""
+
+    # Send email
+    try:
+        params = {
+            "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": ["admin@demo.com"],
+            "subject": f"Pre-call brief: {lead.get('first_name')} {lead.get('last_name')} — {lead.get('company_name', 'N/A')}",
+            "html": email_html,
+        }
+        await asyncio.to_thread(resend.Emails.send, params)
+    except Exception as e:
+        print(f"Brief email failed: {e}")
+
+    leads_collection.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {"pre_call_brief_sent": True, "pre_call_brief_sent_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    activities_collection.insert_one({
+        "lead_id": lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": "note_added", "subject": f"Pre-call brief sent to {founder}",
+        "body": None, "outcome": None, "duration_minutes": None,
+        "metadata": {"type": "pre_call_brief"},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"whatsapp_brief": whatsapp_brief, "email_sent": True, "brief_sent": True}
+
+# ─── Phase 2: Call Outcome ───
+
+class CallOutcomeRequest(BaseModel):
+    lead_id: str
+    outcome: str  # interested, proposal_sent, not_a_fit, needs_more_time, rescheduled, no_show
+    notes: Optional[str] = None
+    check_back_in_days: Optional[int] = None
+
+@app.post("/api/aria/call-outcome")
+async def record_call_outcome(request: CallOutcomeRequest, current_user: dict = Depends(get_current_user)):
+    """Record the founder's post-call outcome and trigger Phase 3."""
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+    founder = FOUNDER_PROFILE["name"]
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    update_data = {
+        "call_outcome": request.outcome,
+        "call_happened_at": now_iso,
+        "updated_at": now_iso,
+    }
+    if request.notes:
+        update_data["post_call_notes"] = request.notes
+
+    # Generate post-call message based on outcome
+    post_call_message = None
+    new_status = lead.get("status")
+    new_aria_state = "CONVERSATION_ACTIVE"
+
+    if request.outcome == "interested":
+        post_call_message = f"Hey {lead.get('first_name', 'there')}, it was so great connecting with {founder} today! She's putting together something tailored for you and will be in touch shortly.\n\nIn the meantime, feel free to reach out if anything comes to mind!"
+        new_aria_state = "PROPOSAL_PENDING"
+        new_status = "negotiation"
+
+    elif request.outcome == "proposal_sent":
+        post_call_message = f"Hey {lead.get('first_name', 'there')}, it was so great connecting with {founder} today! She's putting together something tailored for you and will be in touch shortly.\n\nIn the meantime, feel free to reach out if anything comes to mind!"
+        new_aria_state = "PROPOSAL_PENDING"
+        new_status = "proposal_sent"
+
+    elif request.outcome == "not_a_fit":
+        post_call_message = f"Hey {lead.get('first_name', 'there')}, it was really lovely speaking with {founder} today. At this stage it sounds like the timing might not be quite right, but we'd love to stay in touch.\n\nI'll keep you in the loop if anything relevant comes up on our end!"
+        new_aria_state = "DISQUALIFIED"
+        new_status = "lost"
+
+    elif request.outcome == "needs_more_time":
+        new_aria_state = "WAITING_FOR_CHECK_IN"
+        new_status = "nurture"
+        if request.check_back_in_days:
+            update_data["next_followup_at"] = (datetime.now(timezone.utc) + timedelta(days=request.check_back_in_days)).isoformat()
+
+    elif request.outcome == "rescheduled":
+        # Get new Calendly link
+        event_types = await get_calendly_event_types()
+        booking_url = None
+        if event_types:
+            link = await create_scheduling_link(event_types[0].get("uri"), lead.get("first_name"), lead.get("email"))
+            if link:
+                booking_url = link.get("booking_url")
+        post_call_message = f"Hey {lead.get('first_name', 'there')}, {founder} had something come up — so sorry for the inconvenience!\n\nHere's her calendar to find a new time that works for you: {booking_url or 'I will send you a new link shortly'}"
+        new_aria_state = "BOOKING_ATTEMPTED"
+        new_status = "contacted"
+
+    elif request.outcome == "no_show":
+        new_aria_state = "AWAITING_REPLY_1"
+        new_status = "contacted"
+
+    update_data["aria_state"] = new_aria_state
+    update_data["status"] = new_status
+    update_data["aria_handed_off"] = False
+
+    leads_collection.update_one({"_id": ObjectId(request.lead_id)}, {"$set": update_data})
+
+    # Send post-call message
+    if post_call_message and lead.get("email"):
+        try:
+            params = {
+                "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": [lead["email"]],
+                "subject": f"Great speaking with you, {lead.get('first_name', 'there')}!",
+                "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{post_call_message.replace(chr(10),'<br>')}</p><br><p style='color:#666'>{FOUNDER_PROFILE['signature_sign_off']}</p></div>",
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as e:
+            print(f"Post-call email failed: {e}")
+
+    # Save to conversation
+    if post_call_message:
+        save_aria_message(request.lead_id, "aria", post_call_message, "SEND_EMAIL", {"post_call": True, "outcome": request.outcome})
+
+    # Log activity
+    activities_collection.insert_one({
+        "lead_id": request.lead_id, "user_id": current_user["email"],
+        "activity_type": "meeting_done", "subject": f"Call outcome: {request.outcome.replace('_', ' ')}",
+        "body": request.notes, "outcome": request.outcome,
+        "duration_minutes": None, "metadata": {"outcome": request.outcome, "phase": "post_call"},
+        "created_at": now_iso
+    })
+
+    return {"outcome": request.outcome, "new_state": new_aria_state, "new_status": new_status, "message_sent": post_call_message is not None}
+
+# ─── Phase 3: Proposal Follow-up ───
+
+class ProposalFollowUpRequest(BaseModel):
+    lead_id: str
+    step: int = 1  # 1-4
+
+@app.post("/api/aria/proposal-followup")
+async def trigger_proposal_followup(request: ProposalFollowUpRequest, current_user: dict = Depends(get_current_user)):
+    """Trigger a proposal follow-up message."""
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+    founder = FOUNDER_PROFILE["name"]
+    name = lead.get("first_name", "there")
+
+    messages = {
+        1: f"Hey {name}, just checking in — did you get a chance to look over what {founder} sent across?\n\nHappy to answer any questions in the meantime!",
+        2: f"Hey {name}, wanted to share something quickly — we recently helped a company in {lead.get('industry', 'your space')} see some incredible results. Made me think of your situation. {founder}'s around if you'd like to talk through anything!",
+        3: f"Hey {name}, I want to be respectful of your time — if the timing isn't right or you've gone a different direction, just let me know and I'll stop following up.\n\nBut if you're still evaluating, {founder} would love to answer any questions before you decide.",
+        4: f"Last one from me, {name} — just leaving the door open. Whenever the time is right, we're here. Wishing you the best either way!",
+    }
+
+    message = messages.get(request.step, messages[1])
+
+    if lead.get("email"):
+        try:
+            subjects = {1: f"Quick check-in, {name}", 2: f"Thought you'd find this interesting, {name}", 3: f"Just checking, {name}", 4: f"Door's always open, {name}"}
+            params = {
+                "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": [lead["email"]],
+                "subject": subjects.get(request.step, f"Following up, {name}"),
+                "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{message.replace(chr(10),'<br>')}</p><br><p style='color:#666'>{FOUNDER_PROFILE['signature_sign_off']}</p></div>",
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as e:
+            print(f"Proposal follow-up email failed: {e}")
+
+    save_aria_message(request.lead_id, "aria", message, "SEND_EMAIL", {"proposal_followup": True, "step": request.step})
+
+    new_state = "PROPOSAL_FOLLOW_UP"
+    if request.step >= 4:
+        new_state = "SEQUENCE_ENDED"
+        leads_collection.update_one({"_id": ObjectId(request.lead_id)}, {"$set": {"status": "nurture"}})
+
+    leads_collection.update_one(
+        {"_id": ObjectId(request.lead_id)},
+        {"$set": {"aria_state": new_state, "proposal_follow_up_count": request.step, "aria_last_action_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    activities_collection.insert_one({
+        "lead_id": request.lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": "email_sent", "subject": f"Proposal follow-up {request.step}/4",
+        "body": message[:200], "outcome": None, "duration_minutes": None,
+        "metadata": {"step": request.step, "type": "proposal_followup"},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"message": message, "step": request.step, "new_state": new_state, "final": request.step >= 4}
+
+# ─── Mark Proposal Sent ───
+
+@app.post("/api/aria/mark-proposal-sent/{lead_id}")
+async def mark_proposal_sent(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Mark that the founder has sent the proposal."""
+    leads_collection.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {
+            "proposal_sent_at": datetime.now(timezone.utc).isoformat(),
+            "aria_state": "PROPOSAL_FOLLOW_UP",
+            "status": "proposal_sent",
+            "proposal_follow_up_count": 0,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return {"marked": True, "proposal_sent_at": datetime.now(timezone.utc).isoformat()}
+
+# ─── Founder Instruction (Partial Override) ───
+
+class FounderInstructionRequest(BaseModel):
+    lead_id: str
+    instruction: str
+
+@app.post("/api/aria/founder-instruction")
+async def founder_instruction(request: FounderInstructionRequest, current_user: dict = Depends(get_current_user)):
+    """Send a private instruction to Aria for a specific lead."""
+    leads_collection.update_one(
+        {"_id": ObjectId(request.lead_id)},
+        {"$push": {"aria_founder_instructions": {"instruction": request.instruction, "from": current_user["email"], "at": datetime.now(timezone.utc).isoformat()}}}
+    )
+    save_aria_message(request.lead_id, "system", f"Founder instruction: {request.instruction}", "INSTRUCTION", {"instruction": request.instruction})
+    return {"acknowledged": True, "message": f"Got it — noted for this lead's conversation."}
+
+# ─── Pause for Call ───
+
+@app.post("/api/aria/pause-for-call/{lead_id}")
+async def pause_for_call(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Pause Aria during a live call."""
+    leads_collection.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {"aria_state": "ON_HOLD_DURING_CALL", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    save_aria_message(lead_id, "system", "Aria paused — call in progress")
+    return {"paused": True, "state": "ON_HOLD_DURING_CALL"}
+
+# ─── Weekly Summary ───
+
+@app.get("/api/aria/weekly-summary")
+async def get_weekly_summary(current_user: dict = Depends(get_current_user)):
+    """Generate weekly sales summary."""
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+
+    new_leads = leads_collection.count_documents({"created_at": {"$gte": week_ago}})
+    calls = activities_collection.count_documents({"activity_type": {"$in": ["meeting_done", "call"]}, "created_at": {"$gte": week_ago}})
+    proposals = leads_collection.count_documents({"proposal_sent_at": {"$gte": week_ago}})
+    won = leads_collection.count_documents({"status": "won", "updated_at": {"$gte": week_ago}})
+    cold = leads_collection.count_documents({"aria_state": {"$in": ["SEQUENCE_ENDED", None]}, "icp_tier": {"$in": ["warm", "hot"]}, "last_contacted_at": {"$lt": (now - timedelta(days=7)).isoformat()}})
+    upcoming_calls = leads_collection.count_documents({"aria_state": "MEETING_BOOKED"})
+    hot_needs_attention = leads_collection.count_documents({"icp_tier": "hot", "status": {"$in": ["proposal_sent", "negotiation"]}, "last_contacted_at": {"$lt": (now - timedelta(days=3)).isoformat()}})
+    proposals_pending = leads_collection.count_documents({"aria_state": {"$in": ["PROPOSAL_PENDING", "PROPOSAL_FOLLOW_UP"]}})
+    active_convos = aria_conversations_collection.count_documents({"created_at": {"$gte": week_ago}})
+
+    summary = {
+        "period": "Last 7 days",
+        "new_leads": new_leads,
+        "calls_happened": calls,
+        "proposals_sent": proposals,
+        "deals_won": won,
+        "leads_went_cold": cold,
+        "upcoming_calls": upcoming_calls,
+        "hot_leads_need_attention": hot_needs_attention,
+        "proposals_pending_reply": proposals_pending,
+        "aria_active_conversations": active_convos,
+    }
+
+    # Send email
+    try:
+        founder = FOUNDER_PROFILE["name"]
+        html = f"""<div style="font-family:'Plus Jakarta Sans',sans-serif;max-width:600px;margin:0 auto;">
+<div style="background:linear-gradient(135deg,#C044E0,#5B28D4);padding:20px 24px;border-radius:12px 12px 0 0;">
+<h1 style="color:white;margin:0;font-size:20px;">Weekly Sales Summary</h1>
+<p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Good morning {founder}!</p>
+</div>
+<div style="background:white;padding:24px;border:1px solid #E8E0F5;border-top:none;border-radius:0 0 12px 12px;">
+<h3 style="color:#1A0A2E;margin:0 0 16px;">Last Week</h3>
+<p style="color:#5A4A7A;font-size:14px;line-height:2;">
+{new_leads} new leads came in<br>
+{calls} calls happened<br>
+{proposals} proposals sent<br>
+{won} deals won<br>
+{cold} leads went cold
+</p>
+<h3 style="color:#1A0A2E;margin:16px 0;">This Week</h3>
+<p style="color:#5A4A7A;font-size:14px;line-height:2;">
+{upcoming_calls} calls scheduled<br>
+{hot_needs_attention} hot leads need your attention<br>
+{proposals_pending} proposals pending reply
+</p>
+<p style="color:#7C35DC;font-size:14px;font-weight:600;margin-top:16px;">Aria is handling {active_convos} active conversations.</p>
+</div></div>"""
+        params = {
+            "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": ["admin@demo.com"],
+            "subject": f"Weekly Sales Summary — {founder}",
+            "html": html,
+        }
+        await asyncio.to_thread(resend.Emails.send, params)
+        summary["email_sent"] = True
+    except Exception as e:
+        summary["email_sent"] = False
+        print(f"Weekly summary email failed: {e}")
+
+    return summary
+
+# ─── Get Lead Phase Info ───
+
+@app.get("/api/aria/lead-phase/{lead_id}")
+async def get_lead_phase(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Get the current phase and state info for a lead's ARIA lifecycle."""
+    lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = serialize_doc(lead)
+
+    state = lead.get("aria_state", "PENDING_FIRST_TOUCH")
+    phase1_states = ["PENDING_FIRST_TOUCH", "AWAITING_REPLY_1", "AWAITING_REPLY_2", "CONVERSATION_ACTIVE", "BOOKING_ATTEMPTED", "MEETING_BOOKED"]
+    phase2_states = ["ON_HOLD_DURING_CALL"]
+    phase3_states = ["PROPOSAL_PENDING", "PROPOSAL_FOLLOW_UP", "WAITING_FOR_CHECK_IN"]
+    terminal_states = ["DISQUALIFIED", "DO_NOT_CONTACT", "ESCALATED_TO_HUMAN", "SEQUENCE_ENDED"]
+
+    if state in phase1_states:
+        phase = 1
+    elif state in phase2_states:
+        phase = 2
+    elif state in phase3_states:
+        phase = 3
+    else:
+        phase = 0
+
+    return {
+        "phase": phase,
+        "aria_state": state,
+        "call_outcome": lead.get("call_outcome"),
+        "proposal_sent_at": lead.get("proposal_sent_at"),
+        "proposal_follow_up_count": lead.get("proposal_follow_up_count", 0),
+        "pre_call_brief_sent": lead.get("pre_call_brief_sent", False),
+        "research_data": lead.get("research_data"),
+        "post_call_notes": lead.get("post_call_notes"),
+        "aria_handed_off": lead.get("aria_handed_off", False),
+        "aria_founder_instructions": lead.get("aria_founder_instructions", []),
+        "founder_active": state == "FOUNDER_ACTIVE" or lead.get("aria_handed_off", False),
+    }
