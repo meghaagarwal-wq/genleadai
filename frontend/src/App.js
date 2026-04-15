@@ -11,6 +11,8 @@ import Pipeline from './pages/Pipeline';
 import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import AriaFeed from './pages/AriaFeed';
+import AriaAnalytics from './pages/AriaAnalytics';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -61,6 +63,8 @@ function App() {
                       <Route path="/pipeline" element={<Pipeline />} />
                       <Route path="/campaigns" element={<Campaigns />} />
                       <Route path="/analytics" element={<Analytics />} />
+                      <Route path="/aria" element={<AriaFeed />} />
+                      <Route path="/aria/analytics" element={<AriaAnalytics />} />
                       <Route path="/settings" element={<Settings />} />
                     </Routes>
                   </Layout>

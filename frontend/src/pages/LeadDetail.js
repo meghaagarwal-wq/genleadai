@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../config/api';
+import AriaConversationPanel from '../components/AriaConversationPanel';
 import {
   ArrowLeft,
   Phone,
@@ -265,17 +266,21 @@ const LeadDetail = () => {
         <div className="lg:col-span-2 space-y-4">
           {/* Tabs */}
           <div className="flex gap-1 bg-[#141414] border border-[#262626] rounded-lg p-1" data-testid="detail-tabs">
-            {['timeline', 'details'].map(tab => (
+            {['timeline', 'aria', 'details'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? 'bg-[#0055FF] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab ? (tab === 'aria' ? 'bg-[#8B5CF6] text-white' : 'bg-[#0055FF] text-white') : 'text-[#A3A3A3] hover:text-white'}`}
                 data-testid={`tab-${tab}`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === 'aria' ? 'ARIA Agent' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
+
+          {activeTab === 'aria' && (
+            <AriaConversationPanel leadId={id} leadName={`${lead.first_name} ${lead.last_name}`} />
+          )}
 
           {activeTab === 'timeline' && (
             <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="activity-timeline">

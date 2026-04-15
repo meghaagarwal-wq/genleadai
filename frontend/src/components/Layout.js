@@ -12,6 +12,7 @@ import {
   SignOut,
   Bell,
   MagnifyingGlass,
+  Robot,
 } from '@phosphor-icons/react';
 
 const Layout = ({ children }) => {
@@ -29,6 +30,7 @@ const Layout = ({ children }) => {
     { icon: Tray, label: 'Lead Inbox', path: '/leads' },
     { icon: ChartBar, label: 'Pipeline', path: '/pipeline' },
     { icon: MegaphoneSimple, label: 'Campaigns', path: '/campaigns' },
+    { icon: Robot, label: 'ARIA Agent', path: '/aria' },
     { icon: ChartLineUp, label: 'Analytics', path: '/analytics' },
     { icon: UsersThree, label: 'Team', path: '/settings' },
   ];

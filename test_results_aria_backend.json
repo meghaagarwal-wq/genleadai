@@ -1,0 +1,267 @@
+{
+  "summary": {
+    "total_tests": 15,
+    "passed_tests": 15,
+    "success_rate": "100.0%",
+    "timestamp": "2026-04-15T10:35:49.920519"
+  },
+  "test_results": [
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBkZW1vLmNvbSIsImV4cCI6MTc3Njg1NDE0OH0.xlW7JOrW3eLIUmj8lxFFxHeOhmJmFh6uZzH2tThsYO8",
+        "user": {
+          "email": "admin@demo.com",
+          "full_name": "Megha Agarwal",
+          "role": "admin",
+          "avatar_url": "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?w=100&h=100&fit=crop&crop=face"
+        }
+      }
+    },
+    {
+      "test": "ARIA Settings - GET",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "enabled": true,
+        "persona_name": "Aria",
+        "system_prompt_override": null,
+        "first_touch_delay_minutes": 5,
+        "followup_delay_hours": 24,
+        "max_messages_per_lead": 2,
+        "founder_name": "Megha",
+        "company_name": "GenLeadAI",
+        "calendly_event_type_uri": null,
+        "created_at": "2026-04-15T10:32:38.962856+00:00"
+      }
+    },
+    {
+      "test": "ARIA Settings - Field Validation",
+      "success": true,
+      "details": "All expected fields present",
+      "response_data": null
+    },
+    {
+      "test": "ARIA Analytics",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "total_conversations": 1,
+        "total_aria_messages": 1,
+        "total_lead_replies": 0,
+        "reply_rate": 0.0,
+        "qualification_rate": 0.0,
+        "booking_rate": 0.0,
+        "meetings_booked": 0,
+        "escalations": 0,
+        "do_not_contact": 0,
+        "state_distribution": {
+          "AWAITING_REPLY_1": 1
+        }
+      }
+    },
+    {
+      "test": "ARIA Analytics - Field Validation",
+      "success": true,
+      "details": "All expected analytics fields present",
+      "response_data": null
+    },
+    {
+      "test": "ARIA Live Feed",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "feed": [
+          {
+            "lead_id": "69df622290153afe8234ab89",
+            "lead_name": "Frontend Test",
+            "lead_email": "frontend.test@example.com",
+            "company": "Test Company",
+            "aria_state": "AWAITING_REPLY_1",
+            "icp_tier": "cold",
+            "icp_score": 25,
+            "last_message": "Hi Frontend Test,\n\nI noticed you filled out our form on the GenLeadAI website - thanks for your inte",
+            "last_message_role": "aria",
+            "last_action_at": "2026-04-15T10:33:11.800146+00:00",
+            "handed_off": false
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "test": "ARIA Feed - Data Structure",
+      "success": true,
+      "details": "Found 1 feed items",
+      "response_data": null
+    },
+    {
+      "test": "Calendly User Info",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "user": {
+          "avatar_url": null,
+          "created_at": "2025-03-15T15:46:08.438853Z",
+          "current_organization": "https://api.calendly.com/organizations/fcf593d2-13b0-4b62-889e-7a9126a04f98",
+          "email": "meghaagarwaljain2015@gmail.com",
+          "locale": "en",
+          "name": "Megha Agarwal",
+          "resource_type": "User",
+          "scheduling_url": "https://calendly.com/meghaagarwaljain2015",
+          "slug": "meghaagarwaljain2015",
+          "time_notation": "12h",
+          "timezone": "Asia/Calcutta",
+          "updated_at": "2026-04-15T10:17:25.616975Z",
+          "uri": "https://api.calendly.com/users/54cf7241-6989-4d82-8ad2-b169365e6747"
+        }
+      }
+    },
+    {
+      "test": "Calendly Event Types",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "event_types": [
+          {
+            "active": true,
+            "admin_managed": false,
+            "booking_method": "instant",
+            "color": "#8247f5",
+            "created_at": "2025-03-15T15:48:56.928872Z",
+            "custom_questions": [
+              {
+                "answer_choices": [
+                  "B2B",
+                  "SaaS",
+                  "Ecommerce ",
+                  "Consulting/Coaching"
+                ],
+                "enabled": true,
+                "include_other": true,
+                "name": "What is your business type?",
+                "position": 0,
+                "required": false,
+                "type": "multi_select"
+              },
+              {
+                "answer_choices": [],
+                "enabled": true,
+                "include_other": false,
+                "name": "Phone Number:",
+                "position": 1,
+                "required": true,
+                "type": "string"
+              },
+              {
+                "answer_choices": [],
+                "enabled": true,
+                "include_other": false,
+                "name": "What is your goal with lead generation in the next 6 months?",
+                "position": 2,
+                "required": false,
+                "type": "text"
+              },
+              {
+                "answer_choices": [],
+                "enabled": true,
+                "include_other": false,
+                "name": "Website or LinkedIn Profile link:",
+                "position": 3,
+                "required": true,
+                "type": "string"
+              }
+            ],
+            "deleted_at": null,
+            "description_html": "<p>Book your AI-powered lead generation strategy call with GenLeadAI</p>",
+            "description_plain": "Book your AI-powered lead generation strategy call with GenLeadAI",
+            "duration": 30,
+            "duration_options": [],
+            "internal_note": null,
+            "is_paid": false,
+            "kind": "solo",
+            "locale": "en",
+            "locations": [
+              {
+                "kind": "zoom_conference"
+              }
+            ],
+            "name": "30 Minute Meeting",
+            "pooling_type": null,
+            "position": 0,
+            "profile": {
+              "name": "Megha Agarwal",
+              "owner": "https://api.calendly.com/users/54cf7241-6989-4d82-8ad2-b169365e6747",
+              "type": "User"
+            },
+            "scheduling_url": "https://calendly.com/meghaagarwaljain2015/30min",
+            "secret": false,
+            "slug": "30min",
+            "type": "StandardEventType",
+            "updated_at": "2025-09-15T14:03:36.685208Z",
+            "uri": "https://api.calendly.com/event_types/6b1a831f-a454-4716-85d4-31e92c26b92c"
+          }
+        ]
+      }
+    },
+    {
+      "test": "Calendly User - Data Validation",
+      "success": true,
+      "details": "User data retrieved",
+      "response_data": null
+    },
+    {
+      "test": "Calendly Event Types - Data Validation",
+      "success": true,
+      "details": "Found 1 event types",
+      "response_data": null
+    },
+    {
+      "test": "Assets Library",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "assets": []
+      }
+    },
+    {
+      "test": "Assets - Data Structure",
+      "success": true,
+      "details": "Found 0 assets",
+      "response_data": null
+    },
+    {
+      "test": "ARIA Conversation - Lead 69df622290153afe8234ab89",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": {
+        "conversation": [
+          {
+            "lead_id": "69df622290153afe8234ab89",
+            "role": "aria",
+            "content": "Hi Frontend Test,\n\nI noticed you filled out our form on the GenLeadAI website - thanks for your interest! I'm Aria, and I work with Megha to help businesses streamline their lead generation.\n\nI'd love to learn more about what brought you to our site and what challenges you're facing with lead gen at Test Company. Are you currently struggling with finding qualified prospects or is it more about converting the leads you already have?\n\nLooking forward to hearing from you!\n\nBest,\nAria",
+            "action": "SEND_EMAIL",
+            "action_data": {
+              "subject": "Thanks for your interest in GenLeadAI!",
+              "priority": "normal"
+            },
+            "metadata": {},
+            "created_at": "2026-04-15T10:33:11.788152+00:00"
+          }
+        ],
+        "aria_state": "AWAITING_REPLY_1",
+        "handed_off": false,
+        "qualification_data": null,
+        "booking_url": null
+      }
+    },
+    {
+      "test": "ARIA Conversation - Structure",
+      "success": true,
+      "details": "Found 1 messages, state: AWAITING_REPLY_1",
+      "response_data": null
+    }
+  ]
+}

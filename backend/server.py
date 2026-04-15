@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, EmailStr
@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from bson import ObjectId
 import os
+import uuid
+import json
 from dotenv import load_dotenv
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -15,6 +17,10 @@ import io
 import asyncio
 import resend
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+from aria_agent import (
+    run_aria_agent, get_calendly_event_types, get_calendly_availability,
+    create_scheduling_link, get_calendly_user, init_storage, put_object, get_object
+)
 
 load_dotenv()
 
@@ -39,6 +45,9 @@ activities_collection = db["activities"]
 campaigns_collection = db["campaigns"]
 users_collection = db["users"]
 pipelines_collection = db["pipelines"]
+aria_conversations_collection = db["aria_conversations"]
+workspace_assets_collection = db["workspace_assets"]
+aria_settings_collection = db["aria_settings"]
 
 # Security
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -711,3 +720,559 @@ Give a 3-4 sentence summary and a clear next step recommendation."""
         return {"summary": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization failed: {str(e)}")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ARIA - Autonomous AI Sales Agent Endpoints
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Initialize storage on startup
+@app.on_event("startup")
+async def startup_event():
+    try:
+        init_storage()
+    except Exception as e:
+        print(f"Storage init warning: {e}")
+
+# Pydantic Models for ARIA
+class AriaTriggerRequest(BaseModel):
+    lead_id: str
+    touch_type: str = "first_touch"
+
+class AriaReplyRequest(BaseModel):
+    lead_id: str
+    message: str
+
+class AriaSettingsUpdate(BaseModel):
+    enabled: bool = True
+    persona_name: str = "Aria"
+    system_prompt_override: Optional[str] = None
+    first_touch_delay_minutes: int = 5
+    followup_delay_hours: int = 24
+    max_messages_per_lead: int = 2
+    founder_name: str = "Megha"
+    company_name: str = "GenLeadAI"
+    calendly_event_type_uri: Optional[str] = None
+
+class AssetUploadResponse(BaseModel):
+    id: str
+    asset_type: str
+    name: str
+    storage_path: str
+    file_size_kb: float
+
+# Helper: Get or create ARIA settings
+def get_aria_settings():
+    settings = aria_settings_collection.find_one({}, {"_id": 0})
+    if not settings:
+        default = {
+            "enabled": True,
+            "persona_name": os.getenv("ARIA_PERSONA_NAME", "Aria"),
+            "system_prompt_override": None,
+            "first_touch_delay_minutes": int(os.getenv("ARIA_FIRST_TOUCH_DELAY_MINUTES", 5)),
+            "followup_delay_hours": int(os.getenv("ARIA_FOLLOWUP_DELAY_HOURS", 24)),
+            "max_messages_per_lead": 2,
+            "founder_name": os.getenv("FOUNDER_NAME", "Megha"),
+            "company_name": os.getenv("COMPANY_NAME", "GenLeadAI"),
+            "calendly_event_type_uri": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        aria_settings_collection.insert_one(default)
+        return default
+    return settings
+
+# Helper: Get conversation history for a lead
+def get_conversation_history(lead_id: str):
+    convos = list(aria_conversations_collection.find(
+        {"lead_id": lead_id}, {"_id": 0}
+    ).sort("created_at", ASCENDING))
+    return convos
+
+# Helper: Save ARIA message to conversation
+def save_aria_message(lead_id: str, role: str, content: str, action: str = "NONE", action_data: dict = None, metadata: dict = None):
+    doc = {
+        "lead_id": lead_id,
+        "role": role,  # "aria" or "lead"
+        "content": content,
+        "action": action,
+        "action_data": action_data or {},
+        "metadata": metadata or {},
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    aria_conversations_collection.insert_one(doc)
+    return doc
+
+# Helper: Execute ARIA action
+async def execute_aria_action(lead_id: str, action: str, action_data: dict, message: str, lead: dict, current_user_email: str):
+    """Execute the action ARIA decided to take."""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    if action == "SEND_EMAIL" or action == "NONE":
+        # Send email via Resend
+        if lead.get("email"):
+            try:
+                founder_name = os.getenv("FOUNDER_NAME", "Megha")
+                company_name = os.getenv("COMPANY_NAME", "GenLeadAI")
+                html_body = f"""
+                <div style="font-family: -apple-system, sans-serif; max-width: 600px;">
+                    <p>{message.replace(chr(10), '<br>')}</p>
+                    <br>
+                    <p style="color: #666;">Best,<br>{os.getenv('ARIA_PERSONA_NAME', 'Aria')}<br>
+                    Assistant to {founder_name}, {company_name}</p>
+                </div>"""
+                
+                params = {
+                    "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                    "to": [lead["email"]],
+                    "subject": f"Hi {lead.get('first_name', 'there')} — from {company_name}",
+                    "html": html_body,
+                }
+                await asyncio.to_thread(resend.Emails.send, params)
+            except Exception as e:
+                print(f"Email send failed: {e}")
+        
+        # Log activity
+        activities_collection.insert_one({
+            "lead_id": lead_id,
+            "user_id": f"aria@{os.getenv('COMPANY_NAME', 'genleadai').lower()}.ai",
+            "activity_type": "email_sent",
+            "subject": f"ARIA: Message sent to {lead.get('first_name', 'lead')}",
+            "body": message[:200],
+            "outcome": None,
+            "duration_minutes": None,
+            "metadata": {"via": "aria", "action": action},
+            "created_at": now
+        })
+    
+    if action == "UPDATE_STATUS":
+        new_status = action_data.get("status", "contacted")
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {"$set": {"status": new_status, "updated_at": now}}
+        )
+    
+    if action == "BOOK_MEETING":
+        # Get Calendly event types and create scheduling link
+        event_types = await get_calendly_event_types()
+        if event_types:
+            event_type_uri = event_types[0].get("uri")
+            link = await create_scheduling_link(
+                event_type_uri,
+                lead_name=f"{lead.get('first_name', '')} {lead.get('last_name', '')}",
+                lead_email=lead.get("email")
+            )
+            if link:
+                booking_url = link.get("booking_url")
+                leads_collection.update_one(
+                    {"_id": ObjectId(lead_id)},
+                    {"$set": {"aria_booking_url": booking_url, "status": "negotiation", "updated_at": now}}
+                )
+                return {"booking_url": booking_url}
+        
+        # Fallback: use calendly link
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {"$set": {"status": "negotiation", "updated_at": now}}
+        )
+    
+    if action == "MARK_DNC":
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {"$set": {"aria_state": "DO_NOT_CONTACT", "status": "unqualified", "updated_at": now, "aria_handed_off": True}}
+        )
+    
+    if action == "ESCALATE":
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {"$set": {"aria_state": "ESCALATED_TO_HUMAN", "status": "qualified", "updated_at": now, "aria_handed_off": True}}
+        )
+        # Send handoff email to founder
+        try:
+            convo = get_conversation_history(lead_id)
+            convo_summary = "\n".join([f"[{m['role']}]: {m['content'][:100]}" for m in convo[-5:]])
+            params = {
+                "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+                "to": ["admin@demo.com"],
+                "subject": f"ARIA Handoff: {lead.get('first_name', '')} {lead.get('last_name', '')} needs human attention",
+                "html": f"<h2>Lead Escalated by ARIA</h2><p><b>Lead:</b> {lead.get('first_name')} {lead.get('last_name')}</p><p><b>Email:</b> {lead.get('email')}</p><p><b>ICP Score:</b> {lead.get('icp_score')}</p><h3>Recent Conversation:</h3><pre>{convo_summary}</pre>"
+            }
+            await asyncio.to_thread(resend.Emails.send, params)
+        except Exception as e:
+            print(f"Handoff email failed: {e}")
+    
+    if action == "LOG_QUALIFICATION":
+        leads_collection.update_one(
+            {"_id": ObjectId(lead_id)},
+            {"$set": {"aria_qualification_data": action_data, "updated_at": now}}
+        )
+    
+    return None
+
+# ─── ARIA API Endpoints ───
+
+@app.post("/api/aria/trigger")
+async def trigger_aria(request: AriaTriggerRequest, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Trigger ARIA to send a message to a lead (first touch or followup)."""
+    try:
+        settings = get_aria_settings()
+        if not settings.get("enabled"):
+            raise HTTPException(status_code=400, detail="ARIA is currently disabled")
+        
+        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        lead = serialize_doc(lead)
+        conversation = get_conversation_history(request.lead_id)
+        
+        # Run ARIA agent
+        result = await run_aria_agent(lead, conversation, touch_type=request.touch_type)
+        
+        message = result.get("message", "")
+        action = result.get("action", "NONE")
+        action_data = result.get("action_data", {})
+        
+        # Save ARIA message
+        save_aria_message(request.lead_id, "aria", message, action, action_data)
+        
+        # Update ARIA state
+        new_state = "AWAITING_REPLY_1" if request.touch_type == "first_touch" else "AWAITING_REPLY_2"
+        leads_collection.update_one(
+            {"_id": ObjectId(request.lead_id)},
+            {"$set": {
+                "aria_state": new_state,
+                "aria_last_action_at": datetime.now(timezone.utc).isoformat(),
+                "status": "contacted" if lead.get("status") == "new" else lead.get("status"),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Execute action (send email, etc.)
+        action_result = await execute_aria_action(
+            request.lead_id, action, action_data, message, lead, current_user["email"]
+        )
+        
+        return {
+            "message": message,
+            "action": action,
+            "action_data": action_data,
+            "action_result": action_result,
+            "aria_state": new_state
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ARIA trigger failed: {str(e)}")
+
+@app.post("/api/aria/reply")
+async def process_aria_reply(request: AriaReplyRequest, current_user: dict = Depends(get_current_user)):
+    """Process an incoming reply from a lead and generate ARIA's response."""
+    try:
+        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        lead = serialize_doc(lead)
+        
+        # Check if ARIA should respond
+        if lead.get("aria_state") in ["DO_NOT_CONTACT", "ESCALATED_TO_HUMAN", "MEETING_BOOKED"]:
+            return {"message": "ARIA is no longer active for this lead", "action": "NONE"}
+        
+        if lead.get("aria_handed_off"):
+            return {"message": "This lead has been handed off to a human", "action": "NONE"}
+        
+        # Save lead's message
+        save_aria_message(request.lead_id, "lead", request.message)
+        
+        # Get conversation history
+        conversation = get_conversation_history(request.lead_id)
+        
+        # Run ARIA
+        result = await run_aria_agent(lead, conversation, incoming_message=request.message)
+        
+        message = result.get("message", "")
+        action = result.get("action", "NONE")
+        action_data = result.get("action_data", {})
+        
+        # Save ARIA's response
+        save_aria_message(request.lead_id, "aria", message, action, action_data)
+        
+        # Update state
+        leads_collection.update_one(
+            {"_id": ObjectId(request.lead_id)},
+            {"$set": {
+                "aria_state": "CONVERSATION_ACTIVE",
+                "aria_last_action_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Execute action
+        action_result = await execute_aria_action(
+            request.lead_id, action, action_data, message, lead, current_user["email"]
+        )
+        
+        return {
+            "message": message,
+            "action": action,
+            "action_data": action_data,
+            "action_result": action_result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ARIA reply failed: {str(e)}")
+
+@app.get("/api/aria/conversation/{lead_id}")
+async def get_aria_conversation(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Get full ARIA conversation history for a lead."""
+    conversation = get_conversation_history(lead_id)
+    lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "aria_state": 1, "aria_handed_off": 1, "aria_qualification_data": 1, "aria_booking_url": 1})
+    return {
+        "conversation": conversation,
+        "aria_state": lead.get("aria_state", "PENDING_FIRST_TOUCH") if lead else "PENDING_FIRST_TOUCH",
+        "handed_off": lead.get("aria_handed_off", False) if lead else False,
+        "qualification_data": lead.get("aria_qualification_data") if lead else None,
+        "booking_url": lead.get("aria_booking_url") if lead else None,
+    }
+
+@app.post("/api/aria/takeover/{lead_id}")
+async def takeover_from_aria(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Human takes over conversation from ARIA."""
+    leads_collection.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {
+            "aria_state": "ESCALATED_TO_HUMAN",
+            "aria_handed_off": True,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    save_aria_message(lead_id, "system", "Human agent has taken over this conversation")
+    return {"message": "You've taken over this conversation from ARIA"}
+
+@app.post("/api/aria/resume/{lead_id}")
+async def resume_aria(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Resume ARIA for a lead after human takeover."""
+    leads_collection.update_one(
+        {"_id": ObjectId(lead_id)},
+        {"$set": {
+            "aria_state": "CONVERSATION_ACTIVE",
+            "aria_handed_off": False,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    save_aria_message(lead_id, "system", "ARIA has been resumed for this conversation")
+    return {"message": "ARIA has been resumed for this lead"}
+
+# ─── ARIA Settings Endpoints ───
+
+@app.get("/api/aria/settings")
+async def get_aria_settings_endpoint(current_user: dict = Depends(get_current_user)):
+    return get_aria_settings()
+
+@app.put("/api/aria/settings")
+async def update_aria_settings_endpoint(settings_update: AriaSettingsUpdate, current_user: dict = Depends(get_current_user)):
+    update_data = settings_update.dict()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    aria_settings_collection.update_one({}, {"$set": update_data}, upsert=True)
+    return get_aria_settings()
+
+# ─── ARIA Analytics ───
+
+@app.get("/api/aria/analytics")
+async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
+    """Get ARIA performance analytics."""
+    # Total conversations
+    leads_with_aria = list(leads_collection.find(
+        {"aria_state": {"$exists": True, "$ne": None}},
+        {"_id": 0, "aria_state": 1, "icp_tier": 1, "status": 1}
+    ))
+    
+    total_conversations = len(leads_with_aria)
+    
+    # Count by state
+    state_counts = {}
+    for lead in leads_with_aria:
+        state = lead.get("aria_state", "UNKNOWN")
+        state_counts[state] = state_counts.get(state, 0) + 1
+    
+    # Count messages
+    total_aria_messages = aria_conversations_collection.count_documents({"role": "aria"})
+    total_lead_replies = aria_conversations_collection.count_documents({"role": "lead"})
+    
+    # Reply rate
+    reply_rate = round((total_lead_replies / max(total_conversations, 1)) * 100, 1)
+    
+    # Booking rate
+    booked = state_counts.get("MEETING_BOOKED", 0) + leads_collection.count_documents({"aria_booking_url": {"$exists": True, "$ne": None}})
+    booking_rate = round((booked / max(total_conversations, 1)) * 100, 1)
+    
+    # Qualification rate
+    active_or_beyond = sum(state_counts.get(s, 0) for s in ["CONVERSATION_ACTIVE", "BOOKING_ATTEMPTED", "MEETING_BOOKED", "ESCALATED_TO_HUMAN"])
+    qualification_rate = round((active_or_beyond / max(total_conversations, 1)) * 100, 1)
+    
+    # Disqualification reasons
+    dnc_count = state_counts.get("DO_NOT_CONTACT", 0)
+    disqualified_count = leads_collection.count_documents({"aria_state": "DO_NOT_CONTACT"})
+    
+    return {
+        "total_conversations": total_conversations,
+        "total_aria_messages": total_aria_messages,
+        "total_lead_replies": total_lead_replies,
+        "reply_rate": reply_rate,
+        "qualification_rate": qualification_rate,
+        "booking_rate": booking_rate,
+        "meetings_booked": booked,
+        "escalations": state_counts.get("ESCALATED_TO_HUMAN", 0),
+        "do_not_contact": dnc_count,
+        "state_distribution": state_counts,
+    }
+
+# ─── ARIA Live Feed ───
+
+@app.get("/api/aria/feed")
+async def get_aria_feed(current_user: dict = Depends(get_current_user)):
+    """Get live feed of active ARIA conversations."""
+    active_leads = list(leads_collection.find(
+        {"aria_state": {"$exists": True, "$ne": None}},
+    ).sort("aria_last_action_at", DESCENDING).limit(50))
+    
+    feed = []
+    for lead in active_leads:
+        lead_id = str(lead["_id"])
+        last_msg = aria_conversations_collection.find_one(
+            {"lead_id": lead_id}, {"_id": 0}, sort=[("created_at", DESCENDING)]
+        )
+        
+        feed.append({
+            "lead_id": lead_id,
+            "lead_name": f"{lead.get('first_name', '')} {lead.get('last_name', '')}",
+            "lead_email": lead.get("email"),
+            "company": lead.get("company_name"),
+            "aria_state": lead.get("aria_state"),
+            "icp_tier": lead.get("icp_tier"),
+            "icp_score": lead.get("icp_score"),
+            "last_message": last_msg.get("content", "")[:100] if last_msg else "",
+            "last_message_role": last_msg.get("role") if last_msg else None,
+            "last_action_at": lead.get("aria_last_action_at"),
+            "handed_off": lead.get("aria_handed_off", False),
+        })
+    
+    return {"feed": feed, "total": len(feed)}
+
+# ─── Calendly Endpoints ───
+
+@app.get("/api/calendly/event-types")
+async def get_event_types(current_user: dict = Depends(get_current_user)):
+    """Get available Calendly event types."""
+    event_types = await get_calendly_event_types()
+    return {"event_types": event_types}
+
+@app.get("/api/calendly/availability/{event_type_uri:path}")
+async def get_availability(event_type_uri: str, current_user: dict = Depends(get_current_user)):
+    """Get available slots for a Calendly event type."""
+    slots = await get_calendly_availability(event_type_uri)
+    return {"available_slots": slots}
+
+@app.get("/api/calendly/user")
+async def get_calendly_user_info(current_user: dict = Depends(get_current_user)):
+    """Get current Calendly user info."""
+    user = await get_calendly_user()
+    return {"user": user}
+
+# ─── Asset Library Endpoints ───
+
+@app.post("/api/assets/upload")
+async def upload_asset(
+    file: UploadFile = File(...),
+    asset_type: str = "brand_deck",
+    send_in_first_touch: bool = True,
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload an asset (PDF, document, image) to object storage."""
+    try:
+        data = await file.read()
+        file_size_kb = len(data) / 1024
+        
+        if file_size_kb > 10240:  # 10MB limit
+            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+        
+        ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+        storage_path = f"genleadai/assets/{uuid.uuid4()}.{ext}"
+        
+        result = put_object(storage_path, data, file.content_type or "application/octet-stream")
+        
+        asset_doc = {
+            "asset_type": asset_type,
+            "name": file.filename,
+            "storage_path": result.get("path", storage_path),
+            "original_filename": file.filename,
+            "file_size_kb": round(file_size_kb, 2),
+            "mime_type": file.content_type or "application/octet-stream",
+            "is_active": True,
+            "send_in_first_touch": send_in_first_touch,
+            "send_count": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        workspace_assets_collection.insert_one(asset_doc)
+        asset_doc = serialize_doc(asset_doc)
+        
+        return asset_doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.get("/api/assets")
+async def get_assets(current_user: dict = Depends(get_current_user)):
+    """Get all workspace assets."""
+    assets = list(workspace_assets_collection.find({"is_active": True}).sort("created_at", DESCENDING))
+    assets = [serialize_doc(a) for a in assets]
+    return {"assets": assets}
+
+@app.get("/api/assets/download/{asset_id}")
+async def download_asset(asset_id: str, auth: str = Query(None), authorization: str = Header(None)):
+    """Download an asset file."""
+    try:
+        asset = workspace_assets_collection.find_one({"_id": ObjectId(asset_id)})
+        if not asset:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        data, content_type = get_object(asset["storage_path"])
+        return Response(
+            content=data,
+            media_type=asset.get("mime_type", content_type),
+            headers={"Content-Disposition": f'attachment; filename="{asset.get("original_filename", "file")}"'}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+
+@app.patch("/api/assets/{asset_id}")
+async def update_asset(asset_id: str, current_user: dict = Depends(get_current_user)):
+    """Toggle asset settings."""
+    import json as json_lib
+    # Simple toggle - read body manually
+    asset = workspace_assets_collection.find_one({"_id": ObjectId(asset_id)})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    # Toggle send_in_first_touch
+    new_val = not asset.get("send_in_first_touch", False)
+    workspace_assets_collection.update_one(
+        {"_id": ObjectId(asset_id)},
+        {"$set": {"send_in_first_touch": new_val, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"send_in_first_touch": new_val}
+
+@app.delete("/api/assets/{asset_id}")
+async def delete_asset(asset_id: str, current_user: dict = Depends(get_current_user)):
+    """Soft-delete an asset."""
+    workspace_assets_collection.update_one(
+        {"_id": ObjectId(asset_id)},
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Asset deleted"}
