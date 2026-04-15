@@ -1,39 +1,13 @@
-/* GenLeadAI LMS - App Styles */
+/* GenLeadAI - White + Purple Theme */
 
-/* Cabinet Grotesk approximation via IBM Plex Sans already loaded in index.css */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #FAFAFA; }
+::-webkit-scrollbar-thumb { background: #E8E0F5; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #D4C8ED; }
 
-/* Custom scrollbar for dark theme */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+*:focus-visible { outline: 2px solid #7C35DC; outline-offset: 2px; }
+::selection { background: rgba(124,53,220,0.2); color: #1A0A2E; }
 
-::-webkit-scrollbar-track {
-  background: #0A0A0A;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #262626;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3B3B3B;
-}
-
-/* Focus outlines */
-*:focus-visible {
-  outline: 2px solid #0055FF;
-  outline-offset: 2px;
-}
-
-/* Selection */
-::selection {
-  background: #0055FF;
-  color: white;
-}
-
-/* Line clamp utilities */
 .line-clamp-2 {
   overflow: hidden;
   display: -webkit-box;
@@ -41,23 +15,32 @@
   -webkit-line-clamp: 2;
 }
 
-/* Transitions */
-.transition-all {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
-}
+input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
 
-/* Input date pickers dark mode */
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-}
-
-/* Select arrow color fix for dark mode */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23737373' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239B8AB0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   padding-right: 32px;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient button */
+.btn-gradient {
+  background: var(--gradient-brand);
+  color: white;
+  border: none;
+  transition: all 0.2s;
+}
+.btn-gradient:hover {
+  filter: brightness(1.08);
+  box-shadow: var(--shadow-glow);
 }
