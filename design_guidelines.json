@@ -1,0 +1,106 @@
+{
+  "theme": "dark",
+  "archetype": "4 (Swiss & High-Contrast - Dark Adaptation)",
+  "vibe": "Professional B2B SaaS, Strategy-first, Enterprise, Analytical",
+  "colors": {
+    "background": "#0A0A0A",
+    "surface": "#141414",
+    "surface_hover": "#1E1E1E",
+    "border": "#262626",
+    "border_focus": "#3B3B3B",
+    "text_primary": "#F5F5F5",
+    "text_secondary": "#A3A3A3",
+    "text_muted": "#737373",
+    "primary_brand": "#0055FF",
+    "primary_brand_hover": "#0044CC",
+    "accent_success": "#10B981",
+    "accent_warning": "#F59E0B",
+    "accent_danger": "#FF3B30",
+    "accent_ai": "#8B5CF6",
+    "chart_palette": [
+      "#0055FF",
+      "#10B981",
+      "#F59E0B",
+      "#8B5CF6",
+      "#FF3B30"
+    ]
+  },
+  "typography": {
+    "headings_font": "Cabinet Grotesk",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "JetBrains Mono",
+    "h1": "text-4xl md:text-5xl font-black tracking-tighter text-white",
+    "h2": "text-2xl md:text-3xl font-bold tracking-tight text-white",
+    "h3": "text-xl font-semibold tracking-tight text-white",
+    "h4": "text-lg font-medium tracking-tight text-gray-100",
+    "body": "text-sm text-[#A3A3A3] leading-relaxed",
+    "small_label": "text-xs font-semibold uppercase tracking-[0.2em] text-[#737373]"
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4",
+    "card_padding": "p-6",
+    "section_spacing": "gap-8",
+    "border_radius": {
+      "card": "rounded-none md:rounded-lg",
+      "button": "rounded-none md:rounded-md",
+      "input": "rounded-md"
+    },
+    "style": "Technical Grid - exposed skeletons, flat surfaces, minimal radii"
+  },
+  "surface_strategies": {
+    "header_and_nav": "Crystal Glass: backdrop-blur-xl bg-[#0A0A0A]/70 border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)]",
+    "cards": "Flat background (#141414), 1px solid border (#262626), no soft shadows. On hover, translate-y-[-2px] with border-white/20.",
+    "ai_elements": "Subtle inner glow via box-shadow (inset 0 0 12px rgba(139,92,246,0.15)) and 1px border (#8B5CF6/30) to distinguish AI-generated insights."
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#0055FF] text-white font-medium hover:bg-[#0044CC] transition-colors",
+      "secondary": "bg-transparent border border-[#262626] text-[#F5F5F5] hover:bg-[#1E1E1E]",
+      "ai_action": "bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/30 hover:bg-[#8B5CF6]/20"
+    },
+    "inputs": "bg-[#0A0A0A] border border-[#262626] text-white focus:border-[#0055FF] focus:ring-1 focus:ring-[#0055FF] transition-all",
+    "badges": "px-2 py-0.5 text-xs font-medium uppercase tracking-wider rounded-sm",
+    "data_tables": "border-collapse w-full text-sm text-left, headers in small_label typography, rows with border-b border-[#262626] hover:bg-[#141414]"
+  },
+  "motion_and_interactions": {
+    "hover_states": "Crisp transitions (transition-all duration-200 ease-in-out)",
+    "focus_states": "High contrast ring (ring-2 ring-offset-2 ring-offset-[#0A0A0A] ring-[#0055FF])",
+    "loading": "Use mono_font ASCII spinners or sharp linear indeterminate progress bars (no generic circular spinners)"
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "Duotone or Regular weight, strictly functional"
+  },
+  "media": {
+    "images": [
+      {
+        "category": "avatars",
+        "description": "Dummy user avatars for lead lists and team members",
+        "urls": [
+          "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NjIwNDI2NXww&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1762522926157-bcc04bf0b10a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NjIwNDI2NXww&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1769636929388-99eff95d3bf1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NjIwNDI2NXww&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc3NjIwNDI2NXww&ixlib=rb-4.1.0&q=85"
+        ]
+      },
+      {
+        "category": "company_logos",
+        "description": "Logos for enriched B2B leads or partner integrations",
+        "urls": [
+          "https://images.unsplash.com/photo-1551263640-1c007852f616?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxzdGFydHVwJTIwbG9nb3xlbnwwfHx8fDE3NzYyNDU2ODN8MA&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1669633971142-99954984ca8a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHw0fHxzdGFydHVwJTIwbG9nb3xlbnwwfHx8fDE3NzYyNDU2ODN8MA&ixlib=rb-4.1.0&q=85"
+        ]
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette. Do NOT use Tailwind default slate/gray colors. Use custom hex codes or extended config.",
+    "Data-testid attributes are MANDATORY on all interactive elements (buttons, links, forms, tabs, dropdowns).",
+    "Avoid standard Vercel/Shadcn card looks. Eliminate drop shadows. Use flat borders (1px) for a technical 'Control Room' grid feel.",
+    "Use Cabinet Grotesk for headings and IBM Plex Sans for body. Do not default to Inter.",
+    "For the AI Chat Assistant, use the 'Accent AI' purple strictly for borders, text, or small badges. Do not flood backgrounds with purple. Keep it dark.",
+    "For Kanban board, ensure clear column separation with grid borders (border-r) rather than floating columns.",
+    "Never use fully transparent header backgrounds. Always use backdrop-blur glassmorphism.",
+    "Implement charts using Recharts with the chart_palette defined. Make backgrounds transparent and strokes crisp."
+  ]
+}
