@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-04-15T10:01:15.988955",
+  "tests_run": 14,
+  "tests_passed": 14,
+  "success_rate": 1.0,
+  "results": [
+    {
+      "test": "Health Check",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Current User",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Leads",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Create Lead",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Lead Detail",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Update Lead",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Create Activity",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Lead Activities",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "AI Score Lead",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Campaigns",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Create Campaign",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get Users",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Dashboard Analytics",
+      "success": true,
+      "details": ""
+    }
+  ]
+}
