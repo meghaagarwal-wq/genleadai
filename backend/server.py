@@ -462,7 +462,7 @@ async def create_campaign(campaign: CampaignCreate, current_user: dict = Depends
 
 @app.get("/api/campaigns")
 async def get_campaigns(current_user: dict = Depends(get_current_user)):
-    campaigns = list(campaigns_collection.find({}).sort("created_at", DESCENDING))
+    campaigns = list(campaigns_collection.find({}).sort("created_at", DESCENDING).limit(100))
     
     # Enrich with lead counts
     for campaign in campaigns:
@@ -735,7 +735,7 @@ async def import_leads(file: UploadFile = File(...), current_user: dict = Depend
 # Team/Users Endpoints
 @app.get("/api/users")
 async def get_users(current_user: dict = Depends(get_current_user)):
-    users = list(users_collection.find({"is_active": True}, {"password_hash": 0, "_id": 0}))
+    users = list(users_collection.find({"is_active": True}, {"password_hash": 0, "_id": 0}).limit(100))
     return {"users": users}
 
 @app.get("/api/health")
