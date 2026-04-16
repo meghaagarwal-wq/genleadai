@@ -1,138 +1,344 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import api from '../config/api';
-import { Users, TrendUp, Fire, Target, ArrowRight, Lightning } from '@phosphor-icons/react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import {
+  Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
+  CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
+  CurrencyCircleDollar, ChartLineUp, ArrowUpRight, Warning,
+} from '@phosphor-icons/react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area,
+} from 'recharts';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
   const [recentLeads, setRecentLeads] = useState([]);
+  const [ariaStats, setAriaStats] = useState(null);
+  const [topLeads, setTopLeads] = useState([]);
+  const [sleepingCount, setSleepingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchData(); }, []);
-  const fetchData = async () => {
+  useEffect(() => { fetchAll(); }, []);
+
+  const fetchAll = async () => {
     try {
-      const [aRes, lRes] = await Promise.all([api.get('/api/analytics/dashboard'), api.get('/api/leads?limit=5')]);
+      const [aRes, lRes, arRes, tRes, sRes] = await Promise.all([
+        api.get('/api/analytics/dashboard'),
+        api.get('/api/leads?limit=5'),
+        api.get('/api/aria/analytics').catch(() => ({ data: null })),
+        api.get('/api/leads/your-five-today').catch(() => ({ data: { leads: [] } })),
+        api.get('/api/leads/sleeping?threshold_days=14').catch(() => ({ data: { total: 0 } })),
+      ]);
       setAnalytics(aRes.data);
       setRecentLeads(lRes.data.leads);
+      setAriaStats(arRes.data);
+      setTopLeads(tRes.data.leads?.slice(0, 3) || []);
+      setSleepingCount(sRes.data.total || 0);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="text-[#9B8AB0] text-sm">Loading dashboard...</div></div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center animate-pulse" style={{ background: 'var(--gradient-brand)' }}>
+          <Sparkle size={20} className="text-white" weight="fill" />
+        </div>
+        <span className="text-sm text-[#9B8AB0]">Loading your dashboard...</span>
+      </div>
+    </div>
+  );
 
-  const channelData = analytics ? Object.entries(analytics.channel_distribution).filter(([,v]) => v > 0).map(([k,v]) => ({ name: k.replace('_',' '), value: v })).sort((a,b) => b.value - a.value) : [];
+  const channelData = analytics ? Object.entries(analytics.channel_distribution).filter(([, v]) => v > 0).map(([k, v]) => ({ name: k.replace('_', ' '), value: v })).sort((a, b) => b.value - a.value).slice(0, 6) : [];
   const typeData = analytics ? [{ name: 'B2B', value: analytics.lead_type_distribution.B2B }, { name: 'B2C', value: analytics.lead_type_distribution.B2C }] : [];
-  const icpData = analytics ? [{ name: 'Hot', value: analytics.icp_distribution.hot, color: '#7C35DC' }, { name: 'Warm', value: analytics.icp_distribution.warm, color: '#D97706' }, { name: 'Cold', value: analytics.icp_distribution.cold, color: '#94A3B8' }] : [];
-  const PIE_COLORS = ['#7C35DC', '#16A34A'];
+  const icpData = analytics ? [{ name: 'Hot', value: analytics.icp_distribution.hot, color: '#7C35DC' }, { name: 'Warm', value: analytics.icp_distribution.warm, color: '#D97706' }, { name: 'Cold', value: analytics.icp_distribution.cold, color: '#CBD5E1' }] : [];
+  const funnelData = analytics ? [
+    { stage: 'New', value: analytics.status_distribution.new || 0 },
+    { stage: 'Contacted', value: analytics.status_distribution.contacted || 0 },
+    { stage: 'Qualified', value: analytics.status_distribution.qualified || 0 },
+    { stage: 'Proposal', value: analytics.status_distribution.proposal_sent || 0 },
+    { stage: 'Won', value: analytics.status_distribution.won || 0 },
+  ] : [];
+  const tooltipStyle = { background: '#fff', border: '1px solid #E8E0F5', borderRadius: '12px', color: '#1A0A2E', boxShadow: 'var(--shadow-card)', fontSize: 12 };
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   const tierBadge = (tier) => {
     const s = { hot: 'bg-[#F4E6FD] text-[#7C35DC] border-[#C044E0]', warm: 'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/30', cold: 'bg-[#F1F5F9] text-[#64748B] border-[#94A3B8]/30' };
-    return `px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded border ${s[tier] || s.cold}`;
-  };
-  const statusBadge = (status) => {
-    const s = { new: 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20', contacted: 'bg-[#F4F0FF] text-[#A855F7] border-[#A855F7]/20', qualified: 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20', won: 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20', lost: 'bg-[#FEE2E2] text-[#DC2626] border-[#DC2626]/20', proposal_sent: 'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/20', negotiation: 'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/20' };
-    return `px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded border ${s[status] || s.new}`;
+    return `px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${s[tier] || s.cold}`;
   };
 
   return (
-    <div data-testid="dashboard-page" className="space-y-6">
+    <div data-testid="dashboard-page" className="space-y-5 max-w-[1400px] mx-auto">
+      {/* Greeting Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily: 'Plus Jakarta Sans' }}>Dashboard</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Growth pipeline overview</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+            {greeting()}, {user?.full_name?.split(' ')[0] || 'there'}
+          </h1>
+          <p className="text-sm text-[#5A4A7A] mt-1">Here's what's happening with your leads today</p>
         </div>
-        <button onClick={() => navigate('/leads')} data-testid="view-all-leads-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-          View All Leads <ArrowRight size={16} />
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => navigate('/your-5-today')} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-xl hover:bg-[#F9F5FF] hover:text-[#7C35DC] hover:border-[#7C35DC]/20 transition-all text-sm font-medium" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="your5-shortcut">
+            <Lightning size={16} weight="fill" className="text-[#7C35DC]" /> Your 5 Today
+          </button>
+          <button onClick={() => navigate('/leads')} data-testid="view-all-leads-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-xl text-sm font-semibold" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+            View All Leads <ArrowRight size={14} />
+          </button>
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Leads', value: analytics?.total_leads || 0, icon: Users, color: '#7C35DC', sub: 'Active pipeline', subColor: '#16A34A' },
-          { label: 'Hot Leads', value: analytics?.icp_distribution?.hot || 0, icon: Fire, color: '#C044E0', sub: 'ICP Score 70+', subColor: '#D97706' },
-          { label: 'Won Deals', value: analytics?.status_distribution?.won || 0, icon: Target, color: '#16A34A', sub: 'Closed successfully', subColor: '#16A34A' },
-          { label: 'Qualified', value: analytics?.status_distribution?.qualified || 0, icon: Lightning, color: '#A855F7', sub: 'Ready for outreach', subColor: '#7C35DC' },
-        ].map(kpi => (
-          <div key={kpi.label} className="bg-white border border-[#E8E0F5] rounded-xl p-6 hover:shadow-[var(--shadow-hover)] transition-all" style={{ boxShadow: 'var(--shadow-card)' }} data-testid={`kpi-${kpi.label.toLowerCase().replace(' ','-')}`}>
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.label}</span>
-              <kpi.icon size={20} style={{ color: kpi.color }} weight="duotone" />
+      {/* Sleeping Leads Alert Banner */}
+      {sleepingCount > 5 && (
+        <div className="flex items-center justify-between p-4 rounded-xl border" style={{ background: 'linear-gradient(135deg, rgba(192,68,224,0.06) 0%, rgba(91,40,212,0.06) 100%)', borderColor: 'rgba(124,53,220,0.15)' }} data-testid="sleeping-alert-banner">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#F4F0FF] flex items-center justify-center border border-[#E0D4F7]">
+              <CurrencyCircleDollar size={20} className="text-[#7C35DC]" weight="fill" />
             </div>
-            <div className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.value}</div>
-            <div className="text-xs mt-1 flex items-center gap-1" style={{ color: kpi.subColor }}>
-              <TrendUp size={12} /> {kpi.sub}
+            <div>
+              <p className="text-sm font-semibold text-[#1A0A2E]"><span className="text-[#7C35DC]">{sleepingCount} leads</span> are sitting untouched for 14+ days</p>
+              <p className="text-xs text-[#5A4A7A]">ARIA can re-engage them with personalized messages right now</p>
             </div>
           </div>
+          <button onClick={() => navigate('/sleeping-leads')} className="flex items-center gap-2 px-4 py-2 bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20 rounded-xl text-sm font-semibold hover:bg-[#7C35DC] hover:text-white transition-all" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="activate-revival-btn">
+            <Moon size={16} weight="fill" /> Revive Leads <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* KPI Cards — 5 columns */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[
+          { label: 'Total Leads', value: analytics?.total_leads || 0, icon: Users, color: '#7C35DC', sub: 'In pipeline', onClick: () => navigate('/leads') },
+          { label: 'Hot Leads', value: analytics?.icp_distribution?.hot || 0, icon: Fire, color: '#C044E0', sub: 'ICP 70+', onClick: () => navigate('/leads') },
+          { label: 'Meetings', value: ariaStats?.meetings_booked || 0, icon: CalendarCheck, color: '#16A34A', sub: 'Booked by ARIA', onClick: () => navigate('/aria') },
+          { label: 'Won Deals', value: analytics?.status_distribution?.won || 0, icon: Target, color: '#16A34A', sub: 'Closed', onClick: () => navigate('/pipeline') },
+          { label: 'ARIA Convos', value: ariaStats?.total_conversations || 0, icon: Robot, color: '#7C35DC', sub: `${ariaStats?.reply_rate || 0}% reply rate`, onClick: () => navigate('/aria') },
+        ].map(kpi => (
+          <button key={kpi.label} onClick={kpi.onClick} className="bg-white border border-[#E8E0F5] rounded-xl p-4 hover:shadow-[var(--shadow-hover)] hover:-translate-y-0.5 transition-all text-left group" style={{ boxShadow: 'var(--shadow-card)' }} data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.label}</span>
+              <kpi.icon size={18} style={{ color: kpi.color }} weight="duotone" />
+            </div>
+            <div className="text-2xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.value}</div>
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-[11px] text-[#5A4A7A]">{kpi.sub}</span>
+              <ArrowUpRight size={10} className="text-[#9B8AB0] opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          </button>
         ))}
       </div>
 
-      {/* Charts */}
+      {/* Main Grid: 3 columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white border border-[#E8E0F5] rounded-xl p-6" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-channels">
-          <h3 className="text-lg font-bold text-[#1A0A2E] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>Leads by Channel</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={channelData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E8E0F5" />
-              <XAxis dataKey="name" tick={{ fill: '#9B8AB0', fontSize: 12 }} />
-              <YAxis tick={{ fill: '#9B8AB0', fontSize: 12 }} />
-              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E8E0F5', borderRadius: '12px', color: '#1A0A2E', boxShadow: 'var(--shadow-card)' }} />
-              <Bar dataKey="value" fill="#7C35DC" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+
+        {/* Left: Top Leads to Act On + ARIA Summary */}
+        <div className="space-y-4">
+          {/* Your Top 3 */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="top-leads-widget">
+            <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lightning size={16} className="text-[#7C35DC]" weight="fill" />
+                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Priority Leads</h3>
+              </div>
+              <button onClick={() => navigate('/your-5-today')} className="text-xs text-[#7C35DC] font-semibold hover:text-[#6B28C8]">See all 5</button>
+            </div>
+            {topLeads.length === 0 ? (
+              <div className="p-6 text-center text-sm text-[#9B8AB0]">No priority leads today</div>
+            ) : (
+              <div className="divide-y divide-[#F0ECF9]">
+                {topLeads.map((lead, i) => (
+                  <button key={lead.id} onClick={() => navigate(`/leads/${lead.id}`)} className="w-full p-4 hover:bg-[#F9F5FF] transition-all text-left" data-testid={`top-lead-${i}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: 'var(--gradient-brand)' }}>{i + 1}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[#1A0A2E] truncate">{lead.first_name} {lead.last_name}</span>
+                          <span className={tierBadge(lead.icp_tier)}>{lead.icp_tier}</span>
+                        </div>
+                        <p className="text-xs text-[#7C35DC] mt-1 font-medium truncate">{lead._reason}</p>
+                        {lead.company_name && <p className="text-[11px] text-[#9B8AB0] mt-0.5">{lead.company_name}</p>}
+                      </div>
+                      <span className="text-xs font-mono font-bold text-[#7C35DC] shrink-0">{lead.icp_score}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ARIA Activity */}
+          {ariaStats && (
+            <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="aria-summary-widget">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+                  <Robot size={14} className="text-white" weight="fill" />
+                </div>
+                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA Activity</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Messages', value: ariaStats.total_aria_messages, color: '#7C35DC' },
+                  { label: 'Replies', value: ariaStats.total_lead_replies, color: '#C044E0' },
+                  { label: 'Booking %', value: `${ariaStats.booking_rate}%`, color: '#D97706' },
+                  { label: 'Escalated', value: ariaStats.escalations, color: '#DC2626' },
+                ].map(s => (
+                  <div key={s.label} className="bg-[#FAFAFA] rounded-lg p-3 border border-[#F0ECF9]">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">{s.label}</div>
+                    <div className="text-lg font-extrabold mt-0.5" style={{ color: s.color, fontFamily: 'Plus Jakarta Sans' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => navigate('/aria')} className="w-full mt-3 flex items-center justify-center gap-2 py-2 bg-[#F4F0FF] text-[#7C35DC] rounded-lg text-xs font-semibold border border-[#7C35DC]/10 hover:bg-[#7C35DC] hover:text-white transition-all">
+                Open ARIA Dashboard <ArrowRight size={12} />
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-6" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-lead-type">
-          <h3 className="text-lg font-bold text-[#1A0A2E] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>B2B vs B2C</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={typeData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                {typeData.map((e, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #E8E0F5', borderRadius: '12px', color: '#1A0A2E' }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ICP Distribution</h4>
-            {icpData.map(item => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: item.color }}></div>
-                  <span className="text-sm text-[#5A4A7A]">{item.name}</span>
-                </div>
-                <span className="text-sm font-semibold text-[#1A0A2E]">{item.value}</span>
+        {/* Center: Charts */}
+        <div className="space-y-4">
+          {/* Channel Chart */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-channels">
+            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Leads by Channel</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={channelData} barSize={24}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F0ECF9" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(124,53,220,0.04)' }} />
+                <Bar dataKey="value" fill="#7C35DC" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Funnel */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-funnel">
+            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversion Funnel</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={funnelData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F0ECF9" vertical={false} />
+                <XAxis dataKey="stage" tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <defs>
+                  <linearGradient id="funnelGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#7C35DC" stopOpacity={0.2} />
+                    <stop offset="100%" stopColor="#7C35DC" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="value" stroke="#7C35DC" fill="url(#funnelGrad)" strokeWidth={2.5} dot={{ r: 4, fill: '#7C35DC', stroke: '#fff', strokeWidth: 2 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Right: Donut Charts + Quick Actions */}
+        <div className="space-y-4">
+          {/* B2B vs B2C */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-lead-type">
+            <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Lead Split</h3>
+            <div className="flex items-center gap-4">
+              <ResponsiveContainer width={120} height={120}>
+                <PieChart>
+                  <Pie data={typeData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
+                    {typeData.map((e, i) => <Cell key={i} fill={['#7C35DC', '#16A34A'][i]} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-2">
+                {typeData.map((d, i) => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded" style={{ backgroundColor: ['#7C35DC', '#16A34A'][i] }}></div>
+                      <span className="text-sm text-[#5A4A7A]">{d.name}</span>
+                    </div>
+                    <span className="text-sm font-bold text-[#1A0A2E]">{d.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* ICP Distribution */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-icp">
+            <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>ICP Distribution</h3>
+            <div className="flex items-center gap-4">
+              <ResponsiveContainer width={120} height={120}>
+                <PieChart>
+                  <Pie data={icpData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
+                    {icpData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-2">
+                {icpData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded" style={{ backgroundColor: d.color }}></div>
+                      <span className="text-sm text-[#5A4A7A]">{d.name}</span>
+                    </div>
+                    <span className="text-sm font-bold text-[#1A0A2E]">{d.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="quick-actions-widget">
+            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Quick Actions</h3>
+            <div className="space-y-2">
+              {[
+                { icon: Lightning, label: 'Your 5 Today', path: '/your-5-today', color: '#7C35DC' },
+                { icon: Moon, label: `Sleeping Leads (${sleepingCount})`, path: '/sleeping-leads', color: '#D97706' },
+                { icon: ChartLineUp, label: 'Full Analytics', path: '/analytics', color: '#16A34A' },
+                { icon: Robot, label: 'ARIA Conversations', path: '/aria', color: '#C044E0' },
+              ].map(action => (
+                <button key={action.label} onClick={() => navigate(action.path)} className="w-full flex items-center gap-3 px-3 py-2.5 bg-[#FAFAFA] border border-[#F0ECF9] rounded-lg hover:bg-[#F9F5FF] hover:border-[#7C35DC]/20 transition-all text-left group">
+                  <action.icon size={16} style={{ color: action.color }} weight="duotone" />
+                  <span className="text-sm text-[#5A4A7A] group-hover:text-[#7C35DC] font-medium flex-1">{action.label}</span>
+                  <ArrowRight size={12} className="text-[#9B8AB0] opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Recent Leads */}
+      {/* Recent Leads Table */}
       <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="recent-leads-table">
-        <div className="p-6 border-b border-[#E8E0F5] flex items-center justify-between">
-          <h3 className="text-lg font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Recent Leads</h3>
-          <button onClick={() => navigate('/leads')} className="text-sm text-[#7C35DC] hover:text-[#6B28C8] font-semibold">View all</button>
+        <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
+          <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Recent Leads</h3>
+          <button onClick={() => navigate('/leads')} className="text-xs text-[#7C35DC] hover:text-[#6B28C8] font-semibold">View all</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead>
-              <tr className="bg-[#F4F0FF]">
+              <tr className="bg-[#F9F5FF]">
                 {['Name', 'Email', 'Type', 'Status', 'ICP', 'Channel'].map(h => (
-                  <th key={h} className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{h}</th>
+                  <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {recentLeads.map(lead => (
                 <tr key={lead.id} className="border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors" onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
-                  <td className="px-6 py-4 font-semibold text-[#1A0A2E]">{lead.first_name} {lead.last_name}</td>
-                  <td className="px-6 py-4 text-[#5A4A7A] font-mono text-xs">{lead.email}</td>
-                  <td className="px-6 py-4"><span className={`px-2 py-0.5 text-xs font-semibold rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span></td>
-                  <td className="px-6 py-4"><span className={statusBadge(lead.status)}>{lead.status}</span></td>
-                  <td className="px-6 py-4"><span className={tierBadge(lead.icp_tier)}>{lead.icp_tier}</span></td>
-                  <td className="px-6 py-4 text-[#5A4A7A]">{lead.source_channel}</td>
+                  <td className="px-4 py-3 font-semibold text-[#1A0A2E] text-sm">{lead.first_name} {lead.last_name}</td>
+                  <td className="px-4 py-3 text-[#5A4A7A] font-mono text-xs">{lead.email}</td>
+                  <td className="px-4 py-3"><span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span></td>
+                  <td className="px-4 py-3"><span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/10">{lead.status}</span></td>
+                  <td className="px-4 py-3"><span className={tierBadge(lead.icp_tier)}>{lead.icp_tier}</span></td>
+                  <td className="px-4 py-3 text-xs text-[#5A4A7A]">{lead.source_channel?.replace('_', ' ')}</td>
                 </tr>
               ))}
             </tbody>
