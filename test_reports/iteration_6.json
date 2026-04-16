@@ -1,0 +1,59 @@
+{
+  "summary": "Completed comprehensive testing of lead ingestion system. All backend APIs working perfectly (18/18 tests passed). Frontend Settings page structure verified with new API & Forms tab visible, but session management issues prevent full UI testing.",
+  
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Authentication/Session Management",
+        "issue": "Session expires quickly causing redirects to login page during testing",
+        "selector": "Login form appears unexpectedly",
+        "fix_priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Settings page navigation",
+        "issue": "Cannot fully test API & Forms tab functionality due to session expiration",
+        "affected_selectors": ["text=API & Forms"]
+      }
+    ],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "Admin login (admin@demo.com / Demo1234!)",
+    "API key creation via POST /api/settings/api-keys",
+    "API key listing via GET /api/settings/api-keys", 
+    "Lead creation via POST /api/v1/leads with X-API-Key header",
+    "Duplicate lead handling returns 'duplicate' status",
+    "Unauthorized access returns 401 without API key",
+    "Public form submission via POST /api/form/submit",
+    "Public form duplicate handling",
+    "Embed code generation via GET /api/form/embed-code",
+    "Calendly webhook via POST /api/webhooks/calendly",
+    "Meta leads webhook via POST /api/webhooks/meta-leads",
+    "All existing endpoints (leads, dashboard, campaigns, analytics, users, health)",
+    "Settings page structure with API & Forms tab visible",
+    "Basic navigation between dashboard and settings",
+    "Team members display correctly"
+  ],
+
+  "test_report_links": ["/app/backend_test.py"],
+  
+  "success_percentage": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "70% (basic structure verified, session issues prevent full testing)"
+  },
+
+  "updated_files": ["/app/backend_test.py"],
+  
+  "action_item_for_main_agent": "Investigate frontend session management - sessions expire too quickly during testing, preventing full UI verification of API & Forms functionality. Backend APIs are fully functional.",
+  
+  "should_call_test_agent_after_fix": "false",
+  "should_main_agent_test_itself": "true"
+}

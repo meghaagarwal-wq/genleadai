@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle } from '@phosphor-icons/react';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -12,51 +12,64 @@ const Settings = () => {
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [apiKeys, setApiKeys] = useState([]);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKey, setNewKey] = useState(null);
+  const [embedCode, setEmbedCode] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchUsers();
     fetchAriaSettings();
     fetchAssets();
+    fetchApiKeys();
   }, []);
 
   const fetchUsers = async () => {
-    try {
-      const res = await api.get('/api/users');
-      setUsers(res.data.users);
-    } catch (err) {
-      console.error('Failed to fetch users', err);
-    } finally {
-      setLoading(false);
-    }
+    try { const res = await api.get('/api/users'); setUsers(res.data.users); }
+    catch (err) { console.error(err); } finally { setLoading(false); }
   };
 
   const fetchAriaSettings = async () => {
-    try {
-      const res = await api.get('/api/aria/settings');
-      setAriaSettings(res.data);
-    } catch (err) {
-      console.error('Failed to fetch ARIA settings', err);
-    }
+    try { const res = await api.get('/api/aria/settings'); setAriaSettings(res.data); }
+    catch (err) { console.error(err); }
   };
 
   const saveAriaSettings = async () => {
     setSavingSettings(true);
-    try {
-      await api.put('/api/aria/settings', ariaSettings);
-    } catch (err) {
-      console.error('Failed to save ARIA settings', err);
-    } finally {
-      setSavingSettings(false);
-    }
+    try { await api.put('/api/aria/settings', ariaSettings); }
+    catch (err) { console.error(err); } finally { setSavingSettings(false); }
   };
 
   const fetchAssets = async () => {
+    try { const res = await api.get('/api/assets'); setAssets(res.data.assets); }
+    catch (err) { console.error(err); }
+  };
+
+  const fetchApiKeys = async () => {
+    try { const res = await api.get('/api/settings/api-keys'); setApiKeys(res.data.keys); }
+    catch (err) { console.error(err); }
+  };
+
+  const createApiKey = async () => {
+    if (!newKeyName.trim()) return;
     try {
-      const res = await api.get('/api/assets');
-      setAssets(res.data.assets);
-    } catch (err) {
-      console.error('Failed to fetch assets', err);
-    }
+      const res = await api.post('/api/settings/api-keys', { name: newKeyName });
+      setNewKey(res.data.key);
+      setNewKeyName('');
+      await fetchApiKeys();
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchEmbedCode = async () => {
+    try { const res = await api.get('/api/form/embed-code'); setEmbedCode(res.data); }
+    catch (err) { console.error(err); }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleUpload = async (e) => {
@@ -120,6 +133,7 @@ const Settings = () => {
           { id: 'team', label: 'Team', icon: User },
           { id: 'aria', label: 'ARIA Agent', icon: Robot },
           { id: 'assets', label: 'Asset Library', icon: FileArrowUp },
+          { id: 'integrations', label: 'API & Forms', icon: Key },
           { id: 'workspace', label: 'Workspace', icon: Gear },
         ].map(tab => (
           <button
@@ -296,6 +310,101 @@ const Settings = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Integrations Tab */}
+      {activeTab === 'integrations' && (
+        <div className="space-y-4">
+          {/* API Keys */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-6" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="api-keys-management">
+            <h3 className="text-lg font-bold text-[#1A0A2E] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>API Keys</h3>
+            <p className="text-xs text-[#5A4A7A] mb-4">Create API keys for external integrations (Zapier, Make, ad platforms)</p>
+
+            <div className="flex gap-2 mb-4">
+              <input type="text" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} placeholder="Key name (e.g., Zapier, Meta Ads)" className="flex-1 bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="new-key-name-input" />
+              <button onClick={createApiKey} className="btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="create-key-btn">Create Key</button>
+            </div>
+
+            {newKey && (
+              <div className="bg-[#DCFCE7] border border-[#16A34A]/20 rounded-lg p-4 mb-4" data-testid="new-key-display">
+                <p className="text-sm font-semibold text-[#16A34A] mb-1">New API Key Created!</p>
+                <p className="text-xs text-[#5A4A7A] mb-2">Copy this key now — it won't be shown again.</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white border border-[#E8E0F5] rounded-lg px-3 py-2 text-xs font-mono text-[#1A0A2E] select-all">{newKey}</code>
+                  <button onClick={() => copyToClipboard(newKey)} className="p-2 bg-white border border-[#E8E0F5] rounded-lg hover:bg-[#F9F5FF] transition-all" data-testid="copy-key-btn">
+                    {copied ? <CheckCircle size={16} className="text-[#16A34A]" /> : <Copy size={16} className="text-[#5A4A7A]" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {apiKeys.length > 0 && (
+              <div className="space-y-2">
+                {apiKeys.map((k, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-[#FAFAFA] rounded-lg border border-[#F0ECF9]">
+                    <div>
+                      <div className="text-sm font-medium text-[#1A0A2E]">{k.name}</div>
+                      <div className="text-xs text-[#9B8AB0] font-mono">{k.key}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-[#9B8AB0]">{k.usage_count || 0} calls</span>
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${k.is_active ? 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20' : 'bg-[#FEE2E2] text-[#DC2626] border-[#DC2626]/20'}`}>{k.is_active ? 'Active' : 'Revoked'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 p-4 bg-[#F4F0FF] rounded-lg border border-[#E0D4F7]">
+              <p className="text-xs font-semibold text-[#7C35DC] mb-1">API Endpoint</p>
+              <code className="text-xs font-mono text-[#5A4A7A]">POST /api/v1/leads</code>
+              <p className="text-xs text-[#9B8AB0] mt-1">Include header: <code className="font-mono">X-API-Key: your_key</code></p>
+            </div>
+          </div>
+
+          {/* Embeddable Form */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-6" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="embed-form-section">
+            <h3 className="text-lg font-bold text-[#1A0A2E] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>Embeddable Lead Form</h3>
+            <p className="text-xs text-[#5A4A7A] mb-4">Paste this on your website to capture leads directly into GenLeadAI</p>
+
+            {!embedCode ? (
+              <button onClick={fetchEmbedCode} className="btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="generate-embed-btn">
+                <Code size={16} className="inline mr-2" />Generate Embed Code
+              </button>
+            ) : (
+              <div>
+                <p className="text-xs text-[#5A4A7A] mb-2">{embedCode.instructions}</p>
+                <div className="relative">
+                  <pre className="bg-[#FAFAFA] border border-[#E8E0F5] rounded-lg p-4 text-xs font-mono text-[#5A4A7A] overflow-x-auto max-h-48">{embedCode.embed_code}</pre>
+                  <button onClick={() => copyToClipboard(embedCode.embed_code)} className="absolute top-2 right-2 p-1.5 bg-white border border-[#E8E0F5] rounded-lg hover:bg-[#F9F5FF] transition-all" data-testid="copy-embed-btn">
+                    {copied ? <CheckCircle size={14} className="text-[#16A34A]" /> : <Copy size={14} className="text-[#5A4A7A]" />}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Webhook URLs */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-6" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="webhook-urls">
+            <h3 className="text-lg font-bold text-[#1A0A2E] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>Webhook URLs</h3>
+            <p className="text-xs text-[#5A4A7A] mb-4">Configure these in your external tools</p>
+            <div className="space-y-3">
+              {[
+                { name: 'Calendly Webhook', url: '/api/webhooks/calendly', desc: 'Receives booking confirmations' },
+                { name: 'Meta Lead Ads', url: '/api/webhooks/meta-leads', desc: 'Facebook/Instagram lead form submissions' },
+                { name: 'Web Form', url: '/api/form/submit', desc: 'Public form endpoint (no auth needed)' },
+              ].map(wh => (
+                <div key={wh.name} className="flex items-center justify-between p-3 bg-[#FAFAFA] rounded-lg border border-[#F0ECF9]">
+                  <div>
+                    <div className="text-sm font-medium text-[#1A0A2E]">{wh.name}</div>
+                    <div className="text-xs text-[#9B8AB0]">{wh.desc}</div>
+                  </div>
+                  <code className="text-xs font-mono text-[#7C35DC] bg-[#F4F0FF] px-2 py-1 rounded">{wh.url}</code>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
