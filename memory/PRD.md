@@ -6,55 +6,36 @@
 - **AI:** Claude API via Emergent LLM Key | **Email:** Resend API | **Calendar:** Calendly API v2 | **Storage:** Emergent Object Storage
 - **Auth:** JWT + bcrypt | **Design:** White+Purple (#7C35DC)
 
-## Complete Feature List (Feb 2026)
+## Complete Feature List
 
 ### Core LMS
-- [x] Auth, Lead CRUD, Pipeline Kanban, Campaigns, Analytics, Team, Settings
-- [x] AI ICP scoring, summarization, email generation
-- [x] CSV import, 50 leads seed data
+- Auth, Lead CRUD, Pipeline Kanban, Campaigns, Analytics, Team, Settings
+- AI ICP scoring, summarization, email generation, CSV import
 
-### ARIA AI Sales Agent → Sales PA (3-Phase)
-**Phase 1 — Before the Call (Aria owns):**
-- [x] First touch + follow-up generation
-- [x] Reply processing with qualification + objection handling
-- [x] Calendly meeting booking
-- [x] Pre-call research engine (Claude AI inference)
-- [x] Pre-call brief generation (email to founder)
-- [x] Pre-call lead reminder
+### ARIA 3-Phase Sales PA
+- Phase 1: First touch, qualification, Calendly booking, pre-call research + briefing
+- Phase 2: Call hold + 5 outcome buttons (Interested/Proposal/Not Fit/More Time/Rescheduled)
+- Phase 3: Post-call messages, proposal follow-up (4-step), reply handling, Won/Lost detection
+- Founder Override: Take over, hand back, private instructions, weekly summary
 
-**Phase 2 — The Call (Founder owns):**
-- [x] ON_HOLD_DURING_CALL state (Aria paused)
-- [x] Post-call outcome buttons: Interested, Sending Proposal, Not a Fit, Needs More Time, Rescheduled
-- [x] Automatic Phase 3 trigger based on outcome
+### Advanced Modules
+- Your 5 Today (AI daily picks), Sleeping Leads + Revival Engine
+- No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
 
-**Phase 3 — After Call + Proposal (Aria owns):**
-- [x] Post-call warm message to lead
-- [x] Mark Proposal Sent workflow
-- [x] 4-step proposal follow-up sequence (48h, 4d, 7d, 14d)
-- [x] Reply handling with value reframing (never discount)
-- [x] Complex question escalation to founder
-- [x] Won/Lost detection and appropriate responses
+### Production Lead Ingestion (NEW)
+- [x] Public REST API: POST /api/v1/leads with API key auth
+- [x] Embeddable web form: POST /api/form/submit (no auth, UTM auto-capture)
+- [x] Embed code generator with GenLeadAI-branded form
+- [x] API key management (create, list, revoke)
+- [x] Calendly webhook receiver (auto-creates leads on booking)
+- [x] Meta Lead Ads webhook receiver (Facebook/Instagram)
+- [x] Lead deduplication on email (all endpoints)
+- [x] Auto-link campaigns by UTM params
+- [x] Settings > API & Forms tab with keys, embed code, webhook URLs
 
-**Founder Controls:**
-- [x] Take Over / Hand Back to Aria
-- [x] Private instructions (partial override)
-- [x] Weekly sales summary (email)
-- [x] Phase indicator on conversation panel
+### To make emails universal
+- Verify genleadai.com domain in Resend → update SENDER_EMAIL to aria@genleadai.com
 
-### New Modules
-- [x] Your 5 Today (AI daily picks with weighted ranking)
-- [x] Sleeping Leads + Revival Engine (bulk revival with 4 angles)
-- [x] No-Show Recovery (3-step)
-- [x] Referral Capture
-- [x] Intent Signals with score boosts
-- [x] Broadcast Personalizer (filter → template → preview → send)
-- [x] WhatsApp + Email dual channel (Email real, WhatsApp pluggable)
-
-### Design
-- [x] White+Purple theme throughout all pages
-- [x] Plus Jakarta Sans / Inter / JetBrains Mono typography
-
-## Backlog
-### P0: Automated background scheduler, Score Decay engine
-### P1: Daily Brief via WhatsApp, Sequence builder, Real WhatsApp API
-### P2: WebSocket live feed, CSV/PDF export, Notification center
+## Deployment: READY
+- Deployment health check: PASS
+- Custom domain: app.genleadai.com ready to link
