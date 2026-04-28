@@ -6,6 +6,7 @@ import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
   CurrencyCircleDollar, ChartLineUp, ArrowUpRight, Warning,
+  CheckCircle, Trophy, User, Tray,
 } from '@phosphor-icons/react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -20,24 +21,27 @@ const Dashboard = () => {
   const [ariaStats, setAriaStats] = useState(null);
   const [topLeads, setTopLeads] = useState([]);
   const [sleepingCount, setSleepingCount] = useState(0);
+  const [ttv, setTtv] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     try {
-      const [aRes, lRes, arRes, tRes, sRes] = await Promise.all([
+      const [aRes, lRes, arRes, tRes, sRes, ttvRes] = await Promise.all([
         api.get('/api/analytics/dashboard'),
         api.get('/api/leads?limit=5'),
         api.get('/api/aria/analytics').catch(() => ({ data: null })),
         api.get('/api/leads/your-five-today').catch(() => ({ data: { leads: [] } })),
         api.get('/api/leads/sleeping?threshold_days=14').catch(() => ({ data: { total: 0 } })),
+        api.get('/api/ttv/milestones').catch(() => ({ data: null })),
       ]);
       setAnalytics(aRes.data);
       setRecentLeads(lRes.data.leads);
       setAriaStats(arRes.data);
       setTopLeads(tRes.data.leads?.slice(0, 3) || []);
       setSleepingCount(sRes.data.total || 0);
+      setTtv(ttvRes.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -112,6 +116,56 @@ const Dashboard = () => {
           <button onClick={() => navigate('/sleeping-leads')} className="flex items-center gap-2 px-4 py-2 bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20 rounded-xl text-sm font-semibold hover:bg-[#7C35DC] hover:text-white transition-all" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="activate-revival-btn">
             <Moon size={16} weight="fill" /> Revive Leads <ArrowRight size={14} />
           </button>
+        </div>
+      )}
+
+      {/* Time to Value Tracker */}
+      {ttv && ttv.progress_pct < 100 && (
+        <div className="bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="ttv-tracker">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your Progress</h3>
+              <p className="text-xs text-[#5A4A7A] mt-0.5">{ttv.completed_count} of {ttv.total_milestones} milestones completed</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{ttv.progress_pct}%</span>
+            </div>
+          </div>
+          {/* Progress bar */}
+          <div className="w-full h-2 bg-[#F0ECF9] rounded-full mb-5 overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${ttv.progress_pct}%`, background: 'var(--gradient-brand-horizontal)' }}></div>
+          </div>
+          {/* Milestone steps */}
+          <div className="flex items-start justify-between relative">
+            {/* Connector line */}
+            <div className="absolute top-4 left-6 right-6 h-0.5 bg-[#F0ECF9]" style={{ zIndex: 0 }}></div>
+            <div className="absolute top-4 left-6 h-0.5 transition-all duration-700" style={{ width: `${Math.max(0, (ttv.completed_count - 1) / (ttv.total_milestones - 1) * 100)}%`, background: 'var(--gradient-brand-horizontal)', zIndex: 1 }}></div>
+            {ttv.milestones.map((m, i) => {
+              const IconMap = { user: User, tray: Tray, robot: Robot, calendar: CalendarCheck, trophy: Trophy };
+              const MIcon = IconMap[m.icon] || CheckCircle;
+              return (
+                <div key={m.id} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                    m.completed
+                      ? 'text-white shadow-md'
+                      : 'bg-[#F0ECF9] text-[#9B8AB0] border-2 border-[#E8E0F5]'
+                  }`} style={m.completed ? { background: 'var(--gradient-brand)', boxShadow: '0 0 12px rgba(124,53,220,0.3)' } : {}}>
+                    {m.completed ? <CheckCircle size={16} weight="fill" /> : <MIcon size={14} />}
+                  </div>
+                  <span className={`text-[10px] mt-2 font-semibold text-center leading-tight max-w-[80px] ${m.completed ? 'text-[#7C35DC]' : 'text-[#9B8AB0]'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>{m.label}</span>
+                  {m.time_from_start && (
+                    <span className="text-[9px] mt-0.5 font-mono text-[#16A34A] bg-[#DCFCE7] px-1.5 py-0.5 rounded">{m.time_from_start}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {ttv.ttv_to_meeting && (
+            <div className="mt-4 pt-4 border-t border-[#F0ECF9] text-center">
+              <span className="text-xs text-[#5A4A7A]">Time to first meeting: </span>
+              <span className="text-sm font-bold text-[#7C35DC] font-mono">{ttv.ttv_to_meeting}</span>
+            </div>
+          )}
         </div>
       )}
 

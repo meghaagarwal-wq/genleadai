@@ -2961,3 +2961,142 @@ async def complete_onboarding(data: OnboardingData, current_user: dict = Depends
     )
 
     return {"completed": True, "message": "Welcome to GenLeadAI!"}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# TIME TO VALUE TRACKER
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ttv_collection = db["time_to_value"]
+
+@app.get("/api/ttv/milestones")
+async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
+    """Get Time to Value milestones for the current user/workspace."""
+    doc = ttv_collection.find_one({"user_email": current_user["email"]}, {"_id": 0})
+
+    # Auto-detect milestones from real data if not explicitly tracked
+    now = datetime.now(timezone.utc)
+    user_doc = users_collection.find_one({"email": current_user["email"]})
+    signup_at = user_doc.get("created_at") if user_doc else now.isoformat()
+
+    # First lead captured
+    first_lead = leads_collection.find_one(
+        {"created_by": {"$in": [current_user["email"], "web_form", "api", "meta_webhook"]}},
+        {"created_at": 1},
+        sort=[("created_at", ASCENDING)]
+    )
+    first_lead_at = first_lead.get("created_at") if first_lead else None
+
+    # First ARIA conversation (any message sent)
+    first_aria = aria_conversations_collection.find_one(
+        {"role": "aria"},
+        {"created_at": 1},
+        sort=[("created_at", ASCENDING)]
+    )
+    first_aria_at = first_aria.get("created_at") if first_aria else None
+
+    # First meeting booked
+    first_meeting_lead = leads_collection.find_one(
+        {"aria_state": "MEETING_BOOKED"},
+        {"updated_at": 1},
+        sort=[("updated_at", ASCENDING)]
+    )
+    first_meeting_at = first_meeting_lead.get("updated_at") if first_meeting_lead else None
+
+    # First deal won
+    first_won = leads_collection.find_one(
+        {"status": "won"},
+        {"updated_at": 1},
+        sort=[("updated_at", ASCENDING)]
+    )
+    first_won_at = first_won.get("updated_at") if first_won else None
+
+    # Calculate durations
+    def time_diff_human(start_str, end_str):
+        if not start_str or not end_str:
+            return None
+        try:
+            start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+            diff = end - start
+            hours = diff.total_seconds() / 3600
+            if hours < 1:
+                return f"{int(diff.total_seconds() / 60)}m"
+            elif hours < 24:
+                return f"{hours:.1f}h"
+            else:
+                return f"{diff.days}d {int(hours % 24)}h"
+        except:
+            return None
+
+    milestones = [
+        {
+            "id": "signup",
+            "label": "Account Created",
+            "completed": True,
+            "completed_at": signup_at,
+            "time_from_start": None,
+            "icon": "user",
+        },
+        {
+            "id": "first_lead",
+            "label": "First Lead Captured",
+            "completed": first_lead_at is not None,
+            "completed_at": first_lead_at,
+            "time_from_start": time_diff_human(signup_at, first_lead_at),
+            "icon": "tray",
+        },
+        {
+            "id": "first_aria",
+            "label": "First ARIA Conversation",
+            "completed": first_aria_at is not None,
+            "completed_at": first_aria_at,
+            "time_from_start": time_diff_human(signup_at, first_aria_at),
+            "icon": "robot",
+        },
+        {
+            "id": "first_meeting",
+            "label": "First Meeting Booked",
+            "completed": first_meeting_at is not None,
+            "completed_at": first_meeting_at,
+            "time_from_start": time_diff_human(signup_at, first_meeting_at),
+            "icon": "calendar",
+        },
+        {
+            "id": "first_won",
+            "label": "First Deal Won",
+            "completed": first_won_at is not None,
+            "completed_at": first_won_at,
+            "time_from_start": time_diff_human(signup_at, first_won_at),
+            "icon": "trophy",
+        },
+    ]
+
+    completed_count = sum(1 for m in milestones if m["completed"])
+    total_milestones = len(milestones)
+    progress_pct = round((completed_count / total_milestones) * 100)
+
+    # Total time to first meeting (key TTV metric)
+    ttv_to_meeting = time_diff_human(signup_at, first_meeting_at)
+
+    # Save/update TTV record
+    ttv_collection.update_one(
+        {"user_email": current_user["email"]},
+        {"$set": {
+            "milestones": milestones,
+            "completed_count": completed_count,
+            "progress_pct": progress_pct,
+            "ttv_to_meeting": ttv_to_meeting,
+            "updated_at": now.isoformat(),
+        }},
+        upsert=True
+    )
+
+    return {
+        "milestones": milestones,
+        "completed_count": completed_count,
+        "total_milestones": total_milestones,
+        "progress_pct": progress_pct,
+        "ttv_to_meeting": ttv_to_meeting,
+        "signup_at": signup_at,
+    }
