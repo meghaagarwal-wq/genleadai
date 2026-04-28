@@ -3646,10 +3646,18 @@ async def whatsapp_webhook_receive(payload: Dict[str, Any]):
                         continue
                     from_phone = msg.get("from")
                     body = (msg.get("text") or {}).get("body", "")
-                    # Match to existing lead by phone
-                    candidates = leads_collection.find({"phone": {"$regex": from_phone[-9:]}}, {"_id": 1}) if from_phone else []
-                    for lead_row in candidates:
-                        lead_id = str(lead_row["_id"])
+                    # Match to existing lead by phone — exact match on normalized digits or last-10
+                    normalized_from = _normalize_phone(from_phone or "")
+                    last10 = normalized_from[-10:] if len(normalized_from) >= 10 else normalized_from
+                    candidate = None
+                    if normalized_from:
+                        # Try exact phone match first
+                        candidate = leads_collection.find_one({"phone": from_phone}, {"_id": 1})
+                        if not candidate and last10:
+                            # Fallback: anchor regex to ensure last10 digits are at end of phone string
+                            candidate = leads_collection.find_one({"phone": {"$regex": f"{last10}$"}}, {"_id": 1})
+                    if candidate:
+                        lead_id = str(candidate["_id"])
                         activities_collection.insert_one({
                             "lead_id": lead_id, "user_id": "whatsapp_webhook",
                             "activity_type": "whatsapp_received",
@@ -3659,7 +3667,6 @@ async def whatsapp_webhook_receive(payload: Dict[str, Any]):
                             "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id")},
                             "created_at": datetime.now(timezone.utc).isoformat(),
                         })
-                        break
     except Exception as e:
         print(f"WhatsApp webhook processing error: {e}")
     return {"received": True}

@@ -144,7 +144,7 @@ const Dashboard = () => {
                 key={o.lead_id}
                 onClick={() => navigate(`/leads/${o.lead_id}`)}
                 className="w-full flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-white/50 transition-colors text-left"
-                data-testid={`brochure-open-${o.lead_id}`}
+                data-testid={`brochure-open-row-${o.lead_id}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-7 h-7 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
