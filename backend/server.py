@@ -3019,9 +3019,12 @@ async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
             start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
             end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
             diff = end - start
-            hours = diff.total_seconds() / 3600
+            total_seconds = diff.total_seconds()
+            if total_seconds < 0:
+                return None
+            hours = total_seconds / 3600
             if hours < 1:
-                return f"{int(diff.total_seconds() / 60)}m"
+                return f"{int(total_seconds / 60)}m"
             elif hours < 24:
                 return f"{hours:.1f}h"
             else:

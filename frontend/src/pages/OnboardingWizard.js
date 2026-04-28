@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
-import { ArrowRight, ArrowLeft, Buildings, User, CalendarBlank, Target, Sparkle, CheckCircle, Rocket } from '@phosphor-icons/react';
+import { ArrowRight, ArrowLeft, Buildings, User, CalendarBlank, Target, Sparkle, CheckCircle, Rocket, Tray, Robot, Trophy, Timer } from '@phosphor-icons/react';
 
 const steps = [
   { id: 'company', title: 'Your Company', subtitle: 'Tell us about your business', icon: Buildings },
@@ -142,6 +142,48 @@ const OnboardingWizard = ({ onComplete }) => {
                       <span className={`text-sm ${item.check ? 'text-[#1A0A2E]' : 'text-[#9B8AB0]'}`}>{item.text}</span>
                     </div>
                   ))}
+                </div>
+
+                {/* Time-to-Value Roadmap Preview */}
+                <div className="mt-5 bg-white border border-[#E8E0F5] rounded-xl p-4 text-left" data-testid="onb-ttv-preview">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+                      <Timer size={14} className="text-white" weight="fill" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your Time-to-Value Roadmap</h4>
+                      <p className="text-[11px] text-[#5A4A7A]">Track your speed from signup to first win</p>
+                    </div>
+                  </div>
+
+                  <div className="relative pl-2">
+                    {[
+                      { Icon: User, label: 'Account Created', desc: 'Just now', done: true },
+                      { Icon: Tray, label: 'First Lead Captured', desc: 'Add or import a lead', done: false },
+                      { Icon: Robot, label: 'First ARIA Conversation', desc: 'ARIA reaches out', done: false },
+                      { Icon: CalendarBlank, label: 'First Meeting Booked', desc: 'Discovery call scheduled', done: false },
+                      { Icon: Trophy, label: 'First Deal Won', desc: 'Mark a lead as won', done: false },
+                    ].map((m, i, arr) => (
+                      <div key={i} className="flex items-start gap-3 pb-3 last:pb-0 relative">
+                        {i < arr.length - 1 && (
+                          <div className="absolute left-[14px] top-7 bottom-0 w-px bg-[#E8E0F5]" />
+                        )}
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${m.done ? 'border-2 border-[#7C35DC]' : 'bg-[#F9F5FF] border border-[#E8E0F5]'}`} style={m.done ? { background: 'var(--gradient-brand)' } : {}}>
+                          <m.Icon size={12} className={m.done ? 'text-white' : 'text-[#9B8AB0]'} weight="fill" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs font-semibold ${m.done ? 'text-[#1A0A2E]' : 'text-[#5A4A7A]'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>{m.label}</p>
+                          <p className="text-[11px] text-[#9B8AB0]">{m.desc}</p>
+                        </div>
+                        {m.done && <CheckCircle size={14} className="text-[#16A34A] mt-0.5" weight="fill" />}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-[#E8E0F5] flex items-center justify-between">
+                    <span className="text-[11px] text-[#5A4A7A]">Live progress on your Dashboard</span>
+                    <span className="text-[11px] font-bold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>1 / 5 done</span>
+                  </div>
                 </div>
               </div>
             )}

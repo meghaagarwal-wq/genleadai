@@ -16,6 +16,7 @@ import AriaAnalytics from './pages/AriaAnalytics';
 import YourFiveToday from './pages/YourFiveToday';
 import SleepingLeads from './pages/SleepingLeads';
 import AuditLog from './pages/AuditLog';
+import OnboardingWizard from './pages/OnboardingWizard';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -54,6 +55,14 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute>
+                  <OnboardingWizard />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/*"
               element={
