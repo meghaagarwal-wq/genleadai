@@ -9,57 +9,62 @@ FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Emergent Object Stor
 Auth (JWT), Lead CRUD, Pipeline Kanban (B2B/B2C), Campaigns, Analytics (6 charts), Team, Settings, RBAC
 
 ### ARIA 3-Phase Sales PA
-- Phase 1: First touch, qualification, Calendly booking, pre-call research + briefing
-- Phase 2: Call hold + outcome buttons
-- Phase 3: Post-call messages, 4-step proposal follow-up, Won/Lost
+Phase 1: First touch + qualification + Calendly + briefing
+Phase 2: Call hold + outcome buttons
+Phase 3: Post-call follow-ups, Won/Lost
 
 ### Advanced Modules
-Your 5 Today, Sleeping Leads + Revival Engine, No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
+Your 5 Today, Sleeping Leads + Revival, No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
 
 ### Production Lead Ingestion
-Public REST API (API key auth), Embeddable web form, Calendly webhook, Meta Lead Ads webhook, WhatsApp webhook (verify + receive)
+Public REST API, Embeddable web form, Calendly webhook, Meta Lead Ads webhook, WhatsApp webhook (verify + receive)
 
 ### Time-to-Value
-- Live milestone widget on Dashboard
-- Roadmap preview on Onboarding Wizard step 4
-- **Celebration toast** — Sonner toaster fires share-worthy toast on milestone flip with copy-to-share button
+- Live milestone widget on Dashboard, Onboarding step 4 preview, milestone celebration toasts (Sonner)
 
 ### Pre-Call Lead Magnet (FULL)
-- **Workspace config** (Settings → Lead Magnet): name, URL OR PDF/PPTX upload, send timing, customizable template
-- **Per-campaign override** with `inherit:true|false` toggle (`PUT /api/lead-magnets/campaign/{id}`)
-- Auto-send on ARIA ESCALATE (pre_booking) + Calendly invitee.created (post_booking)
-- Channel auto-detected (email/whatsapp) from ARIA's most recent send
-- LeadDetail "Pre-Call Brochure" card with manual Send + engagement (sends, opens, last opened, hot badge)
-- **Dashboard "They opened your brochure!" alert** — shows recent opens with hot badges, click-through to lead
-- **🔥 Hot strip on Lead Inbox rows** — leads who opened brochure get red→purple left strip + inline "Nx hot" badge
-- Public tracking endpoint redirects + logs each open with timestamp
-- Pydantic Literal validators on type/send_timing — invalid values rejected with 422
+- Workspace config + per-campaign override (`inherit:true|false`)
+- URL OR PDF/PPTX upload, send timing, customizable template
+- Auto-send on ARIA ESCALATE + Calendly booked
+- Channel auto-detected (email/whatsapp)
+- LeadDetail Pre-Call Brochure card with Send + engagement
+- Dashboard "They opened your brochure!" alert
+- 🔥 Hot strip on Lead Inbox rows
+- Public tracking redirect + view logging
+- Pydantic Literal validators
 
-### Real Meta WhatsApp Cloud API (NEW)
-- Outbound text send via Graph API v23.0 (`POST /{phone_number_id}/messages`)
-- Webhook verify (`GET /api/webhooks/whatsapp` with hub.challenge echo) + receive (`POST /api/webhooks/whatsapp` for inbound replies)
-- Inbound reply matched to lead by exact phone OR anchored last-10-digits regex
-- Graceful **logged-only fallback** when WHATSAPP_ACCESS_TOKEN/PHONE_NUMBER_ID env empty
-- Required env: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (placeholders in /app/backend/.env)
+### Real Meta WhatsApp Cloud API
+- Outbound text via Graph API v23.0
+- Webhook verify + receive, lead matched by exact phone or anchored last-10-digits regex
+- Graceful logged-only fallback when env empty
+
+### ARIA's Best Time to Call (NEW — iter 12)
+- 2 endpoints:
+  - `GET /api/aria/best-time-to-call/{lead_id}` — for LeadDetail
+  - `GET /api/aria/call-priority?limit=N` — top leads ready right now, for Dashboard
+- Combines: brochure-open recency (≤30m=+60, ≤4h=+30) + lead timezone (country or phone-code) + active hours window (from reply heatmap or 10am-4pm default) + ICP boost (hot=+20, warm=+10)
+- Output: call_score 0-100, urgency (now/soon/later), suggested_action, reasons[], lead_local_hour, active_window
+- Dashboard widget: top 3 leads with CALL NOW chip + tel: link
+- LeadDetail card: full breakdown + Call {first_name} button when urgency=now
 
 ### Design
-White + Purple (#7C35DC) theme, Plus Jakarta Sans, Sonner toasts (bottom-right, rich colors)
+White + Purple (#7C35DC), Plus Jakarta Sans, Sonner toasts
 
 ## Recent Changes
-**Feb 28, 2026 (multi-iteration session)**
-- Iter 9: TTV endpoint, Dashboard widget, Onboarding step 4 preview, /onboarding route
-- Iter 10: TTV celebration toast hook + Sonner Toaster; Lead Magnet feature (config, upload, send, tracking, engagement); BACKEND_URL env added
-- **Iter 11: Per-campaign override; Pydantic Literal validators; Dashboard brochure-opens alert; Lead Inbox 🔥 Hot strip; Real Meta WhatsApp Cloud API (send + webhook verify + receive); Hardened phone matching to anchored last-10**
+- Iter 9: TTV endpoint, Dashboard widget, /onboarding route
+- Iter 10: TTV celebration toast hook + Sonner Toaster, Lead Magnet, BACKEND_URL env
+- Iter 11: Per-campaign override, Literal validators, Dashboard brochure-opens alert, Lead Inbox hot strip, Real WhatsApp Cloud API
+- **Iter 12: ARIA's Best Time to Call (Dashboard widget + LeadDetail card + 2 endpoints, 14/14 backend tests, weight tuning so hot-ICP leads in-window reach 'soon')**
 
 ## Test Status
-- iteration_11.json: **36/36 backend tests passing (14 new + 22 regression) + 100% frontend flows verified**
-- Test files: /app/backend/tests/test_ttv.py, test_lead_magnet.py
+- iteration_12.json: 14/14 backend + 100% frontend; cumulative 50+/50+ tests across 4 iterations.
 
 ## Backlog
-- P1: **Refactor server.py (~3666 lines) into modular routers** — auth, leads, ttv, onboarding, aria, billing, lead_magnet, whatsapp (deferred to focused session)
-- P2: Materialize per-lead engagement summary if leads grow >10k (current aggregation is O(N) per dashboard load)
-- P2: WhatsApp template messages (for proactive sends outside the 24h window)
-- Production: Set actual `WHATSAPP_*` env values + add Calendly webhook verification signature
+- P1: Refactor server.py (~3915 lines) into modular routers — deferred to dedicated session
+- P2: Materialize per-lead engagement summary if leads grow >10k
+- P2: WhatsApp template messages (proactive sends outside 24h window)
+- P2: Allow founder to override the active-hours window per workspace (currently 10am-4pm default)
+- Production: Set actual `WHATSAPP_*` env values + Calendly webhook signature verification
 
 ## Deployment: READY
 Custom domain target: app.genleadai.com

@@ -3796,16 +3796,16 @@ def _compute_best_time_to_call_for_lead(lead: dict) -> dict:
         score += 30
         reasons.append(f"opened brochure {minutes_since_view}m ago")
     if in_window:
-        score += 25
+        score += 30
         reasons.append(f"in {tz_label} active hours")
     else:
         reasons.append(f"outside {tz_label} active hours ({_format_local_window(start_h, end_h)})")
     icp = lead.get("icp_score") or 0
     if icp >= 70:
-        score += 15
+        score += 20
         reasons.append(f"hot ICP ({icp})")
     elif icp >= 40:
-        score += 8
+        score += 10
 
     if score >= 75:
         urgency = "now"
