@@ -3670,3 +3670,241 @@ async def whatsapp_webhook_receive(payload: Dict[str, Any]):
     except Exception as e:
         print(f"WhatsApp webhook processing error: {e}")
     return {"received": True}
+
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ARIA — Best Time to Call
+# Combines: brochure-open recency + lead timezone (from country) + reply-hour heatmap
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Coarse country -> (timezone_label, utc_offset_hours) lookup. Covers ~95% of common targets.
+_COUNTRY_TZ = {
+    "india": ("IST", 5.5), "in": ("IST", 5.5),
+    "united states": ("EST", -5.0), "usa": ("EST", -5.0), "us": ("EST", -5.0),
+    "united kingdom": ("GMT", 0.0), "uk": ("GMT", 0.0), "gb": ("GMT", 0.0),
+    "canada": ("EST", -5.0), "ca": ("EST", -5.0),
+    "australia": ("AEDT", 11.0), "au": ("AEDT", 11.0),
+    "germany": ("CET", 1.0), "de": ("CET", 1.0),
+    "france": ("CET", 1.0), "fr": ("CET", 1.0),
+    "spain": ("CET", 1.0), "es": ("CET", 1.0),
+    "italy": ("CET", 1.0), "it": ("CET", 1.0),
+    "netherlands": ("CET", 1.0), "nl": ("CET", 1.0),
+    "singapore": ("SGT", 8.0), "sg": ("SGT", 8.0),
+    "japan": ("JST", 9.0), "jp": ("JST", 9.0),
+    "uae": ("GST", 4.0), "ae": ("GST", 4.0),
+    "brazil": ("BRT", -3.0), "br": ("BRT", -3.0),
+    "mexico": ("CST", -6.0), "mx": ("CST", -6.0),
+}
+
+
+def _resolve_lead_timezone(lead: dict):
+    country = (lead.get("country") or "").strip().lower()
+    if country in _COUNTRY_TZ:
+        return _COUNTRY_TZ[country]
+    # Try to match phone country code prefix as last-resort
+    phone = lead.get("phone") or ""
+    digits = "".join(c for c in phone if c.isdigit())
+    if digits.startswith("91"):
+        return _COUNTRY_TZ["india"]
+    if digits.startswith("1") and len(digits) >= 10:
+        return _COUNTRY_TZ["united states"]
+    if digits.startswith("44"):
+        return _COUNTRY_TZ["united kingdom"]
+    if digits.startswith("61"):
+        return _COUNTRY_TZ["australia"]
+    if digits.startswith("971"):
+        return _COUNTRY_TZ["uae"]
+    return ("UTC", 0.0)
+
+
+def _local_hour_now(utc_offset_hours: float) -> int:
+    now_utc = datetime.now(timezone.utc)
+    local_total = (now_utc.hour + now_utc.minute / 60.0 + utc_offset_hours) % 24
+    return int(local_total)
+
+
+def _format_local_window(start_hour: int, end_hour: int) -> str:
+    def fmt(h):
+        h = h % 24
+        suffix = "AM" if h < 12 else "PM"
+        h12 = ((h - 1) % 12) + 1
+        return f"{h12}{suffix}"
+    return f"{fmt(start_hour)}–{fmt(end_hour)}"
+
+
+def _compute_reply_window_hours(lead_id: str) -> Optional[List[int]]:
+    """Return distinct local-hours when this lead has historically replied. None if no data."""
+    activities = list(activities_collection.find(
+        {"lead_id": lead_id, "activity_type": {"$in": ["whatsapp_received", "email_received"]}},
+        {"_id": 0, "created_at": 1},
+    ).limit(50))
+    if not activities:
+        return None
+    hours = set()
+    for a in activities:
+        ca = a.get("created_at")
+        if not ca:
+            continue
+        try:
+            dt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+            hours.add(dt.hour)
+        except Exception:
+            pass
+    return sorted(hours) if hours else None
+
+
+def _compute_best_time_to_call_for_lead(lead: dict) -> dict:
+    """Return {label, window_local, urgency, reason, call_score, lead_local_hour, tz_label, suggested_action}."""
+    lead_id = lead.get("id") or lead.get("_id_str")
+    tz_label, utc_off = _resolve_lead_timezone(lead)
+    local_hour = _local_hour_now(utc_off)
+
+    # Determine the lead's most active reply window (heuristic)
+    reply_hours = _compute_reply_window_hours(lead_id) if lead_id else None
+    if reply_hours:
+        # Use min/max of replied hours, padded ±1
+        start_h = max(0, min(reply_hours) - 1)
+        end_h = min(23, max(reply_hours) + 1)
+    else:
+        # Default business hours window (10am – 4pm local)
+        start_h, end_h = 10, 16
+
+    in_window = start_h <= local_hour <= end_h
+
+    # Brochure-open recency
+    last_view = lead_magnet_views_collection.find_one(
+        {"lead_id": lead_id, "kind": "view"},
+        {"_id": 0, "created_at": 1},
+        sort=[("created_at", DESCENDING)],
+    ) if lead_id else None
+    minutes_since_view = None
+    if last_view and last_view.get("created_at"):
+        try:
+            dt = datetime.fromisoformat(last_view["created_at"].replace("Z", "+00:00"))
+            minutes_since_view = max(0, int((datetime.now(timezone.utc) - dt).total_seconds() / 60))
+        except Exception:
+            pass
+
+    # Compute call_score (0-100) and urgency
+    score = 0
+    reasons: List[str] = []
+    if minutes_since_view is not None and minutes_since_view <= 30:
+        score += 60
+        reasons.append(f"opened brochure {minutes_since_view}m ago")
+    elif minutes_since_view is not None and minutes_since_view <= 240:
+        score += 30
+        reasons.append(f"opened brochure {minutes_since_view}m ago")
+    if in_window:
+        score += 25
+        reasons.append(f"in {tz_label} active hours")
+    else:
+        reasons.append(f"outside {tz_label} active hours ({_format_local_window(start_h, end_h)})")
+    icp = lead.get("icp_score") or 0
+    if icp >= 70:
+        score += 15
+        reasons.append(f"hot ICP ({icp})")
+    elif icp >= 40:
+        score += 8
+
+    if score >= 75:
+        urgency = "now"
+        suggested_action = "Call now"
+    elif score >= 45:
+        urgency = "soon"
+        suggested_action = f"Good window now ({tz_label})" if in_window else f"Wait for their {tz_label} window"
+    else:
+        urgency = "later"
+        if in_window:
+            suggested_action = f"Available now ({tz_label})"
+        else:
+            # Compute hours until next window
+            if local_hour < start_h:
+                hours_to_window = start_h - local_hour
+            else:
+                hours_to_window = (24 - local_hour) + start_h
+            suggested_action = f"Best in ~{hours_to_window}h ({_format_local_window(start_h, end_h)} {tz_label})"
+
+    return {
+        "tz_label": tz_label,
+        "utc_offset_hours": utc_off,
+        "lead_local_hour": local_hour,
+        "active_window_local": _format_local_window(start_h, end_h),
+        "active_start_hour": start_h,
+        "active_end_hour": end_h,
+        "in_window": in_window,
+        "minutes_since_brochure_open": minutes_since_view,
+        "call_score": min(100, score),
+        "urgency": urgency,
+        "suggested_action": suggested_action,
+        "reasons": reasons,
+        "data_source": "reply_heatmap" if reply_hours else "default_business_hours",
+    }
+
+
+@app.get("/api/aria/best-time-to-call/{lead_id}")
+async def best_time_to_call_for_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Return the best time to call THIS lead — for Lead Detail panel."""
+    try:
+        lead_doc = leads_collection.find_one(
+            {"_id": ObjectId(lead_id)},
+            {"_id": 0, "first_name": 1, "last_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1},
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid lead id")
+    if not lead_doc:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead_doc["id"] = lead_id
+    return _compute_best_time_to_call_for_lead(lead_doc)
+
+
+@app.get("/api/aria/call-priority")
+async def aria_call_priority(limit: int = 3, current_user: dict = Depends(get_current_user)):
+    """Return the top N leads that are ripe to call RIGHT NOW — for Dashboard widget.
+
+    Considers: leads with recent brochure opens, then leads in active timezone window with high ICP.
+    """
+    limit = max(1, min(limit, 10))
+
+    # Pull lead candidates: anyone with engagement OR ICP>=60 OR aria_state in active phases
+    candidate_ids = set()
+    # Recent brochure openers (last 24h)
+    recent_views = list(lead_magnet_views_collection.find({"kind": "view"}, {"_id": 0, "lead_id": 1, "created_at": 1}).sort("created_at", DESCENDING).limit(50))
+    for v in recent_views:
+        if v.get("lead_id"):
+            candidate_ids.add(v["lead_id"])
+    # High ICP leads not in terminal states
+    high_icp = list(leads_collection.find(
+        {"icp_score": {"$gte": 60}, "status": {"$nin": ["won", "lost", "unqualified"]}},
+        {"_id": 1},
+    ).limit(30))
+    for l_doc in high_icp:
+        candidate_ids.add(str(l_doc["_id"]))
+
+    results = []
+    for lid in candidate_ids:
+        try:
+            lead_doc = leads_collection.find_one(
+                {"_id": ObjectId(lid)},
+                {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1, "status": 1, "email": 1},
+            )
+        except Exception:
+            continue
+        if not lead_doc:
+            continue
+        lead_doc["id"] = lid
+        score_data = _compute_best_time_to_call_for_lead(lead_doc)
+        results.append({
+            "lead_id": lid,
+            "first_name": lead_doc.get("first_name"),
+            "last_name": lead_doc.get("last_name"),
+            "company_name": lead_doc.get("company_name"),
+            "phone": lead_doc.get("phone"),
+            "email": lead_doc.get("email"),
+            "icp_score": lead_doc.get("icp_score"),
+            "icp_tier": lead_doc.get("icp_tier"),
+            **score_data,
+        })
+
+    results.sort(key=lambda x: (x["call_score"], x.get("icp_score") or 0), reverse=True)
+    return {"priority": results[:limit], "checked_count": len(candidate_ids)}

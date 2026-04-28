@@ -23,13 +23,14 @@ const Dashboard = () => {
   const [sleepingCount, setSleepingCount] = useState(0);
   const [ttv, setTtv] = useState(null);
   const [recentOpens, setRecentOpens] = useState([]);
+  const [callPriority, setCallPriority] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     try {
-      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes] = await Promise.all([
+      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes, cpRes] = await Promise.all([
         api.get('/api/analytics/dashboard'),
         api.get('/api/leads?limit=5'),
         api.get('/api/aria/analytics').catch(() => ({ data: null })),
@@ -37,6 +38,7 @@ const Dashboard = () => {
         api.get('/api/leads/sleeping?threshold_days=14').catch(() => ({ data: { total: 0 } })),
         api.get('/api/ttv/milestones').catch(() => ({ data: null })),
         api.get('/api/lead-magnets/recent-opens?limit=5').catch(() => ({ data: { opens: [] } })),
+        api.get('/api/aria/call-priority?limit=3').catch(() => ({ data: { priority: [] } })),
       ]);
       setAnalytics(aRes.data);
       setRecentLeads(lRes.data.leads);
@@ -45,6 +47,7 @@ const Dashboard = () => {
       setSleepingCount(sRes.data.total || 0);
       setTtv(ttvRes.data);
       setRecentOpens(opensRes.data?.opens || []);
+      setCallPriority(cpRes.data?.priority || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -165,6 +168,68 @@ const Dashboard = () => {
                 <ArrowRight size={14} className="text-[#7C35DC] flex-shrink-0" />
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ARIA Best Time to Call — top priority leads */}
+      {callPriority.length > 0 && (
+        <div className="rounded-xl border border-[#E0D4F7] overflow-hidden" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F9F5FF 100%)', boxShadow: 'var(--shadow-card)' }} data-testid="best-time-to-call-widget">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E0F5]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+                <Clock size={14} className="text-white" weight="fill" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA's Best Time to Call</h3>
+                <p className="text-[11px] text-[#5A4A7A]">Right person, right moment — based on opens, ICP & timezone</p>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20">{callPriority.length} ready</span>
+          </div>
+          <div className="divide-y divide-[#F0ECF9]">
+            {callPriority.map((p) => {
+              const urgencyStyle = {
+                now: { color: '#16A34A', bg: '#DCFCE7', border: '#16A34A33', label: 'Call now' },
+                soon: { color: '#D97706', bg: '#FEF3C7', border: '#D9770633', label: 'Soon' },
+                later: { color: '#9B8AB0', bg: '#F1F5F9', border: '#94A3B833', label: 'Later' },
+              }[p.urgency] || {};
+              return (
+                <div key={p.lead_id} className="flex items-center justify-between px-5 py-3 hover:bg-white/70 transition-colors" data-testid={`call-priority-row-${p.lead_id}`}>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-9 h-9 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{(p.first_name?.[0] || '?').toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-[#1A0A2E] truncate">{p.first_name} {p.last_name}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border" style={{ color: urgencyStyle.color, background: urgencyStyle.bg, borderColor: urgencyStyle.border }}>{urgencyStyle.label}</span>
+                        {p.icp_score >= 70 && (
+                          <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#F4E6FD] text-[#7C35DC] border border-[#7C35DC]/20">
+                            <Fire size={9} weight="fill" /> ICP {p.icp_score}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#5A4A7A]">
+                        <span className="truncate">{p.suggested_action}</span>
+                        <span className="text-[#9B8AB0]">·</span>
+                        <span className="text-[#9B8AB0] font-mono">{p.tz_label} {p.lead_local_hour}:00</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {p.phone && (
+                      <a href={`tel:${p.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 px-3 py-1.5 btn-gradient rounded-lg text-xs font-semibold text-white" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid={`call-now-btn-${p.lead_id}`}>
+                        <Phone size={12} weight="fill" /> Call
+                      </a>
+                    )}
+                    <button onClick={() => navigate(`/leads/${p.lead_id}`)} className="px-2.5 py-1.5 bg-white border border-[#E8E0F5] text-[#5A4A7A] hover:text-[#7C35DC] hover:border-[#7C35DC]/30 rounded-lg transition-colors" data-testid={`open-lead-btn-${p.lead_id}`}>
+                      <ArrowRight size={12} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

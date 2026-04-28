@@ -19,6 +19,7 @@ import {
   Paperclip,
   Eye,
   Fire,
+  CheckCircle,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 
@@ -35,11 +36,13 @@ const LeadDetail = () => {
   const [editData, setEditData] = useState({});
   const [engagement, setEngagement] = useState(null);
   const [sendingMagnet, setSendingMagnet] = useState(false);
+  const [bestTime, setBestTime] = useState(null);
 
   useEffect(() => {
     fetchLead();
     fetchActivities();
     fetchEngagement();
+    fetchBestTime();
   }, [id]);
 
   const fetchLead = async () => {
@@ -109,6 +112,15 @@ const LeadDetail = () => {
       setEngagement(res.data);
     } catch (err) {
       // silent — engagement is optional
+    }
+  };
+
+  const fetchBestTime = async () => {
+    try {
+      const res = await api.get(`/api/aria/best-time-to-call/${id}`);
+      setBestTime(res.data);
+    } catch (err) {
+      // silent
     }
   };
 
@@ -291,6 +303,56 @@ const LeadDetail = () => {
               </div>
             )}
           </div>
+
+          {/* Best Time to Call */}
+          {bestTime && (
+            <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="best-time-to-call-card">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-3 flex items-center gap-1.5" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                <Clock size={12} /> ARIA's Best Time to Call
+              </h4>
+              <div className="space-y-2.5">
+                {/* Big call score */}
+                <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: bestTime.urgency === 'now' ? '#DCFCE7' : bestTime.urgency === 'soon' ? '#FEF3C7' : '#F4F0FF' }}>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: bestTime.urgency === 'now' ? '#16A34A' : bestTime.urgency === 'soon' ? '#D97706' : '#7C35DC' }}>
+                      {bestTime.urgency === 'now' ? 'Call now' : bestTime.urgency === 'soon' ? 'Soon' : 'Later'}
+                    </div>
+                    <div className="text-sm font-semibold text-[#1A0A2E] mt-0.5">{bestTime.suggested_action}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-extrabold font-mono" style={{ color: bestTime.urgency === 'now' ? '#16A34A' : bestTime.urgency === 'soon' ? '#D97706' : '#7C35DC' }}>{bestTime.call_score}</div>
+                    <div className="text-[10px] text-[#9B8AB0] uppercase tracking-wider">/100</div>
+                  </div>
+                </div>
+                {/* Timezone & window */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-[#F9F5FF] border border-[#E8E0F5]">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#9B8AB0]">Their time</div>
+                    <div className="text-sm font-bold text-[#1A0A2E] font-mono mt-0.5">{bestTime.tz_label} {String(bestTime.lead_local_hour).padStart(2, '0')}:00</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#F9F5FF] border border-[#E8E0F5]">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#9B8AB0]">Active window</div>
+                    <div className={`text-sm font-bold font-mono mt-0.5 ${bestTime.in_window ? 'text-[#16A34A]' : 'text-[#5A4A7A]'}`}>{bestTime.active_window_local}</div>
+                  </div>
+                </div>
+                {/* Reasons */}
+                {bestTime.reasons?.length > 0 && (
+                  <ul className="space-y-1 pt-1" data-testid="best-time-reasons">
+                    {bestTime.reasons.map((r, i) => (
+                      <li key={i} className="text-xs text-[#5A4A7A] flex items-start gap-1.5">
+                        <CheckCircle size={11} className="text-[#7C35DC] mt-0.5 flex-shrink-0" weight="fill" /> {r}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {lead?.phone && bestTime.urgency === 'now' && (
+                  <a href={`tel:${lead.phone}`} className="w-full flex items-center justify-center gap-2 btn-gradient px-3 py-2.5 rounded-lg text-sm font-semibold mt-2" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="best-time-call-now-btn">
+                    <Phone size={14} weight="fill" /> Call {lead.first_name}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column - Activity & Details */}

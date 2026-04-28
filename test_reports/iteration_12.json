@@ -1,0 +1,61 @@
+{
+  "summary": "Iteration 12 verification of ARIA Best-Time-to-Call feature. Tested 2 new backend endpoints (/api/aria/best-time-to-call/{lead_id} + /api/aria/call-priority) and the Dashboard widget + LeadDetail card. 14/14 backend pytests passed; all required data-testid selectors render correctly on the frontend; 'Best in 0h' bug-fix confirmed (low-score in-window leads now show 'Available now (TZ)').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/aria/best-time-to-call/{lead_id}",
+        "issue": "Score ceiling without recent brochure is 40 (25 in_window + 15 hot ICP). A hot-ICP lead inside their active window can never reach urgency='soon' (>=45) or 'now' (>=75) without a brochure-open. UX-wise the suggested_action 'Available now (EST)' is fine but urgency badge stays 'later' even when the lead is clearly call-able. Consider bumping in_window from +25 to +35 or hot-ICP from +15 to +25 if you want hot leads in-window to surface as 'soon'."
+      },
+      {
+        "endpoint": "/api/aria/call-priority",
+        "issue": "Top-1 priority row Public FormUser has icp_score=0 / icp_tier='cold' yet ranks #1. This is correct given recent brochure dominates the score, but the UI shows the ICP badge missing while still labelling 'CALL NOW' — a bit jarring. Consider showing 'Just opened brochure' chip instead of (or alongside) ICP."
+      },
+      {
+        "endpoint": "/api/aria/best-time-to-call/{lead_id}",
+        "issue": "Quinn Varma's country is 'USA' (per lead detail city='Toronto, USA') so tz resolves to EST. If the intent was IST per the original problem statement Quinn example, country/phone-country-code data may need correction in seed data — not a code bug."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "LeadDetail",
+        "issues": [
+          "best-time-to-call-card is mounted (data-testid found) but did not appear in the visible viewport on Quinn's lead page during initial render — the right-rail Timeline panel dominates. Verify the card is placed where users will actually see it (e.g., right of the lead summary or above Timeline)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_best_time_to_call.py",
+    "/app/test_reports/pytest/iter12_results.xml"
+  ],
+  "action_items": [
+    "[Optional UX] Consider raising in_window or hot-ICP weights so hot leads in-window can reach urgency='soon' without requiring a brochure-open.",
+    "[Optional UX] Verify Dashboard 'Public FormUser' row not showing ICP/tier feels right (it currently says CALL NOW for an icp_score=0 'cold' lead — the brochure-open dominates).",
+    "[Optional design] Confirm best-time-to-call-card placement is above-the-fold on LeadDetail right column."
+  ],
+  "critical_code_review_comments": [
+    "server.py line ~3724: _local_hour_now uses int() on a float — fine for non-negative results but relies on the modulo yielding a non-negative value; works because Python % always returns non-negative when divisor positive. OK.",
+    "server.py line ~3826: 'Best in ~{h}h' branch only fires when local_hour > end_h (else uses 24-local_hour+start_h). Code correctly avoids the previously-reported 'Best in 0h' bug because the 'Available now (TZ)' branch is hit when in_window=True. Confirmed via Quinn endpoint output.",
+    "server.py line ~3909: priority sort uses tuple (call_score, icp_score) — stable & predictable. Good.",
+    "server.py line ~3870-3882: candidate gathering combines 'recent brochure openers (last 50)' + 'high-ICP non-terminal (limit 30)' — duplicates de-duped via set. Reasonable scope but at scale (>50 brochure views/day) only the latest 50 openers are considered; document this limit or paginate.",
+    "Frontend: All required data-testid attributes present (best-time-to-call-widget, call-priority-row-{id}, call-now-btn-{id}, open-lead-btn-{id}, best-time-to-call-card, best-time-reasons, best-time-call-now-btn). tel: links validated with correct phone numbers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_best_time_to_call.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14)",
+    "frontend": "100% (all required selectors and conditional rendering verified)"
+  },
+  "test_credentials": "admin@demo.com / Demo1234! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing seed leads 69e081b5cd724a3d376691c4 (Public FormUser, recent brochure, score=85 urgency=now) and 69df5f8410ff1b6e41ead225 (Quinn Varma, ICP 93 no brochure, score=40 urgency=later).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "ARIA Best-Time-to-Call endpoints are stable. Live values observed: Public FormUser → call_score=85, urgency=now, reasons=['opened brochure 11m ago','in EST active hours']. Quinn → call_score=40, urgency=later, suggested_action='Available now (EST)' — CONFIRMS 'Best in 0h' bug fix. Dashboard widget shows 3 priority rows with tel: links. LeadDetail card renders best-time-call-now-btn ONLY when urgency=now AND phone exists.",
+  "rca of the issue": "N/A — no bugs found in feature under test. Only minor UX suggestions (score ceiling for hot in-window leads w/o brochure, card placement) flagged for main agent."
+}
