@@ -1,41 +1,34 @@
-# GenLeadAI Lead Management System — PRD
+# GenLeadAI — Full PRD
 
-## Architecture
-- **Frontend:** React + TailwindCSS + Recharts + react-beautiful-dnd
-- **Backend:** FastAPI (Python) + MongoDB
-- **AI:** Claude API via Emergent LLM Key | **Email:** Resend API | **Calendar:** Calendly API v2 | **Storage:** Emergent Object Storage
-- **Auth:** JWT + bcrypt | **Design:** White+Purple (#7C35DC)
+## Stack
+FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Emergent Object Storage + Stripe
 
-## Complete Feature List
+## Complete Feature Map
 
 ### Core LMS
-- Auth, Lead CRUD, Pipeline Kanban, Campaigns, Analytics, Team, Settings
-- AI ICP scoring, summarization, email generation, CSV import
+Auth (JWT), Lead CRUD, Pipeline Kanban (B2B/B2C), Campaigns, Analytics (6 charts), Team, Settings
 
 ### ARIA 3-Phase Sales PA
-- Phase 1: First touch, qualification, Calendly booking, pre-call research + briefing
-- Phase 2: Call hold + 5 outcome buttons (Interested/Proposal/Not Fit/More Time/Rescheduled)
-- Phase 3: Post-call messages, proposal follow-up (4-step), reply handling, Won/Lost detection
-- Founder Override: Take over, hand back, private instructions, weekly summary
+Phase 1: First touch, qualification, Calendly booking, pre-call research + briefing
+Phase 2: Call hold + outcome buttons (Interested/Proposal/Not Fit/More Time/Rescheduled)
+Phase 3: Post-call messages, 4-step proposal follow-up, reply handling, Won/Lost
 
 ### Advanced Modules
-- Your 5 Today (AI daily picks), Sleeping Leads + Revival Engine
-- No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
+Your 5 Today, Sleeping Leads + Revival Engine, No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
 
-### Production Lead Ingestion (NEW)
-- [x] Public REST API: POST /api/v1/leads with API key auth
-- [x] Embeddable web form: POST /api/form/submit (no auth, UTM auto-capture)
-- [x] Embed code generator with GenLeadAI-branded form
-- [x] API key management (create, list, revoke)
-- [x] Calendly webhook receiver (auto-creates leads on booking)
-- [x] Meta Lead Ads webhook receiver (Facebook/Instagram)
-- [x] Lead deduplication on email (all endpoints)
-- [x] Auto-link campaigns by UTM params
-- [x] Settings > API & Forms tab with keys, embed code, webhook URLs
+### Production Lead Ingestion
+Public REST API (API key auth), Embeddable web form, Calendly webhook, Meta Lead Ads webhook, API key management
 
-### To make emails universal
-- Verify genleadai.com domain in Resend → update SENDER_EMAIL to aria@genleadai.com
+### Product-Ready (NEW)
+- [x] Onboarding Wizard — 5-step setup (Company → Founder → Calendar → ICP → Launch)
+- [x] Mobile-Responsive UI — Hamburger menu, responsive grids, touch-friendly
+- [x] Stripe Billing — 3 plans (Starter $49, Growth $149, Scale $399) with checkout
+- [x] CSV Export — Leads, activities per lead, analytics report
+- [x] Audit Log — Full activity trail with pagination
+- [x] Role-based access control (Admin/Manager/Sales Rep/Viewer)
+
+### Design
+White + Purple (#7C35DC) theme, Plus Jakarta Sans, shadow-card system
 
 ## Deployment: READY
-- Deployment health check: PASS
-- Custom domain: app.genleadai.com ready to link
+Custom domain: app.genleadai.com
