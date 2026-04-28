@@ -4087,21 +4087,27 @@ async def daily_call_plan_preview(current_user: dict = Depends(get_current_user)
 
 # ─── Daily cron loop ───
 async def _daily_call_plan_loop():
-    """Background loop: every 60s check if it's time to send today's plan."""
+    """Background loop: every 60s check if it's time to send today's plan.
+
+    Compares the founder's intended local minute-of-day against current UTC minute-of-day
+    (mod 1440) so that fractional UTC offsets like IST (+5.5) trigger correctly.
+    """
     while True:
         try:
             cfg = _get_daily_call_plan_config()
             if cfg and cfg.get("enabled") and cfg.get("send_to_email"):
                 send_hour_local = int(cfg.get("send_hour_local", 8))
                 tz_off = float(cfg.get("timezone_offset_hours", 0.0))
-                # Convert founder local hour -> UTC hour
-                send_hour_utc = (send_hour_local - tz_off) % 24
+                # Founder local minute-of-day (whole hours only) -> UTC minute-of-day
+                target_minute_of_day_utc = int(((send_hour_local * 60) - (tz_off * 60)) % 1440)
                 now_utc = datetime.now(timezone.utc)
+                current_minute_of_day_utc = now_utc.hour * 60 + now_utc.minute
+                # Trigger if within a 5-minute fire window (loop ticks every 60s)
+                in_window = 0 <= (current_minute_of_day_utc - target_minute_of_day_utc) <= 5
                 today_str = now_utc.strftime("%Y-%m-%d")
                 last_date = cfg.get("last_sent_date")
-                # Trigger if we're within the target hour and haven't sent today
-                if int(send_hour_utc) == now_utc.hour and last_date != today_str:
-                    print(f"[DailyCallPlan] Triggering send to {cfg['send_to_email']} (founder hour={send_hour_local}, UTC={send_hour_utc:.1f})")
+                if in_window and last_date != today_str:
+                    print(f"[DailyCallPlan] Triggering send to {cfg['send_to_email']} (founder hour={send_hour_local}, tz_off={tz_off}, target_utc_min={target_minute_of_day_utc}, now_utc_min={current_minute_of_day_utc})")
                     await _send_daily_call_plan(
                         cfg["send_to_email"],
                         plan_size=int(cfg.get("plan_size", 5)),

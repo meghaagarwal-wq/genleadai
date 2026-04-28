@@ -358,17 +358,22 @@ const Settings = () => {
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Send hour (your local time)</label>
                     <select value={dcp.send_hour_local} onChange={(e) => setDcp({ ...dcp, send_hour_local: parseInt(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="dcp-hour-input">
-                      {Array.from({ length: 24 }, (_, h) => (
-                        <option key={h} value={h}>{((h - 1) % 12 + 1)}{h < 12 ? 'AM' : 'PM'} ({String(h).padStart(2, '0')}:00)</option>
-                      ))}
+                      {Array.from({ length: 24 }, (_, h) => {
+                        const h12 = ((h - 1) % 12) + 1;
+                        const ampm = h < 12 ? 'AM' : 'PM';
+                        const hh = String(h).padStart(2, '0');
+                        return <option key={h} value={h}>{`${h12}${ampm} (${hh}:00)`}</option>;
+                      })}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your timezone (UTC offset)</label>
                     <select value={dcp.timezone_offset_hours} onChange={(e) => setDcp({ ...dcp, timezone_offset_hours: parseFloat(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="dcp-tz-input">
-                      {[-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,5.5,6,7,8,9,10,11,12,13,14].map(o => (
-                        <option key={o} value={o}>UTC{o >= 0 ? '+' : ''}{o}{o === 5.5 ? ' (IST)' : o === 0 ? ' (GMT)' : o === -5 ? ' (EST)' : ''}</option>
-                      ))}
+                      {[-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,5.5,6,7,8,9,10,11,12,13,14].map(o => {
+                        const sign = o >= 0 ? '+' : '';
+                        const note = o === 5.5 ? ' (IST)' : o === 0 ? ' (GMT)' : o === -5 ? ' (EST)' : '';
+                        return <option key={o} value={o}>{`UTC${sign}${o}${note}`}</option>;
+                      })}
                     </select>
                   </div>
                   <div>
