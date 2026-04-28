@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
-import { MagnifyingGlass, Plus, Funnel, X } from '@phosphor-icons/react';
+import { MagnifyingGlass, Plus, Funnel, X, Fire } from '@phosphor-icons/react';
 
 const CHANNELS = ['whatsapp','email','linkedin','instagram','facebook','website_form','cold_call','referral','webinar','organic_search','paid_ads','other'];
 const STATUSES = ['new','contacted','qualified','unqualified','proposal_sent','negotiation','won','lost','nurture'];
@@ -17,6 +17,7 @@ const LeadInbox = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [page, setPage] = useState(0);
+  const [engagementMap, setEngagementMap] = useState({});
   const limit = 20;
 
   const fetchLeads = useCallback(async () => {
@@ -31,6 +32,12 @@ const LeadInbox = () => {
   }, [page, search, filters]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  useEffect(() => {
+    api.get('/api/lead-magnets/engagement-map')
+      .then(res => setEngagementMap(res.data?.leads || {}))
+      .catch(() => {});
+  }, []);
 
   const tierBadge = (tier) => {
     const s = { hot:'bg-[#F4E6FD] text-[#7C35DC] border-[#C044E0]', warm:'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/30', cold:'bg-[#F1F5F9] text-[#64748B] border-[#94A3B8]/30' };
@@ -99,11 +106,24 @@ const LeadInbox = () => {
                 <tr><td colSpan={8} className="px-6 py-12 text-center text-[#9B8AB0]">Loading...</td></tr>
               ) : leads.length === 0 ? (
                 <tr><td colSpan={8} className="px-6 py-12 text-center text-[#9B8AB0]">No leads found</td></tr>
-              ) : leads.map(lead => (
-                <tr key={lead.id} className="border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors" onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
+              ) : leads.map(lead => {
+                const eng = engagementMap[lead.id];
+                const isHot = eng?.is_hot;
+                return (
+                <tr key={lead.id} className={`border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors relative ${isHot ? 'bg-gradient-to-r from-[#FEE2E2]/30 to-transparent' : ''}`} onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
+                  {isHot && <td className="absolute left-0 top-0 bottom-0 w-1" style={{ background: 'linear-gradient(180deg, #DC2626 0%, #C044E0 100%)' }} aria-hidden="true"></td>}
                   <td className="px-6 py-4">
-                    <div className="font-semibold text-[#1A0A2E]">{lead.first_name} {lead.last_name}</div>
-                    <div className="text-xs text-[#9B8AB0] font-mono">{lead.email}</div>
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <div className="font-semibold text-[#1A0A2E]">{lead.first_name} {lead.last_name}</div>
+                        <div className="text-xs text-[#9B8AB0] font-mono">{lead.email}</div>
+                      </div>
+                      {isHot && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/20" data-testid={`row-hot-${lead.id}`} title={`Opened brochure ${eng.view_count}× — last ${eng.last_viewed ? new Date(eng.last_viewed).toLocaleString() : 'recently'}`}>
+                          <Fire size={10} weight="fill" /> {eng.view_count}× hot
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-[#5A4A7A]">{lead.company_name || '—'}</td>
                   <td className="px-6 py-4"><span className={`px-2 py-0.5 text-xs font-semibold rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span></td>
@@ -120,7 +140,8 @@ const LeadInbox = () => {
                   <td className="px-6 py-4 text-[#5A4A7A] text-xs">{lead.source_channel?.replace('_',' ')}</td>
                   <td className="px-6 py-4 text-[#9B8AB0] text-xs font-mono">{new Date(lead.created_at).toLocaleDateString()}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

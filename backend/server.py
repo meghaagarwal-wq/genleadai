@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timedelta, timezone
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from bson import ObjectId
@@ -3130,17 +3130,97 @@ lead_magnet_views_collection = db["lead_magnet_views"]
 class LeadMagnetConfig(BaseModel):
     enabled: bool = False
     name: Optional[str] = None
-    type: str = "url"  # "url" | "file"
+    type: Literal["url", "file"] = "url"
     url: Optional[str] = None
     file_id: Optional[str] = None
     file_name: Optional[str] = None
-    send_timing: str = "post_booking"  # "pre_booking" | "post_booking" | "both"
+    send_timing: Literal["pre_booking", "post_booking", "both"] = "post_booking"
+    message_template: Optional[str] = None
+
+
+class CampaignLeadMagnetOverride(BaseModel):
+    enabled: bool = False
+    inherit: bool = True  # if True, uses workspace config
+    name: Optional[str] = None
+    type: Literal["url", "file"] = "url"
+    url: Optional[str] = None
+    file_id: Optional[str] = None
+    file_name: Optional[str] = None
+    send_timing: Literal["pre_booking", "post_booking", "both"] = "post_booking"
     message_template: Optional[str] = None
 
 
 def _get_workspace_magnet():
     doc = lead_magnets_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
     return doc
+
+
+def _get_campaign_magnet(campaign_id: Optional[str]):
+    """Return campaign-level override if it exists and inherit=False; else None."""
+    if not campaign_id:
+        return None
+    doc = lead_magnets_collection.find_one({"scope": "campaign", "campaign_id": campaign_id}, {"_id": 0})
+    if not doc:
+        return None
+    if doc.get("inherit", True):
+        return None
+    return doc
+
+
+def _resolve_magnet_for_lead(lead: dict) -> dict:
+    """Choose campaign override (if any) over workspace default."""
+    campaign_id = lead.get("campaign_id") if isinstance(lead, dict) else None
+    return _get_campaign_magnet(campaign_id) or _get_workspace_magnet()
+
+
+# ─── WhatsApp Cloud API (Meta) ───
+WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+WHATSAPP_GRAPH_API_VERSION = os.getenv("WHATSAPP_GRAPH_API_VERSION", "v23.0")
+WHATSAPP_API_BASE_URL = os.getenv("WHATSAPP_API_BASE_URL", "https://graph.facebook.com")
+
+
+def _whatsapp_configured() -> bool:
+    return bool(WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID)
+
+
+def _normalize_phone(phone: str) -> str:
+    digits = "".join(c for c in (phone or "") if c.isdigit())
+    return digits
+
+
+async def send_whatsapp_text(to_phone: str, body: str) -> dict:
+    """Send a text session message via Meta WhatsApp Cloud API.
+    Falls back to log-only if WHATSAPP_ACCESS_TOKEN/PHONE_NUMBER_ID env not set."""
+    normalized = _normalize_phone(to_phone)
+    if not normalized:
+        return {"sent": False, "error": "missing_phone"}
+    if not _whatsapp_configured():
+        return {"sent": False, "error": "not_configured", "logged_only": True}
+    import httpx
+    url = f"{WHATSAPP_API_BASE_URL.rstrip('/')}/{WHATSAPP_GRAPH_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": normalized,
+        "type": "text",
+        "text": {"body": body, "preview_url": True},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code >= 400:
+            print(f"WhatsApp API error {resp.status_code}: {resp.text}")
+            return {"sent": False, "error": "api_error", "status": resp.status_code, "detail": resp.text}
+        data = resp.json()
+        return {"sent": True, "message_id": data.get("messages", [{}])[0].get("id"), "raw": data}
+    except Exception as e:
+        print(f"WhatsApp send exception: {e}")
+        return {"sent": False, "error": str(e)}
 
 
 def _build_tracking_url(tracking_id: str) -> str:
@@ -3183,23 +3263,29 @@ async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: st
         print(f"Lead magnet email failed: {e}")
 
 
-def _send_lead_magnet_via_whatsapp(lead: dict, magnet: dict, tracking_url: str, founder_name: str):
-    """Logs a whatsapp_sent activity. Real WhatsApp API integration is hooked elsewhere."""
+def _send_lead_magnet_via_whatsapp_message(lead: dict, magnet: dict, tracking_url: str, founder_name: str) -> str:
+    """Build the WhatsApp body text (does not send)."""
     name = lead.get("first_name") or "there"
     template = magnet.get("message_template") or (
         f"Hi {{first_name}}! Before our call — here's a 2-min overview of our work: {{link}}\n— {founder_name}"
     )
-    body = template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
-    return body
+    return template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
 
 
 async def auto_send_lead_magnet(lead_id: str, trigger: str):
     """Auto-send the configured lead magnet to a lead.
 
     trigger: 'pre_booking' (lead just qualified) or 'post_booking' (meeting booked).
-    Honors workspace setting send_timing.
+    Honors send_timing setting and campaign override.
     """
-    magnet = _get_workspace_magnet()
+    try:
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1, "campaign_id": 1})
+    except Exception:
+        return
+    if not lead or not lead.get("email"):
+        return
+
+    magnet = _resolve_magnet_for_lead(lead)
     if not magnet or not magnet.get("enabled"):
         return
     timing = magnet.get("send_timing", "post_booking")
@@ -3208,13 +3294,6 @@ async def auto_send_lead_magnet(lead_id: str, trigger: str):
     if magnet.get("type") == "url" and not magnet.get("url"):
         return
     if magnet.get("type") == "file" and not magnet.get("file_id"):
-        return
-
-    try:
-        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1})
-    except Exception:
-        return
-    if not lead or not lead.get("email"):
         return
 
     # Idempotency: skip if already sent for this trigger
@@ -3230,21 +3309,23 @@ async def auto_send_lead_magnet(lead_id: str, trigger: str):
     channel = _get_lead_preferred_channel(lead_id)
 
     if channel == "whatsapp":
-        body = _send_lead_magnet_via_whatsapp(lead, magnet, tracking_url, founder_name)
+        body_text = _send_lead_magnet_via_whatsapp_message(lead, magnet, tracking_url, founder_name)
+        wa_result = await send_whatsapp_text(lead.get("phone"), body_text)
         activity_type = "whatsapp_sent"
-        subject = "Lead magnet sent (WhatsApp)"
+        subject = "Lead magnet sent (WhatsApp)" if wa_result.get("sent") else "Lead magnet queued (WhatsApp logged-only — configure WHATSAPP_* env)"
+        body_preview = body_text
     else:
         await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
-        body = magnet.get("name") or "Pre-call brochure"
+        body_preview = magnet.get("name") or "Pre-call brochure"
         activity_type = "email_sent"
         subject = "Lead magnet sent (Email)"
 
     now_iso = datetime.now(timezone.utc).isoformat()
     activities_collection.insert_one({
         "lead_id": lead_id, "user_id": "aria@genleadai.ai",
-        "activity_type": activity_type, "subject": subject, "body": body,
+        "activity_type": activity_type, "subject": subject, "body": body_preview,
         "outcome": None, "duration_minutes": None,
-        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": trigger, "channel": channel},
+        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": trigger, "channel": channel, "scope": magnet.get("scope", "workspace")},
         "created_at": now_iso,
     })
     lead_magnet_views_collection.insert_one({
@@ -3255,6 +3336,7 @@ async def auto_send_lead_magnet(lead_id: str, trigger: str):
         "trigger": trigger,
         "magnet_type": magnet.get("type"),
         "magnet_target": magnet.get("url") or magnet.get("file_id"),
+        "magnet_scope": magnet.get("scope", "workspace"),
         "created_at": now_iso,
     })
 
@@ -3316,8 +3398,15 @@ async def serve_upload(file_id: str, current_user: dict = Depends(get_current_us
 
 @app.post("/api/leads/{lead_id}/send-lead-magnet")
 async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get_current_user)):
-    """Founder manually triggers the lead magnet for this lead."""
-    magnet = _get_workspace_magnet()
+    """Founder manually triggers the lead magnet for this lead. Honors campaign override."""
+    try:
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1, "campaign_id": 1})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid lead id")
+    if not lead or not lead.get("email"):
+        raise HTTPException(status_code=404, detail="Lead not found or missing email")
+
+    magnet = _resolve_magnet_for_lead(lead)
     if not magnet or not magnet.get("enabled"):
         raise HTTPException(status_code=400, detail="Lead magnet is not enabled. Configure it in Settings.")
     if magnet.get("type") == "url" and not magnet.get("url"):
@@ -3325,22 +3414,22 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
     if magnet.get("type") == "file" and not magnet.get("file_id"):
         raise HTTPException(status_code=400, detail="Lead magnet file not uploaded.")
 
-    try:
-        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1})
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid lead id")
-    if not lead or not lead.get("email"):
-        raise HTTPException(status_code=404, detail="Lead not found or missing email")
-
     tracking_id = uuid.uuid4().hex
     tracking_url = _build_tracking_url(tracking_id)
     founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "the team"
     channel = _get_lead_preferred_channel(lead_id)
 
     if channel == "whatsapp":
-        body_preview = _send_lead_magnet_via_whatsapp(lead, magnet, tracking_url, founder_name)
+        body_text = _send_lead_magnet_via_whatsapp_message(lead, magnet, tracking_url, founder_name)
+        wa_result = await send_whatsapp_text(lead.get("phone"), body_text)
         activity_type = "whatsapp_sent"
-        subject = "Lead magnet sent (WhatsApp)"
+        if wa_result.get("sent"):
+            subject = "Lead magnet sent (WhatsApp)"
+        elif wa_result.get("error") == "not_configured":
+            subject = "Lead magnet queued (WhatsApp logged-only — set WHATSAPP_ACCESS_TOKEN+PHONE_NUMBER_ID)"
+        else:
+            subject = f"Lead magnet WhatsApp send failed: {wa_result.get('error')}"
+        body_preview = body_text
     else:
         await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
         body_preview = magnet.get("name") or "Pre-call brochure"
@@ -3352,7 +3441,7 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
         "lead_id": lead_id, "user_id": current_user["email"],
         "activity_type": activity_type, "subject": subject, "body": body_preview,
         "outcome": None, "duration_minutes": None,
-        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": "manual", "channel": channel},
+        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": "manual", "channel": channel, "scope": magnet.get("scope", "workspace")},
         "created_at": now_iso,
     })
     lead_magnet_views_collection.insert_one({
@@ -3363,9 +3452,10 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
         "trigger": "manual",
         "magnet_type": magnet.get("type"),
         "magnet_target": magnet.get("url") or magnet.get("file_id"),
+        "magnet_scope": magnet.get("scope", "workspace"),
         "created_at": now_iso,
     })
-    return {"sent": True, "channel": channel, "tracking_url": tracking_url}
+    return {"sent": True, "channel": channel, "tracking_url": tracking_url, "scope": magnet.get("scope", "workspace")}
 
 
 @app.get("/api/lead-magnets/track/{tracking_id}")
@@ -3413,3 +3503,163 @@ async def lead_magnet_engagement(lead_id: str, current_user: dict = Depends(get_
         "views": views[:10],
         "is_hot": len(views) >= 2,
     }
+
+
+
+# ─── Per-Campaign Lead Magnet Override ───
+
+@app.get("/api/lead-magnets/campaign/{campaign_id}")
+async def get_campaign_magnet(campaign_id: str, current_user: dict = Depends(get_current_user)):
+    doc = lead_magnets_collection.find_one({"scope": "campaign", "campaign_id": campaign_id}, {"_id": 0})
+    if not doc:
+        return {
+            "campaign_id": campaign_id,
+            "inherit": True,
+            "enabled": False,
+            "name": "",
+            "type": "url",
+            "url": "",
+            "file_id": None,
+            "file_name": None,
+            "send_timing": "post_booking",
+            "message_template": "",
+        }
+    doc.pop("scope", None)
+    return doc
+
+
+@app.put("/api/lead-magnets/campaign/{campaign_id}")
+async def save_campaign_magnet(campaign_id: str, cfg: CampaignLeadMagnetOverride, current_user: dict = Depends(get_current_user)):
+    payload = cfg.dict()
+    payload["scope"] = "campaign"
+    payload["campaign_id"] = campaign_id
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["updated_by"] = current_user["email"]
+    lead_magnets_collection.update_one(
+        {"scope": "campaign", "campaign_id": campaign_id},
+        {"$set": payload},
+        upsert=True,
+    )
+    payload.pop("scope", None)
+    return payload
+
+
+# ─── Engagement Aggregation (for Dashboard alert + Lead Inbox hot strip) ───
+
+@app.get("/api/lead-magnets/engagement-map")
+async def lead_magnet_engagement_map(current_user: dict = Depends(get_current_user)):
+    """Return {lead_id: {sent_count, view_count, last_viewed, is_hot}} for all leads with engagement.
+
+    Used by Lead Inbox to show a Hot strip on rows where a lead has opened the brochure.
+    """
+    pipeline = [
+        {"$group": {
+            "_id": {"lead_id": "$lead_id", "kind": "$kind"},
+            "count": {"$sum": 1},
+            "last_at": {"$max": "$created_at"},
+        }},
+    ]
+    rows = list(lead_magnet_views_collection.aggregate(pipeline))
+    lead_map: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        lid = r["_id"].get("lead_id")
+        kind = r["_id"].get("kind")
+        if not lid:
+            continue
+        bucket = lead_map.setdefault(lid, {"sent_count": 0, "view_count": 0, "last_viewed": None, "last_sent": None})
+        if kind == "send":
+            bucket["sent_count"] = r["count"]
+            bucket["last_sent"] = r["last_at"]
+        elif kind == "view":
+            bucket["view_count"] = r["count"]
+            bucket["last_viewed"] = r["last_at"]
+    for _lid, b in lead_map.items():
+        b["is_hot"] = b["view_count"] >= 2
+    return {"leads": lead_map, "total_engaged": len(lead_map)}
+
+
+@app.get("/api/lead-magnets/recent-opens")
+async def lead_magnet_recent_opens(limit: int = 5, current_user: dict = Depends(get_current_user)):
+    """Recent brochure-opens with enriched lead info, for Dashboard alert card."""
+    views = list(lead_magnet_views_collection.find(
+        {"kind": "view"}, {"_id": 0}
+    ).sort("created_at", DESCENDING).limit(max(1, min(limit, 50))))
+    out = []
+    seen_leads = set()
+    for v in views:
+        lid = v.get("lead_id")
+        if not lid or lid in seen_leads:
+            continue
+        seen_leads.add(lid)
+        try:
+            lead = leads_collection.find_one({"_id": ObjectId(lid)}, {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "icp_tier": 1, "email": 1})
+        except Exception:
+            lead = None
+        if not lead:
+            continue
+        view_count = lead_magnet_views_collection.count_documents({"lead_id": lid, "kind": "view"})
+        out.append({
+            "lead_id": lid,
+            "first_name": lead.get("first_name"),
+            "last_name": lead.get("last_name"),
+            "company_name": lead.get("company_name"),
+            "icp_score": lead.get("icp_score"),
+            "icp_tier": lead.get("icp_tier"),
+            "email": lead.get("email"),
+            "viewed_at": v.get("created_at"),
+            "view_count": view_count,
+            "is_hot": view_count >= 2,
+        })
+    return {"opens": out, "count": len(out)}
+
+
+
+# ─── WhatsApp Cloud API Webhooks ───
+
+@app.get("/api/webhooks/whatsapp")
+async def whatsapp_webhook_verify(
+    hub_mode: Optional[str] = Query(None, alias="hub.mode"),
+    hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
+    hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token"),
+):
+    """Meta WhatsApp Cloud API webhook verification (GET hub.challenge echo).
+    Returns the challenge as plain text when hub.verify_token matches WHATSAPP_VERIFY_TOKEN env.
+    """
+    expected = os.getenv("WHATSAPP_VERIFY_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=503, detail="WHATSAPP_VERIFY_TOKEN env not set")
+    if hub_mode != "subscribe" or hub_verify_token != expected:
+        raise HTTPException(status_code=403, detail="Invalid verification token or mode")
+    return Response(content=hub_challenge or "", media_type="text/plain", status_code=200)
+
+
+@app.post("/api/webhooks/whatsapp")
+async def whatsapp_webhook_receive(payload: Dict[str, Any]):
+    """Receive inbound WhatsApp messages and delivery status updates from Meta."""
+    try:
+        for entry in payload.get("entry", []) or []:
+            for change in entry.get("changes", []) or []:
+                value = change.get("value", {}) or {}
+                # Inbound text messages
+                for msg in value.get("messages", []) or []:
+                    if msg.get("type") != "text":
+                        continue
+                    from_phone = msg.get("from")
+                    body = (msg.get("text") or {}).get("body", "")
+                    # Match to existing lead by phone
+                    candidates = leads_collection.find({"phone": {"$regex": from_phone[-9:]}}, {"_id": 1}) if from_phone else []
+                    for lead_row in candidates:
+                        lead_id = str(lead_row["_id"])
+                        activities_collection.insert_one({
+                            "lead_id": lead_id, "user_id": "whatsapp_webhook",
+                            "activity_type": "whatsapp_received",
+                            "subject": "WhatsApp reply received",
+                            "body": body[:1000],
+                            "outcome": None, "duration_minutes": None,
+                            "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id")},
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        break
+    except Exception as e:
+        print(f"WhatsApp webhook processing error: {e}")
+    return {"received": True}

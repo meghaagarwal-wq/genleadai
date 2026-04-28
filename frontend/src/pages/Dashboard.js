@@ -22,19 +22,21 @@ const Dashboard = () => {
   const [topLeads, setTopLeads] = useState([]);
   const [sleepingCount, setSleepingCount] = useState(0);
   const [ttv, setTtv] = useState(null);
+  const [recentOpens, setRecentOpens] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     try {
-      const [aRes, lRes, arRes, tRes, sRes, ttvRes] = await Promise.all([
+      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes] = await Promise.all([
         api.get('/api/analytics/dashboard'),
         api.get('/api/leads?limit=5'),
         api.get('/api/aria/analytics').catch(() => ({ data: null })),
         api.get('/api/leads/your-five-today').catch(() => ({ data: { leads: [] } })),
         api.get('/api/leads/sleeping?threshold_days=14').catch(() => ({ data: { total: 0 } })),
         api.get('/api/ttv/milestones').catch(() => ({ data: null })),
+        api.get('/api/lead-magnets/recent-opens?limit=5').catch(() => ({ data: { opens: [] } })),
       ]);
       setAnalytics(aRes.data);
       setRecentLeads(lRes.data.leads);
@@ -42,6 +44,7 @@ const Dashboard = () => {
       setTopLeads(tRes.data.leads?.slice(0, 3) || []);
       setSleepingCount(sRes.data.total || 0);
       setTtv(ttvRes.data);
+      setRecentOpens(opensRes.data?.opens || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -116,6 +119,53 @@ const Dashboard = () => {
           <button onClick={() => navigate('/sleeping-leads')} className="flex items-center gap-2 px-4 py-2 bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20 rounded-xl text-sm font-semibold hover:bg-[#7C35DC] hover:text-white transition-all" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="activate-revival-btn">
             <Moon size={16} weight="fill" /> Revive Leads <ArrowRight size={14} />
           </button>
+        </div>
+      )}
+
+      {/* Brochure Opens Alert — leads who opened your lead magnet */}
+      {recentOpens.length > 0 && (
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.05) 0%, rgba(192,68,224,0.06) 100%)', borderColor: 'rgba(220,38,38,0.2)' }} data-testid="brochure-opens-alert">
+          <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'rgba(220,38,38,0.15)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #DC2626 0%, #C044E0 100%)' }}>
+                <Fire size={18} className="text-white" weight="fill" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#1A0A2E]">
+                  <span className="text-[#DC2626]">{recentOpens.length} {recentOpens.length === 1 ? 'lead' : 'leads'}</span> just opened your brochure
+                </p>
+                <p className="text-xs text-[#5A4A7A]">They're warm right now — perfect time to reach out</p>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-2 divide-y divide-[#F4E6F0]">
+            {recentOpens.slice(0, 3).map(o => (
+              <button
+                key={o.lead_id}
+                onClick={() => navigate(`/leads/${o.lead_id}`)}
+                className="w-full flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-white/50 transition-colors text-left"
+                data-testid={`brochure-open-${o.lead_id}`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-7 h-7 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{(o.first_name?.[0] || '?').toUpperCase()}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[#1A0A2E] truncate">{o.first_name} {o.last_name}</span>
+                      {o.is_hot && (
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/20">
+                          <Fire size={9} weight="fill" /> {o.view_count}× hot
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-[#9B8AB0] truncate block">{o.company_name || o.email}</span>
+                  </div>
+                </div>
+                <ArrowRight size={14} className="text-[#7C35DC] flex-shrink-0" />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

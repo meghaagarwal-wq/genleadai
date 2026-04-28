@@ -1,0 +1,83 @@
+{
+  "summary": "Iteration 11 — verified all 4 backlog items: (1) Pydantic Literal validators reject invalid type/send_timing with 422, (2) per-campaign LeadMagnetOverride CRUD round-trips and is correctly used over workspace when inherit:false (returns scope:'campaign'), (3) workspace falls back when override.inherit:true (scope:'workspace'), (4) engagement-map + recent-opens endpoints return correct shape with seed lead 69e081b5cd724a3d376691c4 (4 views, is_hot=true), Dashboard brochure-opens-alert renders + click navigates to /leads/{id}, LeadInbox row-hot-{leadId} badge + red strip render. WhatsApp Cloud API graceful logged-only fallback works (no 500). WhatsApp webhook GET returns 503 (env empty) and POST accepts payload returning {received:true}. 14/14 new tests + 22/22 regression tests = 36/36 backend tests passing. All UI flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/webhooks/whatsapp",
+        "issue": "Currently returns 503 because WHATSAPP_VERIFY_TOKEN is intentionally blank in /app/backend/.env. Confirmed graceful behavior; before going live the founder must set the token in env. Documented in product copy expected."
+      },
+      {
+        "endpoint": "send_lead_magnet (auto + manual) when channel='whatsapp' with WA env empty",
+        "issue": "Subject prefix 'Lead magnet queued (WhatsApp logged-only — set WHATSAPP_ACCESS_TOKEN+PHONE_NUMBER_ID)' is logged correctly; no crash. Inbound webhook regex '$regex': from_phone[-9:] is greedy (could match unintended phone substrings); consider switching to exact normalized-digits comparison."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dashboard brochure-opens-alert row",
+        "issue": "The clickable row inside [data-testid=brochure-opens-alert] does NOT carry the row-level data-testid 'brochure-open-row-{leadId}' described in the spec. Selector that worked: alert > button. Add data-testid='brochure-open-row-{leadId}' to each row for stable test selection.",
+        "selector": "[data-testid='brochure-opens-alert'] > button",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "PUT /api/lead-magnets/config rejects type='pdf' with 422",
+    "PUT /api/lead-magnets/config rejects send_timing='never' with 422",
+    "PUT /api/lead-magnets/config accepts type='url'+send_timing='both'",
+    "GET /api/lead-magnets/campaign/{unknown} returns defaults inherit:true, enabled:false",
+    "PUT /api/lead-magnets/campaign/{id} round-trips inherit:false override (url, name, send_timing)",
+    "PUT /api/lead-magnets/campaign/{id} rejects invalid type='video' with 422",
+    "POST /api/leads/{id}/send-lead-magnet with campaign override inherit:false returns scope:'campaign'",
+    "POST /api/leads/{id}/send-lead-magnet with override inherit:true returns scope:'workspace'",
+    "GET /api/lead-magnets/engagement-map returns {leads:{lead_id:{sent_count,view_count,is_hot,last_sent,last_viewed}}, total_engaged} — seed lead present with is_hot=true",
+    "GET /api/lead-magnets/recent-opens?limit=5 returns enriched leads with first_name+company_name+view_count, deduped by lead_id",
+    "GET /api/lead-magnets/recent-opens?limit=999 clamped without crash",
+    "POST /api/leads/{id}/send-lead-magnet stays 200 with sent:true even when WhatsApp env empty (logged-only fallback, no 500)",
+    "GET /api/webhooks/whatsapp returns 503 when WHATSAPP_VERIFY_TOKEN env empty",
+    "POST /api/webhooks/whatsapp accepts sample inbound payload and returns {received:true}",
+    "Regression: 22/22 lead_magnet + ttv tests still pass (login, /api/leads, /api/ttv/milestones, onboarding/status, magnet config, upload, send+track+engagement, ttv shape)",
+    "Frontend: Dashboard renders [data-testid=brochure-opens-alert] with '1 lead just opened your brochure' + Public FormUser/Form Corp/4× HOT row",
+    "Frontend: Clicking the row navigates to /leads/69e081b5cd724a3d376691c4 (lead detail loads with HOT badge + Pre-Call Brochure card + Sent 10× / Opens 4)",
+    "Frontend: LeadInbox renders [data-testid=row-hot-69e081b5cd724a3d376691c4] inline badge ('4× hot') with red→purple left strip; existing 20 rows render normally"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_features.py",
+    "/app/backend/tests/test_lead_magnet.py",
+    "/app/backend/tests/test_ttv.py",
+    "/app/test_reports/pytest/iter11_results.xml"
+  ],
+  "action_items": [
+    "(LOW) Add data-testid='brochure-open-row-{leadId}' attribute on each row inside [data-testid=brochure-opens-alert] for stable selectors. Currently only the parent has a testid — the child row uses a generic button.",
+    "(LOW) WhatsApp webhook receive: regex match on from_phone[-9:] could collide with unintended leads. Switch to normalized-digits exact compare or last-10 with anchor.",
+    "(deferred) server.py is now 3666 lines — splitting into modules (lead_magnet.py, whatsapp.py, ttv.py, leads.py, etc.) is overdue but explicitly out-of-scope per problem statement.",
+    "(production-blocker, but env-only) Set WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_VERIFY_TOKEN in /app/backend/.env before going live; currently empty for graceful logged-only fallback as designed."
+  ],
+  "critical_code_review_comments": [
+    "Literal['url','file'] and Literal['pre_booking','post_booking','both'] correctly enforce payload validation on both LeadMagnetConfig and CampaignLeadMagnetOverride — verified by 422 tests.",
+    "_resolve_magnet_for_lead correctly prefers campaign override only when inherit=False; otherwise falls back to workspace. Magnet doc carries scope:'workspace'|'campaign' which is returned in send response — clean and testable.",
+    "send_whatsapp_text guards on _whatsapp_configured() and returns {sent:False, error:'not_configured', logged_only:True} without raising; manual+auto send handlers branch correctly to label activity subjects appropriately. No 500s.",
+    "engagement-map aggregation pipeline uses {kind, lead_id} group then merges send/view counts in Python — correct but O(N) per dashboard load. Acceptable now; consider materializing per-lead engagement summary if leads grow >10k.",
+    "recent-opens dedupes by lead_id keeping latest view (sorted DESC + first-seen) — correct.",
+    "WhatsApp webhook receive regex {'$regex': from_phone[-9:]} is fragile; use normalized digits with anchor or store leads.phone_normalized for exact match.",
+    "_build_tracking_url now reads BACKEND_URL which IS set in .env (carried over from iter10 fix) — tracking URLs are absolute. Confirmed.",
+    "Dashboard alert row missing per-row data-testid is a minor testability gap but not a functional bug."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_features.py (NEW — 14 tests covering all iter11 backlog items)"
+  ],
+  "success_rate": {
+    "backend": "100% (36/36: 14 new + 22 regression)",
+    "frontend": "100% (Dashboard alert + click-nav + LeadInbox hot strip all verified)"
+  },
+  "test_credentials": "admin@demo.com / Demo1234! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created TEST_iter11_campaign override in lead_magnets_collection. Patched seed lead 69e081b5cd724a3d376691c4 to attach campaign_id=TEST_iter11_campaign during scope-resolution test. Triggered ~6 additional sends on the seed lead. Workspace magnet ends in TEST_iter11_workspace, type=url, url=https://example.com/workspace_iter11.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 backlog items + dashboard alert + hot strip work end-to-end. WhatsApp logged-only fallback verified — no 500 with empty env. Seed lead 69e081b5cd724a3d376691c4 now has 10+ sends and 4 views (is_hot=true). One minor UI testability gap: brochure-opens-alert child rows need data-testid='brochure-open-row-{leadId}'. Webhook receive uses a fragile $regex on phone last-9 — consider hardening before production. server.py refactor still pending (3666 lines).",
+  "rca of the issue": "N/A — no critical issues found in this iteration. Two minor improvements documented in action_items."
+}
