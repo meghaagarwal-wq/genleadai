@@ -2718,3 +2718,246 @@ async def meta_leads_webhook(request_body: Dict[str, Any]):
                     created += 1
 
     return {"received": True, "leads_created": created}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# STRIPE BILLING
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+
+payment_transactions = db["payment_transactions"]
+
+SUBSCRIPTION_PLANS = {
+    "starter": {"name": "Starter", "amount": 49.00, "leads": 500, "ai_credits": 100},
+    "growth": {"name": "Growth", "amount": 149.00, "leads": 2000, "ai_credits": 500},
+    "scale": {"name": "Scale", "amount": 399.00, "leads": 10000, "ai_credits": 2000},
+}
+
+class CheckoutRequest(BaseModel):
+    plan_id: str
+    origin_url: str
+
+@app.post("/api/billing/checkout")
+async def create_checkout(request: CheckoutRequest, http_request: object = None, current_user: dict = Depends(get_current_user)):
+    """Create Stripe checkout session for subscription."""
+    plan = SUBSCRIPTION_PLANS.get(request.plan_id)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+
+    from starlette.requests import Request
+    stripe_key = os.getenv("STRIPE_API_KEY")
+    host_url = request.origin_url.rstrip("/")
+    webhook_url = f"{host_url}/api/webhook/stripe"
+
+    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
+
+    success_url = f"{host_url}/settings?session_id={{CHECKOUT_SESSION_ID}}&payment=success"
+    cancel_url = f"{host_url}/settings?payment=cancelled"
+
+    checkout_req = CheckoutSessionRequest(
+        amount=plan["amount"],
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"plan_id": request.plan_id, "user_email": current_user["email"], "plan_name": plan["name"]}
+    )
+
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+
+    payment_transactions.insert_one({
+        "session_id": session.session_id,
+        "user_email": current_user["email"],
+        "plan_id": request.plan_id,
+        "plan_name": plan["name"],
+        "amount": plan["amount"],
+        "currency": "usd",
+        "payment_status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"url": session.url, "session_id": session.session_id}
+
+@app.get("/api/billing/status/{session_id}")
+async def check_payment_status(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Check payment status and update transaction."""
+    stripe_key = os.getenv("STRIPE_API_KEY")
+    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url="")
+
+    status = await stripe_checkout.get_checkout_status(session_id)
+
+    # Update transaction
+    existing = payment_transactions.find_one({"session_id": session_id})
+    if existing and existing.get("payment_status") != "paid":
+        payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {"payment_status": status.payment_status, "status": status.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+
+    return {"status": status.status, "payment_status": status.payment_status, "amount": status.amount_total, "currency": status.currency}
+
+@app.post("/api/webhook/stripe")
+async def stripe_webhook(request: object):
+    """Handle Stripe webhook events."""
+    return {"received": True}
+
+@app.get("/api/billing/plans")
+async def get_billing_plans():
+    """Get available subscription plans."""
+    return {"plans": SUBSCRIPTION_PLANS}
+
+@app.get("/api/billing/transactions")
+async def get_transactions(current_user: dict = Depends(get_current_user)):
+    """Get payment transaction history."""
+    txns = list(payment_transactions.find({"user_email": current_user["email"]}, {"_id": 0}).sort("created_at", DESCENDING).limit(20))
+    return {"transactions": txns}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AUDIT LOG
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+audit_log_collection = db["audit_log"]
+
+def log_audit(user_email: str, action: str, resource_type: str, resource_id: str = None, details: str = None):
+    """Log an audit event."""
+    audit_log_collection.insert_one({
+        "user_email": user_email,
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "details": details,
+        "ip_address": None,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+@app.get("/api/audit-log")
+async def get_audit_log(skip: int = 0, limit: int = 50, current_user: dict = Depends(get_current_user)):
+    """Get audit log entries."""
+    if current_user.get("role") not in ["admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin or manager access required")
+    entries = list(audit_log_collection.find({}, {"_id": 0}).sort("timestamp", DESCENDING).skip(skip).limit(limit))
+    total = audit_log_collection.count_documents({})
+    return {"entries": entries, "total": total}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CSV/PDF EXPORT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@app.get("/api/export/leads")
+async def export_leads_csv(current_user: dict = Depends(get_current_user)):
+    """Export all leads as CSV."""
+    leads = list(leads_collection.find({}, {"_id": 0}).limit(5000))
+    output = io.StringIO()
+    if leads:
+        fields = ["first_name", "last_name", "email", "phone", "lead_type", "company_name", "job_title", "industry", "source_channel", "status", "icp_score", "icp_tier", "city", "country", "created_at"]
+        writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
+        writer.writeheader()
+        for lead in leads:
+            writer.writerow(lead)
+    content = output.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=genleadai_leads_{datetime.now().strftime('%Y%m%d')}.csv"}
+    )
+
+@app.get("/api/export/activities/{lead_id}")
+async def export_lead_activities(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Export activities for a lead as CSV."""
+    activities = list(activities_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING))
+    output = io.StringIO()
+    if activities:
+        fields = ["created_at", "activity_type", "subject", "body", "outcome", "user_id"]
+        writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
+        writer.writeheader()
+        for act in activities:
+            writer.writerow(act)
+    content = output.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=lead_{lead_id}_activities.csv"}
+    )
+
+@app.get("/api/export/report")
+async def export_analytics_report(current_user: dict = Depends(get_current_user)):
+    """Export analytics report as CSV."""
+    total = leads_collection.count_documents({})
+    status_counts = {}
+    for s in ["new", "contacted", "qualified", "proposal_sent", "negotiation", "won", "lost"]:
+        status_counts[s] = leads_collection.count_documents({"status": s})
+    channel_counts = {}
+    for c in ["whatsapp", "email", "linkedin", "instagram", "facebook", "website_form", "cold_call", "referral", "webinar", "organic_search", "paid_ads"]:
+        channel_counts[c] = leads_collection.count_documents({"source_channel": c})
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["GenLeadAI Analytics Report", datetime.now().strftime('%Y-%m-%d')])
+    writer.writerow([])
+    writer.writerow(["Metric", "Value"])
+    writer.writerow(["Total Leads", total])
+    writer.writerow(["B2B", leads_collection.count_documents({"lead_type": "B2B"})])
+    writer.writerow(["B2C", leads_collection.count_documents({"lead_type": "B2C"})])
+    writer.writerow([])
+    writer.writerow(["Status", "Count"])
+    for s, c in status_counts.items():
+        writer.writerow([s, c])
+    writer.writerow([])
+    writer.writerow(["Channel", "Count"])
+    for ch, c in channel_counts.items():
+        if c > 0:
+            writer.writerow([ch, c])
+
+    content = output.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=genleadai_report_{datetime.now().strftime('%Y%m%d')}.csv"}
+    )
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ONBOARDING
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+onboarding_collection = db["onboarding"]
+
+class OnboardingData(BaseModel):
+    company_name: str
+    founder_name: str
+    industry: Optional[str] = None
+    team_size: Optional[str] = None
+    calendly_link: Optional[str] = None
+    icp_description: Optional[str] = None
+    completed: bool = False
+
+@app.get("/api/onboarding/status")
+async def get_onboarding_status(current_user: dict = Depends(get_current_user)):
+    """Check if onboarding is completed."""
+    status = onboarding_collection.find_one({"user_email": current_user["email"]}, {"_id": 0})
+    return {"onboarding": status, "completed": status.get("completed", False) if status else False}
+
+@app.post("/api/onboarding/complete")
+async def complete_onboarding(data: OnboardingData, current_user: dict = Depends(get_current_user)):
+    """Save onboarding data and mark as complete."""
+    doc = data.dict()
+    doc["user_email"] = current_user["email"]
+    doc["completed"] = True
+    doc["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    onboarding_collection.update_one(
+        {"user_email": current_user["email"]},
+        {"$set": doc},
+        upsert=True
+    )
+
+    # Update workspace settings
+    aria_settings_collection.update_one(
+        {},
+        {"$set": {
+            "founder_name": data.founder_name,
+            "company_name": data.company_name,
+        }},
+        upsert=True
+    )
+
+    return {"completed": True, "message": "Welcome to GenLeadAI!"}

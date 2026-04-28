@@ -15,6 +15,7 @@ import AriaFeed from './pages/AriaFeed';
 import AriaAnalytics from './pages/AriaAnalytics';
 import YourFiveToday from './pages/YourFiveToday';
 import SleepingLeads from './pages/SleepingLeads';
+import AuditLog from './pages/AuditLog';
 import Layout from './components/Layout';
 import './App.css';
 
@@ -69,6 +70,7 @@ function App() {
                       <Route path="/analytics" element={<Analytics />} />
                       <Route path="/aria" element={<AriaFeed />} />
                       <Route path="/aria/analytics" element={<AriaAnalytics />} />
+                      <Route path="/audit-log" element={<AuditLog />} />
                       <Route path="/settings" element={<Settings />} />
                     </Routes>
                   </Layout>
