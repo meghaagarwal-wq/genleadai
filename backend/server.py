@@ -3860,20 +3860,19 @@ async def best_time_to_call_for_lead(lead_id: str, current_user: dict = Depends(
 
 @app.get("/api/aria/call-priority")
 async def aria_call_priority(limit: int = 3, current_user: dict = Depends(get_current_user)):
-    """Return the top N leads that are ripe to call RIGHT NOW — for Dashboard widget.
+    """Return the top N leads that are ripe to call RIGHT NOW — for Dashboard widget."""
+    return _compute_call_priority(limit)
 
-    Considers: leads with recent brochure opens, then leads in active timezone window with high ICP.
-    """
-    limit = max(1, min(limit, 10))
 
-    # Pull lead candidates: anyone with engagement OR ICP>=60 OR aria_state in active phases
+def _compute_call_priority(limit: int = 3) -> dict:
+    """Internal: top-N call priority, callable without auth (used by daily call plan + endpoint)."""
+    limit = max(1, min(limit, 50))
+
     candidate_ids = set()
-    # Recent brochure openers (last 24h)
     recent_views = list(lead_magnet_views_collection.find({"kind": "view"}, {"_id": 0, "lead_id": 1, "created_at": 1}).sort("created_at", DESCENDING).limit(50))
     for v in recent_views:
         if v.get("lead_id"):
             candidate_ids.add(v["lead_id"])
-    # High ICP leads not in terminal states
     high_icp = list(leads_collection.find(
         {"icp_score": {"$gte": 60}, "status": {"$nin": ["won", "lost", "unqualified"]}},
         {"_id": 1},
@@ -3908,3 +3907,212 @@ async def aria_call_priority(limit: int = 3, current_user: dict = Depends(get_cu
 
     results.sort(key=lambda x: (x["call_score"], x.get("icp_score") or 0), reverse=True)
     return {"priority": results[:limit], "checked_count": len(candidate_ids)}
+
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ARIA Daily Call Plan — emails the founder a sorted top-5 leads to call today
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+daily_call_plan_collection = db["daily_call_plan_settings"]
+
+
+class DailyCallPlanConfig(BaseModel):
+    enabled: bool = False
+    send_to_email: Optional[EmailStr] = None
+    send_hour_local: int = Field(8, ge=0, le=23)
+    timezone_offset_hours: float = Field(0.0, ge=-12.0, le=14.0)
+    plan_size: int = Field(5, ge=1, le=10)
+
+
+def _get_daily_call_plan_config() -> dict:
+    doc = daily_call_plan_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+    return doc
+
+
+def _render_daily_call_plan_html(priority: List[dict], founder_name: str, plan_date: str) -> str:
+    if not priority:
+        rows_html = '<tr><td style="padding:24px;text-align:center;color:#9B8AB0;font-size:14px;">No high-priority leads today. Pipeline is calm — perfect time for outbound.</td></tr>'
+    else:
+        rows_html = ""
+        for i, p in enumerate(priority, 1):
+            urgency = p.get("urgency", "later")
+            urg_color = {"now": "#16A34A", "soon": "#D97706", "later": "#7C35DC"}.get(urgency, "#7C35DC")
+            urg_bg = {"now": "#DCFCE7", "soon": "#FEF3C7", "later": "#F4F0FF"}.get(urgency, "#F4F0FF")
+            urg_label = {"now": "CALL NOW", "soon": "SOON", "later": "LATER"}.get(urgency, urgency.upper())
+            phone = p.get("phone") or ""
+            phone_html = f'<a href="tel:{phone}" style="display:inline-block;background:linear-gradient(135deg,#7C35DC 0%,#C044E0 100%);color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">📞 Call</a>' if phone else '<span style="color:#9B8AB0;font-size:12px;">No phone</span>'
+            company = p.get("company_name") or "—"
+            reasons_text = " · ".join((p.get("reasons") or [])[:2])
+            rows_html += f"""
+            <tr>
+              <td style="padding:14px 16px;border-bottom:1px solid #F0ECF9;">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                  <tr>
+                    <td style="vertical-align:top;width:32px;color:#9B8AB0;font-weight:700;font-size:14px;">#{i}</td>
+                    <td style="vertical-align:top;">
+                      <div style="margin-bottom:4px;">
+                        <span style="font-size:15px;font-weight:700;color:#1A0A2E;">{p.get('first_name','')} {p.get('last_name','')}</span>
+                        <span style="display:inline-block;margin-left:6px;padding:2px 6px;border-radius:4px;background:{urg_bg};color:{urg_color};font-size:10px;font-weight:700;letter-spacing:0.5px;">{urg_label}</span>
+                        <span style="display:inline-block;margin-left:4px;padding:2px 6px;border-radius:4px;background:#F4F0FF;color:#7C35DC;font-size:10px;font-weight:700;">ICP {p.get('icp_score', 0)}</span>
+                      </div>
+                      <div style="font-size:12px;color:#5A4A7A;margin-bottom:2px;">{company}</div>
+                      <div style="font-size:11px;color:#9B8AB0;font-style:italic;">{reasons_text}</div>
+                    </td>
+                    <td style="vertical-align:top;text-align:right;width:90px;">{phone_html}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>"""
+
+    return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#FAFAFA;font-family:'Plus Jakarta Sans',Arial,sans-serif;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#FAFAFA;padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table cellpadding="0" cellspacing="0" border="0" width="600" style="background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(124,53,220,0.08);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#7C35DC 0%,#C044E0 100%);padding:28px 24px;color:#fff;">
+            <div style="font-size:12px;font-weight:600;opacity:0.85;letter-spacing:1px;text-transform:uppercase;">ARIA · Daily Call Plan</div>
+            <div style="font-size:24px;font-weight:800;margin-top:4px;">Good morning, {founder_name}</div>
+            <div style="font-size:13px;margin-top:6px;opacity:0.9;">Your top {len(priority) or 0} leads to call today — {plan_date}</div>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+              {rows_html}
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 24px;border-top:1px solid #F0ECF9;background:#FAFAFA;">
+            <div style="font-size:12px;color:#9B8AB0;text-align:center;">ARIA scored these by brochure opens, ICP, and timezone fit. Tap a number to call directly from your phone.</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body></html>"""
+
+
+async def _send_daily_call_plan(recipient_email: str, plan_size: int = 5, manual: bool = False) -> dict:
+    """Send the daily call plan email NOW. Returns metadata."""
+    if not recipient_email:
+        return {"sent": False, "error": "no_recipient"}
+    plan = _compute_call_priority(limit=plan_size)
+    priority = plan.get("priority", [])
+    founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "founder"
+    plan_date = datetime.now(timezone.utc).strftime("%A, %b %d")
+    html = _render_daily_call_plan_html(priority, founder_name, plan_date)
+    subject = f"☀️ {len(priority)} leads to call today" if priority else "☀️ Pipeline is calm today — outbound time"
+    params = {
+        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+        "to": [recipient_email],
+        "subject": subject,
+        "html": html,
+    }
+    try:
+        await asyncio.to_thread(resend.Emails.send, params)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        daily_call_plan_collection.update_one(
+            {"scope": "workspace"},
+            {"$set": {
+                "last_sent_at": now_iso,
+                "last_sent_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "last_sent_count": len(priority),
+                "last_sent_manual": manual,
+            }},
+            upsert=True,
+        )
+        return {"sent": True, "count": len(priority), "recipient": recipient_email}
+    except Exception as e:
+        print(f"Daily call plan email failed: {e}")
+        return {"sent": False, "error": str(e)}
+
+
+@app.get("/api/aria/daily-call-plan/config")
+async def get_daily_call_plan_config(current_user: dict = Depends(get_current_user)):
+    cfg = _get_daily_call_plan_config()
+    if not cfg:
+        return {
+            "enabled": False,
+            "send_to_email": current_user.get("email"),
+            "send_hour_local": 8,
+            "timezone_offset_hours": 5.5,
+            "plan_size": 5,
+            "last_sent_at": None,
+            "last_sent_date": None,
+            "last_sent_count": 0,
+        }
+    cfg.pop("scope", None)
+    return cfg
+
+
+@app.put("/api/aria/daily-call-plan/config")
+async def save_daily_call_plan_config(cfg: DailyCallPlanConfig, current_user: dict = Depends(get_current_user)):
+    payload = cfg.dict()
+    payload["scope"] = "workspace"
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["updated_by"] = current_user["email"]
+    daily_call_plan_collection.update_one({"scope": "workspace"}, {"$set": payload}, upsert=True)
+    payload.pop("scope", None)
+    return payload
+
+
+@app.post("/api/aria/daily-call-plan/send-now")
+async def send_daily_call_plan_now(current_user: dict = Depends(get_current_user)):
+    cfg = _get_daily_call_plan_config()
+    recipient = (cfg or {}).get("send_to_email") or current_user.get("email")
+    plan_size = int((cfg or {}).get("plan_size") or 5)
+    if not recipient:
+        raise HTTPException(status_code=400, detail="No recipient email configured. Set it in Settings → ARIA → Daily Call Plan.")
+    res = await _send_daily_call_plan(recipient, plan_size=plan_size, manual=True)
+    if not res.get("sent"):
+        raise HTTPException(status_code=500, detail=f"Failed to send: {res.get('error')}")
+    return res
+
+
+@app.get("/api/aria/daily-call-plan/preview")
+async def daily_call_plan_preview(current_user: dict = Depends(get_current_user)):
+    """Return the rendered HTML preview without sending — for in-app preview."""
+    cfg = _get_daily_call_plan_config()
+    plan_size = int((cfg or {}).get("plan_size") or 5)
+    plan = _compute_call_priority(limit=plan_size)
+    founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "founder"
+    plan_date = datetime.now(timezone.utc).strftime("%A, %b %d")
+    html = _render_daily_call_plan_html(plan.get("priority", []), founder_name, plan_date)
+    return {"html": html, "count": len(plan.get("priority", []))}
+
+
+# ─── Daily cron loop ───
+async def _daily_call_plan_loop():
+    """Background loop: every 60s check if it's time to send today's plan."""
+    while True:
+        try:
+            cfg = _get_daily_call_plan_config()
+            if cfg and cfg.get("enabled") and cfg.get("send_to_email"):
+                send_hour_local = int(cfg.get("send_hour_local", 8))
+                tz_off = float(cfg.get("timezone_offset_hours", 0.0))
+                # Convert founder local hour -> UTC hour
+                send_hour_utc = (send_hour_local - tz_off) % 24
+                now_utc = datetime.now(timezone.utc)
+                today_str = now_utc.strftime("%Y-%m-%d")
+                last_date = cfg.get("last_sent_date")
+                # Trigger if we're within the target hour and haven't sent today
+                if int(send_hour_utc) == now_utc.hour and last_date != today_str:
+                    print(f"[DailyCallPlan] Triggering send to {cfg['send_to_email']} (founder hour={send_hour_local}, UTC={send_hour_utc:.1f})")
+                    await _send_daily_call_plan(
+                        cfg["send_to_email"],
+                        plan_size=int(cfg.get("plan_size", 5)),
+                        manual=False,
+                    )
+        except Exception as e:
+            print(f"[DailyCallPlan] loop error: {e}")
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def _start_daily_call_plan_loop():
+    asyncio.create_task(_daily_call_plan_loop())
+    print("[DailyCallPlan] Background loop started (60s tick)")

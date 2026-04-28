@@ -20,6 +20,9 @@ const Settings = () => {
   const [magnet, setMagnet] = useState(null);
   const [magnetSaving, setMagnetSaving] = useState(false);
   const [magnetUploading, setMagnetUploading] = useState(false);
+  const [dcp, setDcp] = useState(null);
+  const [dcpSaving, setDcpSaving] = useState(false);
+  const [dcpSending, setDcpSending] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -27,6 +30,7 @@ const Settings = () => {
     fetchAssets();
     fetchApiKeys();
     fetchMagnet();
+    fetchDcp();
   }, []);
 
   const fetchUsers = async () => {
@@ -86,6 +90,39 @@ const Settings = () => {
       console.error('Upload failed', err);
       alert(err?.response?.data?.detail || 'Upload failed');
     } finally { setMagnetUploading(false); }
+  };
+
+  const fetchDcp = async () => {
+    try { const res = await api.get('/api/aria/daily-call-plan/config'); setDcp(res.data); }
+    catch (err) { console.error(err); }
+  };
+
+  const saveDcp = async () => {
+    setDcpSaving(true);
+    try {
+      const payload = {
+        enabled: !!dcp.enabled,
+        send_to_email: dcp.send_to_email,
+        send_hour_local: parseInt(dcp.send_hour_local) || 8,
+        timezone_offset_hours: parseFloat(dcp.timezone_offset_hours) || 0,
+        plan_size: parseInt(dcp.plan_size) || 5,
+      };
+      const res = await api.put('/api/aria/daily-call-plan/config', payload);
+      setDcp({ ...dcp, ...res.data });
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to save daily call plan');
+    } finally { setDcpSaving(false); }
+  };
+
+  const sendDcpNow = async () => {
+    setDcpSending(true);
+    try {
+      const res = await api.post('/api/aria/daily-call-plan/send-now');
+      alert(`Sent to ${res.data.recipient} (${res.data.count} leads)`);
+      await fetchDcp();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to send');
+    } finally { setDcpSending(false); }
   };
 
   const createApiKey = async () => {
@@ -289,6 +326,78 @@ const Settings = () => {
               </div>
             </div>
           </div>
+
+          {/* Daily Call Plan */}
+          {dcp && (
+            <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="daily-call-plan-panel">
+              <div className="p-6 border-b border-[#E8E0F5] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+                    <Robot size={18} className="text-white" weight="fill" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Daily Call Plan Email</h3>
+                    <p className="text-xs text-[#5A4A7A]">ARIA emails you the top leads to call every morning, sorted by call_score.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDcp({ ...dcp, enabled: !dcp.enabled })}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${dcp.enabled ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20'}`}
+                  data-testid="dcp-toggle-btn"
+                >
+                  {dcp.enabled ? <ToggleRight size={20} weight="fill" /> : <ToggleLeft size={20} />}
+                  {dcp.enabled ? 'Active' : 'Disabled'}
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Send to Email</label>
+                  <input type="email" value={dcp.send_to_email || ''} onChange={(e) => setDcp({ ...dcp, send_to_email: e.target.value })} placeholder="founder@yourcompany.com" className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm font-mono focus:border-[#7C35DC]" data-testid="dcp-email-input" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Send hour (your local time)</label>
+                    <select value={dcp.send_hour_local} onChange={(e) => setDcp({ ...dcp, send_hour_local: parseInt(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="dcp-hour-input">
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={h}>{((h - 1) % 12 + 1)}{h < 12 ? 'AM' : 'PM'} ({String(h).padStart(2, '0')}:00)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your timezone (UTC offset)</label>
+                    <select value={dcp.timezone_offset_hours} onChange={(e) => setDcp({ ...dcp, timezone_offset_hours: parseFloat(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="dcp-tz-input">
+                      {[-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,5.5,6,7,8,9,10,11,12,13,14].map(o => (
+                        <option key={o} value={o}>UTC{o >= 0 ? '+' : ''}{o}{o === 5.5 ? ' (IST)' : o === 0 ? ' (GMT)' : o === -5 ? ' (EST)' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Plan size</label>
+                    <select value={dcp.plan_size} onChange={(e) => setDcp({ ...dcp, plan_size: parseInt(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="dcp-size-input">
+                      {[3,5,7,10].map(n => <option key={n} value={n}>Top {n}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-[#E8E0F5]">
+                  <div className="text-xs text-[#5A4A7A]">
+                    {dcp.last_sent_at ? (
+                      <>Last sent: <span className="font-mono text-[#1A0A2E]">{new Date(dcp.last_sent_at).toLocaleString()}</span> · {dcp.last_sent_count || 0} leads</>
+                    ) : (
+                      'Not sent yet'
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={sendDcpNow} disabled={dcpSending} className="px-4 py-2 bg-white border border-[#7C35DC]/30 text-[#7C35DC] hover:bg-[#F4F0FF] rounded-lg text-sm font-semibold disabled:opacity-50" data-testid="dcp-send-now-btn">
+                      {dcpSending ? 'Sending…' : 'Send now'}
+                    </button>
+                    <button onClick={saveDcp} disabled={dcpSaving} className="btn-gradient px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="dcp-save-btn">
+                      {dcpSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
