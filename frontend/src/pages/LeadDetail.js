@@ -16,7 +16,11 @@ import {
   Buildings,
   Briefcase,
   Tag,
+  Paperclip,
+  Eye,
+  Fire,
 } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 
 const LeadDetail = () => {
   const { id } = useParams();
@@ -29,10 +33,13 @@ const LeadDetail = () => {
   const [showLogActivity, setShowLogActivity] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
+  const [engagement, setEngagement] = useState(null);
+  const [sendingMagnet, setSendingMagnet] = useState(false);
 
   useEffect(() => {
     fetchLead();
     fetchActivities();
+    fetchEngagement();
   }, [id]);
 
   const fetchLead = async () => {
@@ -94,6 +101,44 @@ const LeadDetail = () => {
     } catch (err) {
       console.error('Failed to log activity', err);
     }
+  };
+
+  const fetchEngagement = async () => {
+    try {
+      const res = await api.get(`/api/lead-magnets/engagement/${id}`);
+      setEngagement(res.data);
+    } catch (err) {
+      // silent — engagement is optional
+    }
+  };
+
+  const handleSendMagnet = async () => {
+    setSendingMagnet(true);
+    try {
+      const res = await api.post(`/api/leads/${id}/send-lead-magnet`);
+      toast.success(`Brochure sent via ${res.data.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}`, {
+        description: 'You\'ll see opens here as soon as they engage.',
+      });
+      await fetchActivities();
+      await fetchEngagement();
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Failed to send brochure';
+      toast.error(msg, { description: msg.includes('not enabled') ? 'Configure it in Settings → Lead Magnet.' : '' });
+    } finally {
+      setSendingMagnet(false);
+    }
+  };
+
+  const formatRelative = (iso) => {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      const diff = (Date.now() - d.getTime()) / 1000;
+      if (diff < 60) return 'just now';
+      if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+      return `${Math.round(diff / 86400)}d ago`;
+    } catch { return iso; }
   };
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="text-[#9B8AB0] text-sm">Loading lead...</div></div>;
@@ -207,6 +252,44 @@ const LeadDetail = () => {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Lead Magnet / Brochure */}
+          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="lead-magnet-card">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] flex items-center gap-1.5" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                <Paperclip size={12} /> Pre-Call Brochure
+              </h4>
+              {engagement?.is_hot && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/20" data-testid="lead-magnet-hot-badge">
+                  <Fire size={10} weight="fill" /> Hot
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleSendMagnet}
+              disabled={sendingMagnet}
+              className="w-full flex items-center justify-center gap-2 btn-gradient px-3 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
+              style={{ fontFamily: 'Plus Jakarta Sans' }}
+              data-testid="send-brochure-btn"
+            >
+              <Paperclip size={14} weight="fill" /> {sendingMagnet ? 'Sending...' : engagement?.sent_count > 0 ? 'Send again' : 'Send brochure'}
+            </button>
+
+            {engagement && engagement.sent_count > 0 && (
+              <div className="mt-3 pt-3 border-t border-[#E8E0F5] space-y-1.5" data-testid="lead-magnet-engagement">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#9B8AB0]">Sent</span>
+                  <span className="text-[#1A0A2E] font-medium">{engagement.sent_count}× · {formatRelative(engagement.last_sent)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[#9B8AB0] flex items-center gap-1"><Eye size={12} /> Opens</span>
+                  <span className={`font-bold ${engagement.view_count > 0 ? 'text-[#7C35DC]' : 'text-[#9B8AB0]'}`}>
+                    {engagement.view_count}{engagement.last_viewed ? ` · ${formatRelative(engagement.last_viewed)}` : ''}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

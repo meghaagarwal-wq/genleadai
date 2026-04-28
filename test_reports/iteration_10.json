@@ -1,0 +1,71 @@
+{
+  "summary": "End-to-end testing of Lead Magnet feature (workspace config, file upload, manual send, public tracking, engagement) plus TTV milestone watcher + Sonner Toaster, plus regression on existing endpoints. 14/14 backend tests passed; all UI flows verified including config save round-trip, toggle color flip, file dropzone, send brochure with happy/error toasts, engagement card with hot badge, dashboard ttv-tracker, onboarding step 4 preview.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/leads/{lead_id}/send-lead-magnet",
+        "issue": "tracking_url returned is a relative path (e.g. '/api/lead-magnets/track/<id>') because backend reads REACT_APP_BACKEND_URL/BACKEND_URL env which are NOT set in /app/backend/.env. _build_tracking_url falls back to empty string. The URL embedded in actual outbound emails/whatsapp messages would be unclickable for recipients. Recommend either (a) setting BACKEND_URL in backend/.env to the public preview URL, or (b) using request.url_for / Host header to construct an absolute URL."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/health 200",
+    "POST /api/auth/login admin@demo.com 200 (returns access_token)",
+    "GET /api/leads?limit=5 200",
+    "GET /api/ttv/milestones 200 with milestones array",
+    "GET /api/onboarding/status 200",
+    "GET /api/lead-magnets/config returns defaults when missing AND persisted doc when present",
+    "PUT /api/lead-magnets/config saves and round-trips: enabled, name, type, url, send_timing, message_template",
+    "POST /api/lead-magnets/upload rejects text/plain with 400, accepts application/pdf with 200 (returns file_id ending in .pdf, file_name)",
+    "GET /api/uploads/{file_id} requires JWT (401/403 without), returns 200 for uploaded file, 404 for missing",
+    "POST /api/leads/{lead_id}/send-lead-magnet returns 400 when not enabled, 400 when enabled+no URL, 200 when fully configured (returns sent:true, channel:'email', tracking_url containing /api/lead-magnets/track/)",
+    "GET /api/lead-magnets/track/{tracking_id} (no auth) returns 302 redirect to URL target; 404 for invalid tracking_id; logs view in lead_magnet_views",
+    "GET /api/lead-magnets/engagement/{lead_id} returns sent_count, view_count, last_sent, last_viewed, is_hot (=true when view_count>=2), with sends/views arrays",
+    "Settings page renders [data-testid=settings-tab-magnet]; clicking opens [data-testid=lead-magnet-panel] with all fields (toggle, name input, type-url/file toggles, url input, file dropzone+input, 3 timing options, template textarea, save button)",
+    "[data-testid=magnet-toggle-btn] flips between green Active and purple Disabled (class change verified)",
+    "[data-testid=magnet-save-btn] PUT round-trip works (URL+name persist after page reload)",
+    "[data-testid=magnet-file-input] dropzone accepts PDF input (UI verified)",
+    "LeadDetail (/leads/69e081b5cd724a3d376691c4) renders [data-testid=lead-magnet-card] with [data-testid=send-brochure-btn], [data-testid=lead-magnet-engagement], [data-testid=lead-magnet-hot-badge] (view_count>=2)",
+    "Clicking send-brochure-btn fires POST, shows success sonner toast 'Brochure sent via Email — You'll see opens here as soon as they engage.', engagement card sent_count increments (4×→5×), activity timeline records 'Lead magnet sent (Email)' entry",
+    "Error path: when magnet disabled, send button shows error toast 'Lead magnet is not enabled. Configure it in Settings.'",
+    "useTtvMilestoneWatcher hook initializes celebrated set on first poll (no toast spam) and persists to localStorage 'genleadai:ttv-celebrated' — verified value {signup,first_lead,first_aria,first_won}=true",
+    "Sonner Toaster mounted in Layout — confirmed via actual toast rendering (success and error toasts both visible)",
+    "Regression: Dashboard renders [data-testid=ttv-tracker] at 80% (4/5 milestones)",
+    "Regression: /onboarding step 4 renders [data-testid=onb-ttv-preview] with all 5 milestone rows"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_lead_magnet.py",
+    "/app/test_reports/pytest/lead_magnet_results.xml"
+  ],
+  "action_items": [
+    "Backend: tracking_url returned by /api/leads/{id}/send-lead-magnet is RELATIVE because backend reads REACT_APP_BACKEND_URL env (not set in backend/.env). Add BACKEND_URL to backend/.env or build absolute URL from request Host header — otherwise email/whatsapp recipients cannot click the embedded tracking link.",
+    "Optional: server.py is 3416 lines (was 3105) — splitting into modules (lead_magnet.py, ttv.py, leads.py, etc.) is overdue."
+  ],
+  "critical_code_review_comments": [
+    "auto_send_lead_magnet idempotency check correctly queries lead_magnet_views with kind='send' + trigger=trigger to prevent duplicate auto-sends per trigger. Good.",
+    "send_lead_magnet_manual: trigger='manual' is NOT idempotent by design (founder can manually re-send). This is correct but worth documenting.",
+    "/api/uploads/{file_id} path-traversal guard via os.path.commonpath is good. However it relies on the file_id ending with the saved extension; uploaded file_id is uuid+ext, so this is safe.",
+    "_build_tracking_url silently returns '/api/...' when env missing — should warn or raise at startup if BACKEND_URL is required for production. Currently tracking links break silently.",
+    "LeadMagnetConfig pydantic model: type='url'|'file' is not enum-validated; invalid values would persist. Consider Literal['url','file'] and Literal['pre_booking','post_booking','both'] for stricter validation.",
+    "WhatsApp send is logged-only (no real API integration) — confirmed expected per problem statement, but ensure this is documented in product copy so founders don't expect actual delivery."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lead_magnet.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14)",
+    "frontend": "100% (all flows verified)"
+  },
+  "test_credentials": "admin@demo.com / Demo1234! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created/updated workspace lead_magnet config (TEST_UI_Brochure / TEST_Brochure prefixed). Created multiple test send + view records on existing lead 69e081b5cd724a3d376691c4. Uploaded one TEST PDF to /app/backend/uploads.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Lead Magnet features work end-to-end. The single notable issue is that backend's _build_tracking_url returns a relative URL because REACT_APP_BACKEND_URL is not in backend/.env. The endpoint itself works (302 redirect verified), but emails sent in production would contain broken links. Existing lead 69e081b5cd724a3d376691c4 now has 5+ sends and 3+ views (is_hot=true). Workspace magnet is currently configured as enabled=true, type=url, url=https://example.com/test_ui_brochure.pdf, send_timing=post_booking.",
+  "rca of the issue": "Relative tracking URL: /app/backend/server.py line ~3147 uses os.getenv('REACT_APP_BACKEND_URL') or os.getenv('BACKEND_URL', ''). Backend .env contains only MONGO_URL — neither var is set. Result: base=''.rstrip('/') → '' so tracking_url becomes '/api/lead-magnets/track/<id>'. Mitigation: add BACKEND_URL=https://pipeline-pro-96.preview.emergentagent.com to /app/backend/.env (or fallback to constructing from FastAPI Request object's base_url)."
+}

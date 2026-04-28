@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { Toaster } from 'sonner';
+import { useTtvMilestoneWatcher } from '../hooks/useTtvMilestoneWatcher';
 import {
   House, Tray, ChartBar, MegaphoneSimple, ChartLineUp, UsersThree,
   SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning, X,
@@ -13,6 +15,8 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useTtvMilestoneWatcher(!!user);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -137,6 +141,7 @@ const Layout = ({ children }) => {
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
+      <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
     </div>
   );
 };

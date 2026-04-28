@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple } from '@phosphor-icons/react';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -17,12 +17,16 @@ const Settings = () => {
   const [newKey, setNewKey] = useState(null);
   const [embedCode, setEmbedCode] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [magnet, setMagnet] = useState(null);
+  const [magnetSaving, setMagnetSaving] = useState(false);
+  const [magnetUploading, setMagnetUploading] = useState(false);
 
   useEffect(() => {
     fetchUsers();
     fetchAriaSettings();
     fetchAssets();
     fetchApiKeys();
+    fetchMagnet();
   }, []);
 
   const fetchUsers = async () => {
@@ -49,6 +53,39 @@ const Settings = () => {
   const fetchApiKeys = async () => {
     try { const res = await api.get('/api/settings/api-keys'); setApiKeys(res.data.keys); }
     catch (err) { console.error(err); }
+  };
+
+  const fetchMagnet = async () => {
+    try { const res = await api.get('/api/lead-magnets/config'); setMagnet(res.data); }
+    catch (err) { console.error(err); }
+  };
+
+  const saveMagnet = async () => {
+    setMagnetSaving(true);
+    try {
+      const res = await api.put('/api/lead-magnets/config', magnet);
+      setMagnet(res.data);
+    } catch (err) {
+      console.error('Save magnet failed', err);
+      alert(err?.response?.data?.detail || 'Failed to save lead magnet');
+    } finally { setMagnetSaving(false); }
+  };
+
+  const uploadMagnetFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMagnetUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post('/api/lead-magnets/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMagnet({ ...magnet, type: 'file', file_id: res.data.file_id, file_name: res.data.file_name });
+    } catch (err) {
+      console.error('Upload failed', err);
+      alert(err?.response?.data?.detail || 'Upload failed');
+    } finally { setMagnetUploading(false); }
   };
 
   const createApiKey = async () => {
@@ -134,6 +171,7 @@ const Settings = () => {
           { id: 'aria', label: 'ARIA Agent', icon: Robot },
           { id: 'assets', label: 'Asset Library', icon: FileArrowUp },
           { id: 'integrations', label: 'API & Forms', icon: Key },
+          { id: 'magnet', label: 'Lead Magnet', icon: Paperclip },
           { id: 'workspace', label: 'Workspace', icon: Gear },
         ].map(tab => (
           <button
@@ -404,6 +442,120 @@ const Settings = () => {
                   <code className="text-xs font-mono text-[#7C35DC] bg-[#F4F0FF] px-2 py-1 rounded">{wh.url}</code>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Magnet Tab */}
+      {activeTab === 'magnet' && magnet && (
+        <div className="space-y-4" data-testid="lead-magnet-panel">
+          <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <div className="p-6 border-b border-[#E8E0F5] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+                  <Paperclip size={18} className="text-white" weight="fill" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Pre-Call Lead Magnet</h3>
+                  <p className="text-xs text-[#5A4A7A]">Send a brochure or website to leads before the call so they show up informed</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMagnet({ ...magnet, enabled: !magnet.enabled })}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${magnet.enabled ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20'}`}
+                data-testid="magnet-toggle-btn"
+              >
+                {magnet.enabled ? <ToggleRight size={20} weight="fill" /> : <ToggleLeft size={20} />}
+                {magnet.enabled ? 'Active' : 'Disabled'}
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Asset Name</label>
+                <input type="text" value={magnet.name || ''} onChange={(e) => setMagnet({ ...magnet, name: e.target.value })} placeholder="e.g., GenLeadAI Brochure 2026" className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC] focus:ring-2 focus:ring-[rgba(124,53,220,0.12)]" data-testid="magnet-name-input" />
+              </div>
+
+              {/* Type toggle */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Source</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setMagnet({ ...magnet, type: 'url' })} className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-medium transition-all ${magnet.type === 'url' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/30' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:bg-[#F9F5FF]'}`} data-testid="magnet-type-url">
+                    <LinkSimple size={16} /> URL link
+                  </button>
+                  <button onClick={() => setMagnet({ ...magnet, type: 'file' })} className={`flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-medium transition-all ${magnet.type === 'file' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/30' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:bg-[#F9F5FF]'}`} data-testid="magnet-type-file">
+                    <CloudArrowUp size={16} /> Upload file
+                  </button>
+                </div>
+              </div>
+
+              {/* URL or file uploader */}
+              {magnet.type === 'url' && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Magnet URL</label>
+                  <input type="url" value={magnet.url || ''} onChange={(e) => setMagnet({ ...magnet, url: e.target.value })} placeholder="https://yoursite.com/brochure" className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm font-mono focus:border-[#7C35DC]" data-testid="magnet-url-input" />
+                  <p className="mt-1.5 text-xs text-[#9B8AB0]">Notion page, Google Drive PDF, hosted brochure, your website — anything publicly viewable.</p>
+                </div>
+              )}
+              {magnet.type === 'file' && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Brochure file</label>
+                  {magnet.file_id ? (
+                    <div className="flex items-center justify-between p-3 bg-[#F9F5FF] border border-[#E0D4F7] rounded-lg" data-testid="magnet-file-attached">
+                      <div className="flex items-center gap-3">
+                        <File size={20} className="text-[#7C35DC]" weight="fill" />
+                        <div>
+                          <div className="text-sm font-medium text-[#1A0A2E]">{magnet.file_name || magnet.file_id}</div>
+                          <div className="text-xs text-[#9B8AB0]">Uploaded</div>
+                        </div>
+                      </div>
+                      <button onClick={() => setMagnet({ ...magnet, file_id: null, file_name: null })} className="text-[#9B8AB0] hover:text-[#DC2626] transition-colors" data-testid="magnet-file-remove"><Trash size={16} /></button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-[#E0D4F7] rounded-lg cursor-pointer hover:bg-[#F9F5FF] transition-colors" data-testid="magnet-file-dropzone">
+                      <input type="file" accept=".pdf,.pptx" onChange={uploadMagnetFile} className="hidden" data-testid="magnet-file-input" />
+                      <CloudArrowUp size={28} className="text-[#7C35DC] mb-2" />
+                      <p className="text-sm font-semibold text-[#1A0A2E]">{magnetUploading ? 'Uploading...' : 'Click to upload'}</p>
+                      <p className="text-xs text-[#9B8AB0] mt-0.5">PDF or PPTX, up to 25MB</p>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {/* Send timing */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>When to send</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'pre_booking', label: 'After qualification', sub: 'Before they book' },
+                    { id: 'post_booking', label: 'After booking', sub: 'Before the call' },
+                    { id: 'both', label: 'Both', sub: 'Hit twice' },
+                  ].map(opt => (
+                    <button key={opt.id} onClick={() => setMagnet({ ...magnet, send_timing: opt.id })} className={`p-3 rounded-lg border text-left transition-all ${magnet.send_timing === opt.id ? 'bg-[#F4F0FF] border-[#7C35DC]/30' : 'bg-white border-[#E8E0F5] hover:bg-[#F9F5FF]'}`} data-testid={`magnet-timing-${opt.id}`}>
+                      <div className={`text-sm font-semibold ${magnet.send_timing === opt.id ? 'text-[#7C35DC]' : 'text-[#1A0A2E]'}`}>{opt.label}</div>
+                      <div className="text-xs text-[#9B8AB0] mt-0.5">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Message template */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Message Template (optional)</label>
+                <textarea value={magnet.message_template || ''} onChange={(e) => setMagnet({ ...magnet, message_template: e.target.value })} rows={4} placeholder="Hi {first_name}, before our call here's a 2-min overview: {link}&#10;— {founder}" className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm resize-none focus:border-[#7C35DC]" data-testid="magnet-template-input" />
+                <p className="mt-1.5 text-xs text-[#9B8AB0]">
+                  Variables: <code className="text-[#7C35DC] bg-[#F4F0FF] px-1 rounded">{'{first_name}'}</code> · <code className="text-[#7C35DC] bg-[#F4F0FF] px-1 rounded">{'{link}'}</code> · <code className="text-[#7C35DC] bg-[#F4F0FF] px-1 rounded">{'{founder}'}</code>. Leave blank for the default.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-[#E8E0F5]">
+                <p className="text-xs text-[#5A4A7A]">ARIA will auto-deliver via the same channel she's using on each lead (email or WhatsApp), and we track every open & click.</p>
+                <button onClick={saveMagnet} disabled={magnetSaving} className="btn-gradient px-5 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="magnet-save-btn">
+                  {magnetSaving ? 'Saving...' : 'Save Lead Magnet'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

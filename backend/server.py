@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header
+from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
@@ -971,6 +972,11 @@ async def execute_aria_action(lead_id: str, action: str, action_data: dict, mess
             {"_id": ObjectId(lead_id)},
             {"$set": {"aria_state": "ESCALATED_TO_HUMAN", "status": "qualified", "updated_at": now, "aria_handed_off": True}}
         )
+        # Auto-send lead magnet (pre-booking trigger)
+        try:
+            await auto_send_lead_magnet(lead_id, "pre_booking")
+        except Exception as e:
+            print(f"Lead magnet auto-send (pre_booking) failed: {e}")
         # Send handoff email to founder
         try:
             convo = get_conversation_history(lead_id)
@@ -2671,6 +2677,11 @@ async def calendly_webhook(request_body: Dict[str, Any]):
                     "metadata": {"source": "calendly_webhook", "event": event},
                     "created_at": datetime.now(timezone.utc).isoformat()
                 })
+                # Auto-send lead magnet (post-booking trigger)
+                try:
+                    await auto_send_lead_magnet(lead_id, "post_booking")
+                except Exception as e:
+                    print(f"Lead magnet auto-send (post_booking) failed: {e}")
 
     return {"received": True}
 
@@ -3102,4 +3113,303 @@ async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
         "progress_pct": progress_pct,
         "ttv_to_meeting": ttv_to_meeting,
         "signup_at": signup_at,
+    }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# LEAD MAGNET (pre-call brochure) — config, upload, send, tracking
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UPLOADS_DIR = "/app/backend/uploads"
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+lead_magnets_collection = db["lead_magnets"]
+lead_magnet_views_collection = db["lead_magnet_views"]
+
+
+class LeadMagnetConfig(BaseModel):
+    enabled: bool = False
+    name: Optional[str] = None
+    type: str = "url"  # "url" | "file"
+    url: Optional[str] = None
+    file_id: Optional[str] = None
+    file_name: Optional[str] = None
+    send_timing: str = "post_booking"  # "pre_booking" | "post_booking" | "both"
+    message_template: Optional[str] = None
+
+
+def _get_workspace_magnet():
+    doc = lead_magnets_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+    return doc
+
+
+def _build_tracking_url(tracking_id: str) -> str:
+    base = os.getenv("REACT_APP_BACKEND_URL") or os.getenv("BACKEND_URL", "")
+    base = base.rstrip("/")
+    return f"{base}/api/lead-magnets/track/{tracking_id}"
+
+
+def _get_lead_preferred_channel(lead_id: str) -> str:
+    """Detect channel ARIA most recently used. Defaults to 'email'."""
+    recent = activities_collection.find_one(
+        {
+            "lead_id": lead_id,
+            "activity_type": {"$in": ["whatsapp_sent", "email_sent"]},
+        },
+        {"_id": 0, "activity_type": 1},
+        sort=[("created_at", DESCENDING)],
+    )
+    if recent and recent.get("activity_type") == "whatsapp_sent":
+        return "whatsapp"
+    return "email"
+
+
+async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: str, founder_name: str):
+    name = lead.get("first_name") or "there"
+    template = magnet.get("message_template") or (
+        f"Hi {{first_name}},\n\nQuick note before our chat — here's a short overview of how we work and recent results: {{link}}\n\nGive it 2 minutes, it'll make our call sharper.\n\n— {founder_name}"
+    )
+    body = template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
+    html = body.replace("\n", "<br>")
+    params = {
+        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+        "to": [lead.get("email")],
+        "subject": f"Before our call — quick read",
+        "html": f"<div style='font-family:Plus Jakarta Sans,Arial,sans-serif;color:#1A0A2E;'>{html}</div>",
+    }
+    try:
+        await asyncio.to_thread(resend.Emails.send, params)
+    except Exception as e:
+        print(f"Lead magnet email failed: {e}")
+
+
+def _send_lead_magnet_via_whatsapp(lead: dict, magnet: dict, tracking_url: str, founder_name: str):
+    """Logs a whatsapp_sent activity. Real WhatsApp API integration is hooked elsewhere."""
+    name = lead.get("first_name") or "there"
+    template = magnet.get("message_template") or (
+        f"Hi {{first_name}}! Before our call — here's a 2-min overview of our work: {{link}}\n— {founder_name}"
+    )
+    body = template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
+    return body
+
+
+async def auto_send_lead_magnet(lead_id: str, trigger: str):
+    """Auto-send the configured lead magnet to a lead.
+
+    trigger: 'pre_booking' (lead just qualified) or 'post_booking' (meeting booked).
+    Honors workspace setting send_timing.
+    """
+    magnet = _get_workspace_magnet()
+    if not magnet or not magnet.get("enabled"):
+        return
+    timing = magnet.get("send_timing", "post_booking")
+    if timing != "both" and timing != trigger:
+        return
+    if magnet.get("type") == "url" and not magnet.get("url"):
+        return
+    if magnet.get("type") == "file" and not magnet.get("file_id"):
+        return
+
+    try:
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1})
+    except Exception:
+        return
+    if not lead or not lead.get("email"):
+        return
+
+    # Idempotency: skip if already sent for this trigger
+    already = lead_magnet_views_collection.find_one(
+        {"lead_id": lead_id, "trigger": trigger, "kind": "send"}, {"_id": 0}
+    )
+    if already:
+        return
+
+    tracking_id = uuid.uuid4().hex
+    tracking_url = _build_tracking_url(tracking_id)
+    founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "the team"
+    channel = _get_lead_preferred_channel(lead_id)
+
+    if channel == "whatsapp":
+        body = _send_lead_magnet_via_whatsapp(lead, magnet, tracking_url, founder_name)
+        activity_type = "whatsapp_sent"
+        subject = "Lead magnet sent (WhatsApp)"
+    else:
+        await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
+        body = magnet.get("name") or "Pre-call brochure"
+        activity_type = "email_sent"
+        subject = "Lead magnet sent (Email)"
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    activities_collection.insert_one({
+        "lead_id": lead_id, "user_id": "aria@genleadai.ai",
+        "activity_type": activity_type, "subject": subject, "body": body,
+        "outcome": None, "duration_minutes": None,
+        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": trigger, "channel": channel},
+        "created_at": now_iso,
+    })
+    lead_magnet_views_collection.insert_one({
+        "tracking_id": tracking_id,
+        "lead_id": lead_id,
+        "kind": "send",
+        "channel": channel,
+        "trigger": trigger,
+        "magnet_type": magnet.get("type"),
+        "magnet_target": magnet.get("url") or magnet.get("file_id"),
+        "created_at": now_iso,
+    })
+
+
+@app.get("/api/lead-magnets/config")
+async def get_lead_magnet_config(current_user: dict = Depends(get_current_user)):
+    doc = _get_workspace_magnet()
+    if not doc:
+        return {
+            "enabled": False, "name": "", "type": "url", "url": "",
+            "file_id": None, "file_name": None,
+            "send_timing": "post_booking", "message_template": "",
+        }
+    doc.pop("scope", None)
+    return doc
+
+
+@app.put("/api/lead-magnets/config")
+async def save_lead_magnet_config(cfg: LeadMagnetConfig, current_user: dict = Depends(get_current_user)):
+    payload = cfg.dict()
+    payload["scope"] = "workspace"
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["updated_by"] = current_user["email"]
+    lead_magnets_collection.update_one({"scope": "workspace"}, {"$set": payload}, upsert=True)
+    payload.pop("scope", None)
+    return payload
+
+
+@app.post("/api/lead-magnets/upload")
+async def upload_lead_magnet_file(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    allowed = {"application/pdf", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+               "application/vnd.ms-powerpoint"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Only PDF or PPTX allowed")
+    content = await file.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Max file size is 25MB")
+    file_id = uuid.uuid4().hex
+    ext = ".pdf" if file.content_type == "application/pdf" else ".pptx"
+    safe_name = f"{file_id}{ext}"
+    full_path = os.path.join(UPLOADS_DIR, safe_name)
+    with open(full_path, "wb") as f:
+        f.write(content)
+    return {
+        "file_id": safe_name,
+        "file_name": file.filename,
+        "size": len(content),
+        "content_type": file.content_type,
+    }
+
+
+@app.get("/api/uploads/{file_id}")
+async def serve_upload(file_id: str, current_user: dict = Depends(get_current_user)):
+    full_path = os.path.join(UPLOADS_DIR, file_id)
+    if not os.path.isfile(full_path) or not os.path.commonpath([UPLOADS_DIR, os.path.realpath(full_path)]) == UPLOADS_DIR:
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(full_path)
+
+
+@app.post("/api/leads/{lead_id}/send-lead-magnet")
+async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Founder manually triggers the lead magnet for this lead."""
+    magnet = _get_workspace_magnet()
+    if not magnet or not magnet.get("enabled"):
+        raise HTTPException(status_code=400, detail="Lead magnet is not enabled. Configure it in Settings.")
+    if magnet.get("type") == "url" and not magnet.get("url"):
+        raise HTTPException(status_code=400, detail="Lead magnet URL not set.")
+    if magnet.get("type") == "file" and not magnet.get("file_id"):
+        raise HTTPException(status_code=400, detail="Lead magnet file not uploaded.")
+
+    try:
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid lead id")
+    if not lead or not lead.get("email"):
+        raise HTTPException(status_code=404, detail="Lead not found or missing email")
+
+    tracking_id = uuid.uuid4().hex
+    tracking_url = _build_tracking_url(tracking_id)
+    founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "the team"
+    channel = _get_lead_preferred_channel(lead_id)
+
+    if channel == "whatsapp":
+        body_preview = _send_lead_magnet_via_whatsapp(lead, magnet, tracking_url, founder_name)
+        activity_type = "whatsapp_sent"
+        subject = "Lead magnet sent (WhatsApp)"
+    else:
+        await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
+        body_preview = magnet.get("name") or "Pre-call brochure"
+        activity_type = "email_sent"
+        subject = "Lead magnet sent (Email)"
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    activities_collection.insert_one({
+        "lead_id": lead_id, "user_id": current_user["email"],
+        "activity_type": activity_type, "subject": subject, "body": body_preview,
+        "outcome": None, "duration_minutes": None,
+        "metadata": {"type": "lead_magnet", "tracking_id": tracking_id, "trigger": "manual", "channel": channel},
+        "created_at": now_iso,
+    })
+    lead_magnet_views_collection.insert_one({
+        "tracking_id": tracking_id,
+        "lead_id": lead_id,
+        "kind": "send",
+        "channel": channel,
+        "trigger": "manual",
+        "magnet_type": magnet.get("type"),
+        "magnet_target": magnet.get("url") or magnet.get("file_id"),
+        "created_at": now_iso,
+    })
+    return {"sent": True, "channel": channel, "tracking_url": tracking_url}
+
+
+@app.get("/api/lead-magnets/track/{tracking_id}")
+async def track_lead_magnet(tracking_id: str, request_body: Optional[Dict[str, Any]] = None):
+    """Public endpoint — logs view and redirects to the actual asset."""
+    send_doc = lead_magnet_views_collection.find_one({"tracking_id": tracking_id, "kind": "send"}, {"_id": 0})
+    if not send_doc:
+        raise HTTPException(status_code=404, detail="Tracking link not found")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    lead_magnet_views_collection.insert_one({
+        "tracking_id": tracking_id,
+        "lead_id": send_doc.get("lead_id"),
+        "kind": "view",
+        "created_at": now_iso,
+    })
+
+    magnet_type = send_doc.get("magnet_type")
+    target = send_doc.get("magnet_target")
+    if magnet_type == "url" and target:
+        return RedirectResponse(url=target, status_code=302)
+    if magnet_type == "file" and target:
+        full_path = os.path.join(UPLOADS_DIR, target)
+        if os.path.isfile(full_path):
+            return FileResponse(full_path)
+    raise HTTPException(status_code=404, detail="Asset unavailable")
+
+
+@app.get("/api/lead-magnets/engagement/{lead_id}")
+async def lead_magnet_engagement(lead_id: str, current_user: dict = Depends(get_current_user)):
+    sends = list(lead_magnet_views_collection.find(
+        {"lead_id": lead_id, "kind": "send"}, {"_id": 0}
+    ).sort("created_at", DESCENDING))
+    views = list(lead_magnet_views_collection.find(
+        {"lead_id": lead_id, "kind": "view"}, {"_id": 0}
+    ).sort("created_at", DESCENDING))
+    last_sent = sends[0]["created_at"] if sends else None
+    last_viewed = views[0]["created_at"] if views else None
+    return {
+        "sent_count": len(sends),
+        "view_count": len(views),
+        "last_sent": last_sent,
+        "last_viewed": last_viewed,
+        "sends": sends,
+        "views": views[:10],
+        "is_hot": len(views) >= 2,
     }
