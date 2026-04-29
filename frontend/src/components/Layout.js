@@ -19,8 +19,19 @@ const Layout = ({ children }) => {
   const { planName, planId, openUpgrade } = usePlan();
   const navigate = useNavigate();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try { const v = localStorage.getItem('aria_sidebar_open'); return v === null ? true : v === '1'; }
+    catch { return true; }
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const toggleSidebar = () => {
+    setSidebarOpen(prev => {
+      const next = !prev;
+      try { localStorage.setItem('aria_sidebar_open', next ? '1' : '0'); } catch { /* swallow */ }
+      return next;
+    });
+  };
 
   useTtvMilestoneWatcher(!!user);
 
@@ -152,7 +163,7 @@ const Layout = ({ children }) => {
               </div>
             )}
           </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 text-[var(--sidebar-text-muted)] hover:text-white transition-colors"><List size={16} /></button>
+          <button onClick={toggleSidebar} className="p-1 text-[var(--sidebar-text-muted)] hover:text-white transition-colors" title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} data-testid="sidebar-toggle-inner"><List size={16} /></button>
         </div>
         {sidebarOpen ? <NavContent /> : (
           <nav className="flex-1 px-2 py-4">
@@ -203,7 +214,10 @@ const Layout = ({ children }) => {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-[#E8E0F5] flex items-center justify-between px-4 md:px-6 shrink-0">
           <div className="flex items-center gap-3 flex-1">
-            <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-1.5 text-[#5A4A7A] hover:text-[#7C35DC]" data-testid="mobile-menu-btn"><List size={22} /></button>
+            <button onClick={() => setMobileMenuOpen(true)} className="md:hidden p-1.5 text-[#5A4A7A] hover:text-[#7C35DC]" aria-label="Open menu" data-testid="mobile-menu-btn"><List size={22} /></button>
+            <button onClick={toggleSidebar} className="hidden md:flex items-center justify-center p-2 text-[#5A4A7A] hover:text-[#7C35DC] hover:bg-[#F4F0FF] rounded-lg transition-all" title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} data-testid="sidebar-toggle">
+              <List size={18} weight="bold" />
+            </button>
             <div className="relative flex-1 max-w-md hidden sm:block">
               <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B8AB0]" />
               <input type="text" placeholder="Search leads, follow-ups, campaigns…" className="w-full bg-[#FAFAFA] border border-[#E8E0F5] text-[#1A0A2E] pl-9 pr-4 py-2 rounded-lg focus:border-[#7C35DC] focus:ring-2 focus:ring-[rgba(124,53,220,0.12)] transition-all text-sm" style={{ fontFamily: 'Inter' }} data-testid="global-search" />
