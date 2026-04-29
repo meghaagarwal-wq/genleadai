@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Robot, Fire, ChartLineUp, Clock, Target, ChatCircle, Lightning, Warning, FileText, CheckCircle, Copy, X } from '@phosphor-icons/react';
+import { Robot, Fire, ChartLineUp, Clock, Target, ChatCircle, Lightning, Warning, FileText, CheckCircle, Copy, X, Sparkle } from '@phosphor-icons/react';
 import api from '../config/api';
 
 const TEMP_STYLES = {
@@ -164,14 +164,29 @@ const AriaReadPanel = ({ leadId }) => {
           <div className="relative bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-[#F0ECF9] bg-white">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA · FOUNDER BRIEF</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA · FOUNDER BRIEF</div>
+                  {brief?.ai_powered && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.15em] bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30 flex items-center gap-1" data-testid="modal-brief-ai-badge">
+                      <Sparkle size={9} weight="fill" /> AI-POWERED
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-xl font-extrabold text-[#1A0A2E] mt-0.5" style={{ fontFamily: 'Plus Jakarta Sans' }}>{brief?.lead_name || 'Generating brief…'}</h3>
               </div>
               <button onClick={() => setBriefOpen(false)} className="p-2 text-[#9B8AB0] hover:text-[#1A0A2E] rounded-lg hover:bg-[#F4F0FF]" data-testid="founder-brief-modal-close">
                 <X size={18} />
               </button>
             </div>
-            {briefLoading && <div className="p-12 text-center text-sm text-[#9B8AB0]">ARIA is preparing the brief…</div>}
+            {briefLoading && (
+              <div className="p-12 text-center" data-testid="modal-brief-loading">
+                <div className="inline-flex items-center gap-2 text-sm text-[#7C35DC] font-semibold">
+                  <Sparkle size={16} weight="fill" className="animate-pulse" />
+                  ARIA is reading the lead's history and preparing your brief…
+                </div>
+                <p className="text-xs text-[#9B8AB0] mt-2">Usually takes 4–8 seconds.</p>
+              </div>
+            )}
             {brief && !briefLoading && (
               <div className="p-6 space-y-4">
                 <div className="text-xs text-[#5A4A7A]">{brief.company} · {brief.role} · {brief.source}</div>

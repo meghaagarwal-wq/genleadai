@@ -28,7 +28,7 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - `GET/PUT /training` — full Train ARIA wizard data
 - `GET /playbooks` + `POST /playbooks/{id}/activate` + `/deactivate`
 - `GET /journeys/default` — 17-step default journey + 5 templates + max=26 touchpoints
-- `POST /founder-brief/{lead_id}` — heuristic brief with 14 keys
+- `POST /founder-brief/{lead_id}` — **Claude 4 Sonnet powered** via Emergent LLM Key. Uses lead profile + recent activity history + workspace training context to generate `recommended_pitch`, `suggested_opening`, `questions_to_ask`, `aria_recommendation`. Falls back to heuristic on Claude error. Returns `ai_powered: true|false`. ~10–12 sec generation time.
 - `GET /aria-read/{lead_id}` — conversation intelligence (temperature/intent/urgency/fit/need/pain/objection/next-action/suggested-response/handoff-needed/aria-thinks)
 - `GET /handoff/rules` + `/handoff/alerts`
 - `GET /revival/segments` (7 segments + Day 1/4/9/15/30 default journey)

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Copy, PaperPlaneTilt, CheckCircle, ArrowRight, Robot, Lightning } from '@phosphor-icons/react';
+import { FileText, Copy, PaperPlaneTilt, CheckCircle, ArrowRight, Robot, Lightning, Sparkle } from '@phosphor-icons/react';
 import api from '../config/api';
 import PageHeader from '../components/PageHeader';
 
@@ -100,13 +100,28 @@ const FounderBriefs = () => {
 
         {/* Brief panel */}
         <div className="bg-white border border-[#E8E0F5] rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="founder-brief-panel">
-          {loading && <div className="p-12 text-center text-sm text-[#9B8AB0]">ARIA is preparing the brief…</div>}
+          {loading && (
+            <div className="p-12 text-center" data-testid="founder-brief-loading">
+              <div className="inline-flex items-center gap-2 text-sm text-[#7C35DC] font-semibold">
+                <Sparkle size={16} weight="fill" className="animate-pulse" />
+                ARIA is reading the lead's history and preparing your brief…
+              </div>
+              <p className="text-xs text-[#9B8AB0] mt-2">Usually takes 4–8 seconds.</p>
+            </div>
+          )}
           {!loading && !brief && <div className="p-12 text-center text-sm text-[#9B8AB0]">Select a lead to see ARIA's founder brief.</div>}
           {brief && (
             <>
               <div className="px-6 py-5 border-b border-[#F0ECF9] flex items-start justify-between gap-3" style={{ background: 'linear-gradient(135deg, rgba(124,53,220,0.06) 0%, rgba(192,68,224,0.04) 100%)' }}>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>FOUNDER BRIEF</div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>FOUNDER BRIEF</div>
+                    {brief.ai_powered && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-[0.15em] bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30 flex items-center gap-1" data-testid="founder-brief-ai-badge">
+                        <Sparkle size={9} weight="fill" /> AI-POWERED
+                      </span>
+                    )}
+                  </div>
                   <h2 className="text-2xl font-extrabold text-[#1A0A2E] mt-1" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="founder-brief-name">{brief.lead_name}</h2>
                   <p className="text-sm text-[#5A4A7A]">{brief.company} · {brief.role} · {brief.source}</p>
                 </div>
