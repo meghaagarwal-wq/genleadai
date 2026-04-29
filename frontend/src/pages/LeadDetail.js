@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import AriaConversationPanel from '../components/AriaConversationPanel';
+import AriaReadPanel from '../components/AriaReadPanel';
 import {
   ArrowLeft,
   Phone,
@@ -265,6 +266,10 @@ const LeadDetail = () => {
               ))}
             </div>
           </div>
+
+          {/* ARIA's Read — conversation intelligence (additive) */}
+          <AriaReadPanel leadId={lead.id} />
+
 
           {/* Lead Magnet / Brochure */}
           <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="lead-magnet-card">

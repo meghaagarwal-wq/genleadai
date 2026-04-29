@@ -4,76 +4,70 @@
 FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Stripe + Sonner + Meta WhatsApp Cloud API
 
 ## Product
-**ARIA**: AI Sales Personal Assistant — captures, qualifies, scores, assigns, follows up, and tracks every lead from one command center. Reduces lead leakage, enforces follow-up discipline, gives founders/sales teams pipeline visibility.
+**ARIA**: Hyper-personalised **AI sales agent** for startups, founder-led businesses, SaaS companies, agencies, consultants, and service businesses that cannot yet hire a full sales/lead-management/follow-up/call-booking team.
 
-## 4-Tier Plan Structure
-| Plan | Price | Audience | Highlights |
-|------|-------|----------|-----------|
-| **ARIA Starter** | $49/mo | Small teams | Manual lead control, follow-up reminders, Hot/Warm/Cold tagging |
-| **ARIA Growth** | $149/mo | Campaign-driven biz | Multi-source capture, stage pipeline, basic AI scoring, founder summary |
-| **ARIA Pro** | $399/mo | Founder-led companies | AI qualification, follow-up drafts, WhatsApp workflows, full CRM sync, RBAC |
-| **ARIA Custom** | Contact Sales | Complex sales engines | Custom stages/scoring/workflows, AI call scheduling, multi-brand, dedicated support |
+## Brand promise
+- "Deploy your first AI sales hire before building a sales team."
+- "Your CRM stores leads. ARIA works them."
 
-50 feature flags drive gating across all tiers via `_has_feature` + `require_feature` dependency.
+## Positioning
+ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's an AI sales hire that captures, qualifies, nurtures, books calls, prepares founder briefs, follows up post-call, revives silent leads, and only escalates to humans when needed.
 
-## ARIA Brand Visual System
-- **Dark premium sidebar** (`linear-gradient(180deg, #0E0820 → #1A0F38)`) with brand block "ARIA / AI SALES PA · GENLEADAI" and animated ARIA robot avatar
-- **Premium top bar**: search "Search leads, follow-ups, campaigns…", AI Summary button, gradient "+ Add Lead" CTA, notifications bell with red dot
-- **PageHeader component**: eyebrow (purple uppercase) + 36px h1 + 16px subtitle + actions slot
-- **AriaInsightCard**: dark gradient "ARIA SAYS · 🟢 ONLINE" callout with 48px animated robot avatar, pulse glow
-- **AriaAvatar component**: custom SVG robot face — halo pulse, eye blink, antenna LED twinkle
-- **Tokens**: --sidebar-bg, --sidebar-active-border (#C044E0 3px left), --shadow-card, --gradient-brand
-- **Language**: AI Sales PA / lead leakage / follow-up discipline / revenue movement / command center / next best action
+## Existing app (preserved as-is)
+- Sidebar nav (9 items): Dashboard, Lead Inbox, Pipeline, Follow-Ups, AI Assistant, Reports, Integrations, Plan & Billing, Settings
+- Dashboard with ARIA Daily Brief, ARIA Today widget, Founder Command Center (revenue leakage / money at risk / hot untouched / proposal graveyard / source quality / lost reasons), TTV tracking, Daily Call Plan email, End-of-Day Wrap email
+- 4-tier plan structure (Starter / Growth / Pro / Custom) with feature gating
+- Brand: dark sidebar, ARIA robot avatar, Plus Jakarta Sans, purple/violet gradient
+- Lead Inbox with Hot strip, Pipeline kanban with deal-value totals, Follow-Ups with inline +1d/+3d/Done actions
+- Calendly + Resend + Meta WhatsApp Cloud API integrations
 
-## Sidebar Navigation (9 items)
-Dashboard · Lead Inbox · Pipeline · Follow-Ups · AI Assistant · Reports · Integrations · Plan & Billing · Settings
+## ADDITIVE — AI Sales Agent layer (iter 19–20)
 
-## Pages
-- **Dashboard** — "ARIA Command Center" with dynamic ARIA Daily Brief, TTV widget, brochure-opens alert, Best Time to Call
-- **Lead Inbox** — Hot strip, filters, search, 25 demo leads
-- **Lead Profile** — Pre-Call Brochure card, Best Time to Call, activity timeline
-- **Pipeline** — Kanban (8 stages; custom stages = Custom plan); now shows Active Pipeline total + per-stage value totals + per-card deal-value chips (iter 18)
-- **Follow-Ups** — "Follow-Up Command Center" with ARIA Priority Queue insight, 4 buckets, inline +1d/+3d/Done actions per row (iter 18)
-- **AI Assistant** — "ARIA AI Assistant" with 8 gated tiles
-- **Reports** (alias of Analytics)
-- **Integrations** — "Connect ARIA With Your Growth Stack", 11 cards
-- **Plan & Billing** — "Choose your sales operating layer", 4 plan cards + 7-group feature matrix
-- **Settings** — ARIA agent, Daily Call Plan email, End-of-Day Wrap email (iter 18), Lead Magnet, API & Forms, Workspace, Team
+### New backend module: `/app/backend/aria_agent_routes.py`
+14 new endpoints under `/api/aria-agent/*`:
+- `GET/PUT /training` — full Train ARIA wizard data
+- `GET /playbooks` + `POST /playbooks/{id}/activate` + `/deactivate`
+- `GET /journeys/default` — 17-step default journey + 5 templates + max=26 touchpoints
+- `POST /founder-brief/{lead_id}` — heuristic brief with 14 keys
+- `GET /aria-read/{lead_id}` — conversation intelligence (temperature/intent/urgency/fit/need/pain/objection/next-action/suggested-response/handoff-needed/aria-thinks)
+- `GET /handoff/rules` + `/handoff/alerts`
+- `GET /revival/segments` (7 segments + Day 1/4/9/15/30 default journey)
+- `GET /agent-activity` — 6 KPIs for Dashboard activity section
+- `GET /insights` — 8 headline insights + 4 recommendations + live observation
 
-## Scheduled Emails (ARIA cron loops, 60s tick)
-- **Daily Call Plan** — 8 AM local, top-N leads to call today, sorted by call_score
-- **End-of-Day Wrap** — 6 PM local, today's activity summary: calls/emails/WA sent, wins, losses, hot leads still untouched, tomorrow's top 3, momentum tag (strong/steady/quiet)
+### New sidebar section "AI SALES AGENT" (additive, below existing 9 items)
+- Train ARIA `/aria-agent/train`
+- Sales Playbooks `/aria-agent/playbooks`
+- Sales Journeys `/aria-agent/journeys`
+- Founder Briefs `/aria-agent/briefs`
+- Human Handoff `/aria-agent/handoff`
+- Revival Engine `/aria-agent/revival`
+- ARIA Insights `/aria-agent/insights`
+
+### Dashboard additions
+- Positioning banner: "ARIA · YOUR FIRST AI SALES HIRE — Your CRM stores leads. ARIA works them."
+- ARIA Sales Agent Activity card with 6 tiles (responded today, qualified, follow-ups sent, calls booked, hot escalated, silent revived)
+- Mounted between AriaTodayWidget and FounderCommandCenter — nothing pre-existing removed
+
+### LeadDetail additions
+- `<AriaReadPanel>` in left column above Lead Magnet card — purple gradient header, status badges, ARIA thinks block, 4 KV intelligence fields, suggested response with copy button, Generate Founder Brief button → opens modal with full brief
 
 ## Test Status
-- iteration_18.json: 11/11 backend pytest pass for EOD module + regressions. Frontend: Settings EOD panel 100%, Pipeline value totals 100%, FollowUps reschedule 100%, Done button initially blocked by PATCH null bug → **FIXED in iter 18 final** (server.py:381 now uses `exclude_unset=True`). Curl-verified end-to-end.
+- iteration_19.json: 100% pass — 13 backend endpoints + all 7 new pages + dashboard activity section + sidebar both groups verified. Zero regressions on existing surface.
+- iteration_20 (current): aria-read endpoint + AriaReadPanel + Founder Brief modal added; backend curl-verified, frontend screenshot-verified.
 
-## Last Shipped (iter 18)
-1. **End-of-Day Wrap email** — `eod_wrap_collection`, EndOfDayWrapConfig, _compute_eod_wrap, _render_eod_wrap_html, _send_eod_wrap, GET/PUT/POST/preview endpoints, _eod_wrap_loop background task, startup hook. Settings UI panel below Daily Call Plan.
-2. **Pipeline value totals** — Active pipeline chip (header), per-stage value totals in column headers, per-card deal-value chips. fmtInr / stageValue / totalPipelineValue helpers.
-3. **Follow-Up inline actions** — markComplete (POST activity + PATCH next_followup_at:null) and reschedule(+1d/+3d) inline buttons. Outer row converted from `<button>` to `<div role="button">` for valid HTML nesting.
-4. **CRITICAL bug fix** — PATCH /api/leads/{id} now uses `lead_update.dict(exclude_unset=True)` instead of dropping null values. Lets callers explicitly clear fields (used by Mark Complete flow).
-5. **ARIA Today Dashboard widget** — `GET /api/aria/today` lightweight endpoint + `<AriaTodayWidget>` component on Dashboard between AriaInsightCard and FounderCommandCenter. Shows live momentum tag (strong/steady/quiet), headline copy, 4 KPI tiles (calls/emails/whatsapps/wins), 3 secondary tiles (new leads / meetings / overdue), tomorrow's top 3 call chips. Auto-refreshes every 60s via setInterval.
-
-## Phase 2 (Next session)
-- Role-based dashboards: Sales Manager view + Sales Rep view
-- Lead Profile two-column layout with ARIA Suggestions card
-- Mobile drawer/responsive table-to-card transformations
-- Generate Message action on Follow-Up rows (currently only +1d/+3d/Done)
-
-## Phase 3
-- AI Assistant unified UI (qualification, drafts, NBA, lost-lead analysis) wired to existing ARIA Claude endpoints
-- Integrations OAuth flows (Meta Ads, Google Ads, LinkedIn)
-- Reports polish (rep performance, lost-reason chart, time-in-stage, avg time to first follow-up)
+## Phase Next (not yet shipped)
+- Conversations chat-style thread redesign (currently exists as AriaConversationPanel)
+- Booking Assistant inline reminder cards on calendar/booking pages
+- Microcopy sweep across remaining pages ("ARIA is working this lead", empty states)
+- Wire actual Claude completions into Founder Brief instead of heuristic template
+- "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
 ## Backlog
-- P1: server.py refactor (~5100 lines) into modular routers (still pending)
+- P1: server.py refactor (~5160 lines) into `/app/backend/routes/`
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler
-- P1: Real Stripe price IDs for Pro tier
-- P2: Customer Stripe webhook to auto-promote plan on `payment.succeeded`
-- P2: DRY `EmailScheduleCard` component shared by Daily Call Plan + EOD Wrap (currently ~140 lines duplicate JSX in Settings.js)
-- P2: Single-endpoint POST /api/leads/{id}/complete-followup (atomic activity + status clear; currently FE makes 2 calls)
-- P2: Pre-existing react-beautiful-dnd `isDropDisabled` dev warning on Pipeline page
-- Production: Set `WHATSAPP_*` env values; verify Resend domain
+- P2: DRY shared `EmailScheduleCard` for DCP + EOD
+- P2: react-beautiful-dnd `isDropDisabled` dev warning on Pipeline (pre-existing)
 
 ## Deployment: READY
 Custom domain target: app.genleadai.com

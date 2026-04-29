@@ -213,7 +213,6 @@ def _aria_agent_endpoints(app, get_current_user, db):
             raise HTTPException(404, "Lead not found")
         lead["id"] = str(lead["_id"])
         lead.pop("_id", None)
-
         recent = list(activities_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).limit(10))
         # Heuristic-based brief that mixes real lead data with smart defaults so it feels alive on demo workspaces
         icp = lead.get("icp_score") or 0
@@ -254,6 +253,105 @@ def _aria_agent_endpoints(app, get_current_user, db):
         }
         return brief
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 4b. ARIA's Read — conversation intelligence panel (lead detail)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    @router.get("/aria-read/{lead_id}")
+    async def aria_read(lead_id: str, current_user: dict = Depends(get_current_user)):
+        from bson import ObjectId
+        try:
+            lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+        except Exception:
+            raise HTTPException(400, "Invalid lead id")
+        if not lead:
+            raise HTTPException(404, "Lead not found")
+        lead["id"] = str(lead["_id"]); lead.pop("_id", None)
+        icp = lead.get("icp_score") or 0
+        status = lead.get("status") or "new"
+        last_contact = lead.get("last_contacted_at")
+        deal = lead.get("deal_value") or 0
+        meta = lead.get("metadata") or {}
+
+        # Temperature
+        temperature = lead.get("lead_temperature") or ("hot" if icp >= 80 else "warm" if icp >= 50 else "cold")
+        # Buying intent
+        if status in ("proposal_sent", "negotiation", "call_booked"):
+            intent = "high"
+        elif icp >= 70:
+            intent = "medium"
+        else:
+            intent = "low"
+        # Urgency
+        urgency = "this_week" if icp >= 80 and status in ("new", "contacted", "qualified") else \
+                  "this_month" if icp >= 50 else "exploring"
+        # Fit score (mirror icp on a 0–10 scale)
+        fit_score = round((icp or 0) / 10, 1)
+
+        need = meta.get("need") or (
+            f"Wants to automate lead response and follow-up at {lead.get('company_name') or 'their company'}." if temperature in ("hot", "warm")
+            else "Exploring tools to reduce manual sales work."
+        )
+        pain = meta.get("pain") or "Founder still chasing leads manually — slipping in the first hour."
+        objection = meta.get("objection") or (
+            "Unsure how this differs from a CRM." if status == "new" else
+            "Pricing or timing concern likely." if status in ("contacted", "qualified") else
+            "Wants proof / case study before committing."
+        )
+
+        # Next action mapping
+        if status == "new":
+            next_action = "Reply with a discovery question + proof"
+            suggested_response = f"Hey {lead.get('first_name','')}, ARIA here — what's slowing your sales motion the most right now: lead response, follow-up, or booking?"
+        elif status == "contacted":
+            next_action = "Send a tailored case study and book the call"
+            suggested_response = f"Quick one — most {lead.get('industry') or 'founders'} we work with had the same pain. Want to see a 90-second walkthrough?"
+        elif status in ("qualified", "proposal_sent"):
+            next_action = "Founder voice note + 2 specific call slots"
+            suggested_response = f"Hey {lead.get('first_name','')}, founder here. ARIA flagged you as ready — Tuesday 4 PM or Wednesday 11 AM?"
+        elif status == "negotiation":
+            next_action = "Address objection + close"
+            suggested_response = "Happy to walk through any section of the proposal. What's the biggest unknown for you right now?"
+        else:
+            next_action = "Re-engage with a context-aware revival message"
+            suggested_response = "Hey — what changed since we last spoke?"
+
+        handoff_needed = bool(
+            icp >= 85 or
+            status in ("proposal_sent", "negotiation") or
+            meta.get("competitor_mentioned") or
+            meta.get("pricing_asked")
+        )
+
+        if temperature == "hot" and intent == "high":
+            aria_thinks = f"This lead is HOT and ready. They've shown clear intent — don't keep them waiting."
+        elif temperature == "warm" and intent == "medium":
+            aria_thinks = f"This lead is warm but needs proof before booking a call."
+        elif temperature == "cold":
+            aria_thinks = f"This lead is cold for now. Run them through a revival journey, don't push hard."
+        else:
+            aria_thinks = f"Solid prospect — keep momentum and aim for the next touchpoint."
+
+        return {
+            "lead_id": lead_id,
+            "temperature": temperature,
+            "intent": intent,
+            "urgency": urgency,
+            "fit_score": fit_score,
+            "icp_score": icp,
+            "main_need": need,
+            "main_pain": pain,
+            "current_objection": objection,
+            "best_next_action": next_action,
+            "suggested_response": suggested_response,
+            "handoff_needed": handoff_needed,
+            "aria_thinks": aria_thinks,
+            "deal_value": deal,
+            "last_contact_at": last_contact,
+        }
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 5. Smart Human Handoff
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 5. Smart Human Handoff
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
