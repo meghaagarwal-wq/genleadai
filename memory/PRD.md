@@ -52,6 +52,7 @@ Dashboard · Lead Inbox · Pipeline · Follow-Ups · AI Assistant · Reports · 
 2. **Pipeline value totals** — Active pipeline chip (header), per-stage value totals in column headers, per-card deal-value chips. fmtInr / stageValue / totalPipelineValue helpers.
 3. **Follow-Up inline actions** — markComplete (POST activity + PATCH next_followup_at:null) and reschedule(+1d/+3d) inline buttons. Outer row converted from `<button>` to `<div role="button">` for valid HTML nesting.
 4. **CRITICAL bug fix** — PATCH /api/leads/{id} now uses `lead_update.dict(exclude_unset=True)` instead of dropping null values. Lets callers explicitly clear fields (used by Mark Complete flow).
+5. **ARIA Today Dashboard widget** — `GET /api/aria/today` lightweight endpoint + `<AriaTodayWidget>` component on Dashboard between AriaInsightCard and FounderCommandCenter. Shows live momentum tag (strong/steady/quiet), headline copy, 4 KPI tiles (calls/emails/whatsapps/wins), 3 secondary tiles (new leads / meetings / overdue), tomorrow's top 3 call chips. Auto-refreshes every 60s via setInterval.
 
 ## Phase 2 (Next session)
 - Role-based dashboards: Sales Manager view + Sales Rep view

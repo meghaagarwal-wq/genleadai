@@ -4710,6 +4710,37 @@ async def eod_wrap_preview(current_user: dict = Depends(get_current_user)):
     return {"html": html, "wrap": wrap}
 
 
+@app.get("/api/aria/today")
+async def aria_today(current_user: dict = Depends(get_current_user)):
+    """Lightweight live snapshot of today's wrap totals — for the Dashboard ARIA Today widget.
+    Same compute as the EOD email but stripped to totals + momentum + headline copy."""
+    cfg = _get_eod_wrap_config()
+    tz_off = float((cfg or {}).get("timezone_offset_hours") or 0.0)
+    wrap = _compute_eod_wrap(tz_off_hours=tz_off)
+    t = wrap["totals"]
+    momentum = wrap["momentum"]
+
+    if t["wins"] > 0:
+        headline = f"{t['wins']} won today · {_fmt_inr(t['won_value']) if t['won_value'] else 'value pending'}"
+    elif t["total_touches"] >= 15:
+        headline = f"Strong day — {t['total_touches']} touches logged"
+    elif t["total_touches"] >= 5:
+        headline = f"Steady momentum — {t['total_touches']} touches"
+    elif t["total_touches"] > 0:
+        headline = f"Slow start — only {t['total_touches']} touches so far"
+    else:
+        headline = "No outreach logged yet today"
+
+    return {
+        "date_label": wrap["date_label"],
+        "momentum": momentum,
+        "headline": headline,
+        "totals": t,
+        "hot_untouched_count": len(wrap["hot_untouched"]),
+        "tomorrow_top_3": wrap["tomorrow_plan"][:3],
+    }
+
+
 async def _eod_wrap_loop():
     """Background loop: every 60s check if it's the founder's local 6pm to send the wrap."""
     while True:
