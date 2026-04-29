@@ -4,9 +4,9 @@
 FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Stripe + Sonner + Meta WhatsApp Cloud API
 
 ## Product
-**ARIA**: AI Sales Personal Assistant — captures, qualifies, scores, assigns, follows up, and tracks leads from multiple channels. Reduces lead leakage, improves follow-up discipline, gives founders/sales teams pipeline visibility.
+**ARIA**: AI Sales Personal Assistant — captures, qualifies, scores, assigns, follows up, and tracks every lead from one command center. Reduces lead leakage, enforces follow-up discipline, gives founders/sales teams pipeline visibility.
 
-## 4-Tier Plan Structure (NEW)
+## 4-Tier Plan Structure
 | Plan | Price | Audience | Highlights |
 |------|-------|----------|-----------|
 | **ARIA Starter** | $49/mo | Small teams | Manual lead control, follow-up reminders, Hot/Warm/Cold tagging |
@@ -14,53 +14,53 @@ FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Stripe + Sonner + Me
 | **ARIA Pro** | $399/mo | Founder-led companies | AI qualification, follow-up drafts, WhatsApp workflows, full CRM sync, RBAC |
 | **ARIA Custom** | Contact Sales | Complex sales engines | Custom stages/scoring/workflows, AI call scheduling, multi-brand, dedicated support |
 
-50 feature flags drive gating across all tiers.
+50 feature flags drive gating across all tiers via `_has_feature` + `require_feature` dependency.
+
+## ARIA Brand Visual System (NEW — iter 15)
+- **Dark premium sidebar** (`linear-gradient(180deg, #0E0820 → #1A0F38)`) with brand block "ARIA / AI SALES PA · GENLEADAI"
+- **Premium top bar**: search "Search leads, follow-ups, campaigns…", AI Summary button, gradient "+ Add Lead" CTA, notifications bell with red dot
+- **PageHeader component**: eyebrow (purple uppercase) + 36px h1 + 16px subtitle + actions slot
+- **AriaInsightCard**: dark gradient "ARIA SAYS" callout with dynamic message + CTA, urgent variant for overdue
+- **Tokens**: --sidebar-bg, --sidebar-active-border (#C044E0 3px left), --shadow-card, --gradient-brand
+- **Language**: replaced generic CRM terms with AI Sales PA / lead leakage / follow-up discipline / revenue movement / command center / next best action
 
 ## Sidebar Navigation (9 items)
 Dashboard · Lead Inbox · Pipeline · Follow-Ups · AI Assistant · Reports · Integrations · Plan & Billing · Settings
 
-## Pages
-- **Dashboard**: Founder view with TTV widget, brochure-opens alert, ARIA Best Time to Call, ARIA daily plan, etc.
-- **Lead Inbox**: Filters, search, hot strip, 25 demo leads (when seeded)
-- **Lead Profile**: Pre-Call Brochure, Best Time to Call, activity timeline, engagement
-- **Pipeline**: Kanban board (default 8 stages; custom stages = ARIA Custom only)
-- **Follow-Ups**: 4 buckets (Due today / Overdue / Upcoming / Completed)
-- **AI Assistant**: 8 tiles — qualification, scoring, drafts, NBA, lost-lead analysis, daily/weekly summaries
-- **Reports**: Aliased to Analytics
-- **Integrations**: 11 cards (Website, Meta, Google, LinkedIn, WhatsApp, Calendly, GCal, Email, Zoho, HubSpot, Sheets) with Connected/Available/Coming Soon/Request states
-- **Plan & Billing**: 4 plan cards + 7-group feature comparison matrix
-- **Settings**: ARIA agent (incl. Daily Call Plan), Lead Magnet, API & Forms, Asset Library, Workspace, Team
-
-## Key Backend Endpoints (NEW in iter 14)
-- `GET /api/billing/plans` — full 4-plan catalog with feature flags
-- `GET /api/billing/current-plan` — current workspace plan + features
-- `POST /api/billing/checkout` — Stripe checkout (rejects 'custom')
-- `POST /api/billing/request-upgrade` — emails admin (UPGRADE_REQUEST_EMAIL env)
-- `POST /api/admin/load-demo-data?force=` — seeds 25 industry-diverse demo leads
-- `POST /api/dev/set-plan?plan_id=` — dev/admin plan switcher (admin-only)
-- `require_feature('key')` — FastAPI dependency raising 402 with structured detail
-
-## ARIA AI Modules (existing)
-- 3-Phase Sales PA · Calendly auto-booking · Pre-call brochure (lead magnet) with engagement tracking · Best Time to Call · Daily Call Plan email · TTV milestones with celebration toasts
+## Pages (with new ARIA brand language)
+- **Dashboard** — "ARIA Command Center" with dynamic ARIA Daily Brief, TTV widget, brochure-opens alert, Best Time to Call
+- **Lead Inbox** — Hot strip, filters, search, 25 demo leads
+- **Lead Profile** — Pre-Call Brochure card, Best Time to Call, activity timeline
+- **Pipeline** — Kanban (8 stages; custom stages = Custom plan)
+- **Follow-Ups** — "Follow-Up Command Center" with ARIA Priority Queue insight, 4 buckets
+- **AI Assistant** — "ARIA AI Assistant" with 8 gated tiles
+- **Reports** (alias of Analytics)
+- **Integrations** — "Connect ARIA With Your Growth Stack", 11 cards
+- **Plan & Billing** — "Choose your sales operating layer", 4 plan cards + 7-group feature matrix
+- **Settings** — ARIA agent (Daily Call Plan), Lead Magnet, API & Forms, Workspace, Team
 
 ## Test Status
-- iteration_14.json: **18/18 backend pytests + 16/16 frontend testids** after the 2 fixes (sidebar testid regex, LockBadge `<button>` → `<span role=button>` to eliminate React hydration warning)
+- iteration_15.json: **100% pass** (9/9 backend smoke + 9/9 frontend routes, zero console errors, zero regressions). Pre-existing react-beautiful-dnd dev warning noted as non-blocking.
 
-## Phase 2 Plan (next session)
-- C: Role-based dashboards (Founder/Manager/Rep/Marketing variants — Founder exists)
-- D: Follow-Ups workflow page (mark complete, reschedule, type/channel selector)
+## Phase 2 (Next session)
+- Role-based dashboards: Sales Manager view (team ownership, rep activity, lost reasons, conversion by source) + Sales Rep view (my leads, follow-ups due today, hot leads assigned, calls scheduled)
+- Follow-Ups workflow: Mark Complete + Reschedule + Generate Message + Type/channel selector
+- Lead Profile two-column layout with ARIA Suggestions card
+- Pipeline rebuild with deal-value totals per stage
+- Mobile drawer/responsive table-to-card transformations
 
-## Phase 3 Plan
-- E: AI Assistant unified UI tied to existing ARIA endpoints
-- F: Integrations connection flows (Meta Ads, Google Ads OAuth)
-- J: Reports polish (rep performance, lost-reason chart, time-in-stage)
+## Phase 3
+- AI Assistant unified UI (qualification, drafts, NBA, lost-lead analysis) wired to existing ARIA Claude endpoints
+- Integrations OAuth flows (Meta Ads, Google Ads, LinkedIn)
+- Reports polish (rep performance, lost-reason chart, time-in-stage, avg time to first follow-up)
 
 ## Backlog
-- P1: server.py refactor (~4500 lines) into modular routers — overdue
-- P1: `@app.on_event("startup")` → FastAPI lifespan handler (deprecation warning)
-- P1: Real Stripe price IDs for Pro tier (currently uses amount-based checkout)
-- P2: Customer Stripe webhook to auto-promote plan on payment.succeeded
-- P2: `/api/billing/request-upgrade` to surface email_sent boolean
+- P1: server.py refactor (~4500 lines) into modular routers
+- P1: `@app.on_event("startup")` → FastAPI lifespan handler
+- P1: Real Stripe price IDs for Pro tier
+- P2: Customer Stripe webhook to auto-promote plan on `payment.succeeded`
+- P2: Pre-existing react-beautiful-dnd `isDropDisabled` dev warning on Pipeline page
+- Production: Set `WHATSAPP_*` env values; verify Resend domain
 
 ## Deployment: READY
-Custom domain: app.genleadai.com
+Custom domain target: app.genleadai.com
