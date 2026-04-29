@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
-import { MagnifyingGlass, Plus, Funnel, X, Fire } from '@phosphor-icons/react';
+import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle } from '@phosphor-icons/react';
+
+const NEXT_BEST_ACTION = (lead) => {
+  const s = lead.status;
+  const icp = lead.icp_score || 0;
+  if (s === 'new' && icp >= 80) return { label: 'Call within 30 min', tone: 'urgent' };
+  if (s === 'new') return { label: 'Send first-touch message', tone: 'default' };
+  if (s === 'contacted' && icp >= 70) return { label: 'Qualify and book demo', tone: 'default' };
+  if (s === 'contacted') return { label: 'Send pricing context', tone: 'default' };
+  if (s === 'qualified') return { label: 'Book discovery call', tone: 'default' };
+  if (s === 'call_booked') return { label: 'Send pre-call brief', tone: 'default' };
+  if (s === 'proposal_sent') return { label: 'Follow up with case study', tone: 'urgent' };
+  if (s === 'negotiation') return { label: 'Handle pricing objection', tone: 'urgent' };
+  if (s === 'unqualified') return { label: 'Move to nurture sequence', tone: 'soft' };
+  return { label: '—', tone: 'soft' };
+};
 
 const CHANNELS = ['whatsapp','email','linkedin','instagram','facebook','website_form','cold_call','referral','webinar','organic_search','paid_ads','other'];
 const STATUSES = ['new','contacted','qualified','unqualified','proposal_sent','negotiation','won','lost','nurture'];
@@ -96,7 +111,7 @@ const LeadInbox = () => {
           <table className="w-full text-sm text-left">
             <thead>
               <tr className="bg-[#F4F0FF]">
-                {['Name','Company','Type','Status','ICP','Score','Channel','Created'].map(h => (
+                {['Name','Company','Type','Status','ICP','Score','Channel','Next Best Action','Created'].map(h => (
                   <th key={h} className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily:'Plus Jakarta Sans' }}>{h}</th>
                 ))}
               </tr>
@@ -138,6 +153,13 @@ const LeadInbox = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-[#5A4A7A] text-xs">{lead.source_channel?.replace('_',' ')}</td>
+                  <td className="px-6 py-4">
+                    {(() => {
+                      const nba = NEXT_BEST_ACTION(lead);
+                      const cls = nba.tone === 'urgent' ? 'text-[#DC2626] bg-[#FEE2E2] border-[#DC2626]/20' : nba.tone === 'soft' ? 'text-[#9B8AB0] bg-[#F4F0FF] border-[#E0D4F7]' : 'text-[#7C35DC] bg-[#F4F0FF] border-[#7C35DC]/20';
+                      return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${cls}`} data-testid={`nba-${lead.id}`}><Sparkle size={9} weight="fill" /> {nba.label}</span>;
+                    })()}
+                  </td>
                   <td className="px-6 py-4 text-[#9B8AB0] text-xs font-mono">{new Date(lead.created_at).toLocaleDateString()}</td>
                 </tr>
                 );

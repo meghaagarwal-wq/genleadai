@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../config/api';
 import AriaInsightCard from '../components/AriaInsightCard';
+import FounderCommandCenter from '../components/FounderCommandCenter';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -136,6 +137,9 @@ const Dashboard = () => {
         }
         return <AriaInsightCard title={title} message={message} ctaLabel={ctaLabel} ctaTo={ctaTo} tone={tone} />;
       })()}
+
+      {/* Founder Command Center — high-conversion demo features */}
+      <FounderCommandCenter />
 
       {/* Sleeping Leads Alert Banner */}
       {sleepingCount > 5 && (
