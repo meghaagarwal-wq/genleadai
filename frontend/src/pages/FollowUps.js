@@ -15,10 +15,41 @@ const FollowUps = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [bucket, setBucket] = useState('today');
+  const [busyId, setBusyId] = useState(null);
 
   useEffect(() => {
     api.get('/api/leads?limit=200').then(res => setLeads(res.data?.leads || [])).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  const refreshLeads = async () => {
+    try { const res = await api.get('/api/leads?limit=200'); setLeads(res.data?.leads || []); } catch (err) { /* swallow */ }
+  };
+
+  const markComplete = async (e, lead) => {
+    e.stopPropagation();
+    if (busyId) return;
+    setBusyId(lead.id);
+    try {
+      await api.post('/api/activities', { lead_id: lead.id, activity_type: 'note_added', subject: 'Follow-up completed', body: 'Marked complete from Follow-Up Command Center.' });
+      await api.patch(`/api/leads/${lead.id}`, { next_followup_at: null });
+      await refreshLeads();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to mark complete');
+    } finally { setBusyId(null); }
+  };
+
+  const reschedule = async (e, lead, days) => {
+    e.stopPropagation();
+    if (busyId) return;
+    setBusyId(lead.id);
+    try {
+      const next = new Date(Date.now() + days * 86400000).toISOString();
+      await api.patch(`/api/leads/${lead.id}`, { next_followup_at: next });
+      await refreshLeads();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to reschedule');
+    } finally { setBusyId(null); }
+  };
 
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -92,7 +123,7 @@ const FollowUps = () => {
               const channel = (l.metadata?.last_channel) || 'call';
               const Icon = TYPE_ICONS[channel] || Phone;
               return (
-                <button key={l.id} onClick={() => navigate(`/leads/${l.id}`)} className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F9F5FF] transition-colors text-left" data-testid={`followup-row-${l.id}`}>
+                <div key={l.id} onClick={() => navigate(`/leads/${l.id}`)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/leads/${l.id}`); }} className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-[#F9F5FF] transition-colors text-left cursor-pointer" data-testid={`followup-row-${l.id}`}>
                   <div className="w-9 h-9 rounded-full bg-[#F4F0FF] border border-[#E0D4F7] flex items-center justify-center flex-shrink-0">
                     <Icon size={14} className="text-[#7C35DC]" />
                   </div>
@@ -108,8 +139,15 @@ const FollowUps = () => {
                       {due ? `Due ${due.toLocaleDateString()}` : 'No date set'} · ICP {l.icp_score} · {l.status?.replace('_', ' ')}
                     </div>
                   </div>
-                  <ArrowRight size={14} className="text-[#7C35DC] flex-shrink-0" />
-                </button>
+                  {bucket !== 'completed' && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={(e) => reschedule(e, l, 1)} disabled={busyId === l.id} className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-white border border-[#E8E0F5] text-[#5A4A7A] hover:bg-[#F4F0FF] hover:text-[#7C35DC] hover:border-[#7C35DC]/30 transition-colors disabled:opacity-50" data-testid={`followup-reschedule-1d-${l.id}`} title="Reschedule by 1 day">+1d</button>
+                      <button onClick={(e) => reschedule(e, l, 3)} disabled={busyId === l.id} className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-white border border-[#E8E0F5] text-[#5A4A7A] hover:bg-[#F4F0FF] hover:text-[#7C35DC] hover:border-[#7C35DC]/30 transition-colors disabled:opacity-50" data-testid={`followup-reschedule-3d-${l.id}`} title="Reschedule by 3 days">+3d</button>
+                      <button onClick={(e) => markComplete(e, l)} disabled={busyId === l.id} className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-md bg-[#DCFCE7] border border-[#16A34A]/30 text-[#16A34A] hover:bg-[#16A34A] hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1" data-testid={`followup-complete-${l.id}`} title="Mark follow-up complete"><Check size={11} weight="bold" />Done</button>
+                    </div>
+                  )}
+                  <ArrowRight size={14} className="text-[#7C35DC] flex-shrink-0 ml-1" />
+                </div>
               );
             })}
           </div>

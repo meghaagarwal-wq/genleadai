@@ -23,6 +23,9 @@ const Settings = () => {
   const [dcp, setDcp] = useState(null);
   const [dcpSaving, setDcpSaving] = useState(false);
   const [dcpSending, setDcpSending] = useState(false);
+  const [eod, setEod] = useState(null);
+  const [eodSaving, setEodSaving] = useState(false);
+  const [eodSending, setEodSending] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -31,6 +34,7 @@ const Settings = () => {
     fetchApiKeys();
     fetchMagnet();
     fetchDcp();
+    fetchEod();
   }, []);
 
   const fetchUsers = async () => {
@@ -123,6 +127,38 @@ const Settings = () => {
     } catch (err) {
       alert(err?.response?.data?.detail || 'Failed to send');
     } finally { setDcpSending(false); }
+  };
+
+  const fetchEod = async () => {
+    try { const res = await api.get('/api/aria/eod-wrap/config'); setEod(res.data); }
+    catch (err) { console.error(err); }
+  };
+
+  const saveEod = async () => {
+    setEodSaving(true);
+    try {
+      const payload = {
+        enabled: !!eod.enabled,
+        send_to_email: eod.send_to_email,
+        send_hour_local: parseInt(eod.send_hour_local) || 18,
+        timezone_offset_hours: parseFloat(eod.timezone_offset_hours) || 0,
+      };
+      const res = await api.put('/api/aria/eod-wrap/config', payload);
+      setEod({ ...eod, ...res.data });
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to save end-of-day wrap');
+    } finally { setEodSaving(false); }
+  };
+
+  const sendEodNow = async () => {
+    setEodSending(true);
+    try {
+      const res = await api.post('/api/aria/eod-wrap/send-now');
+      alert(`Sent to ${res.data.recipient} (${res.data.touches} touches today)`);
+      await fetchEod();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to send');
+    } finally { setEodSending(false); }
   };
 
   const createApiKey = async () => {
@@ -397,6 +433,77 @@ const Settings = () => {
                     </button>
                     <button onClick={saveDcp} disabled={dcpSaving} className="btn-gradient px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="dcp-save-btn">
                       {dcpSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* End-of-Day Wrap */}
+          {eod && (
+            <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="eod-wrap-panel">
+              <div className="p-6 border-b border-[#E8E0F5] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#1A0F38 0%,#7C35DC 100%)' }}>
+                    <Robot size={18} className="text-white" weight="fill" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>End-of-Day Wrap Email</h3>
+                    <p className="text-xs text-[#5A4A7A]">ARIA emails you a 6 PM summary — calls logged, wins, losses, hot leads still untouched, and tomorrow's top 3.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEod({ ...eod, enabled: !eod.enabled })}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${eod.enabled ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20'}`}
+                  data-testid="eod-toggle-btn"
+                >
+                  {eod.enabled ? <ToggleRight size={20} weight="fill" /> : <ToggleLeft size={20} />}
+                  {eod.enabled ? 'Active' : 'Disabled'}
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Send to Email</label>
+                  <input type="email" value={eod.send_to_email || ''} onChange={(e) => setEod({ ...eod, send_to_email: e.target.value })} placeholder="founder@yourcompany.com" className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm font-mono focus:border-[#7C35DC]" data-testid="eod-email-input" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Send hour (your local time)</label>
+                    <select value={eod.send_hour_local} onChange={(e) => setEod({ ...eod, send_hour_local: parseInt(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="eod-hour-input">
+                      {Array.from({ length: 24 }, (_, h) => {
+                        const h12 = ((h - 1) % 12) + 1;
+                        const ampm = h < 12 ? 'AM' : 'PM';
+                        const hh = String(h).padStart(2, '0');
+                        return <option key={h} value={h}>{`${h12}${ampm} (${hh}:00)`}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-[0.15em] text-[#9B8AB0] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your timezone (UTC offset)</label>
+                    <select value={eod.timezone_offset_hours} onChange={(e) => setEod({ ...eod, timezone_offset_hours: parseFloat(e.target.value) })} className="w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC]" data-testid="eod-tz-input">
+                      {[-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,5.5,6,7,8,9,10,11,12,13,14].map(o => {
+                        const sign = o >= 0 ? '+' : '';
+                        const note = o === 5.5 ? ' (IST)' : o === 0 ? ' (GMT)' : o === -5 ? ' (EST)' : '';
+                        return <option key={o} value={o}>{`UTC${sign}${o}${note}`}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-[#E8E0F5]">
+                  <div className="text-xs text-[#5A4A7A]">
+                    {eod.last_sent_at ? (
+                      <>Last sent: <span className="font-mono text-[#1A0A2E]">{new Date(eod.last_sent_at).toLocaleString()}</span> · {eod.last_sent_touches || 0} touches</>
+                    ) : (
+                      'Not sent yet'
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={sendEodNow} disabled={eodSending} className="px-4 py-2 bg-white border border-[#7C35DC]/30 text-[#7C35DC] hover:bg-[#F4F0FF] rounded-lg text-sm font-semibold disabled:opacity-50" data-testid="eod-send-now-btn">
+                      {eodSending ? 'Sending…' : 'Send now'}
+                    </button>
+                    <button onClick={saveEod} disabled={eodSaving} className="btn-gradient px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="eod-save-btn">
+                      {eodSaving ? 'Saving…' : 'Save'}
                     </button>
                   </div>
                 </div>

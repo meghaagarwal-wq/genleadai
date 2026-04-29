@@ -1,0 +1,62 @@
+{
+  "summary": "Iter 18 — EOD Wrap email module + Pipeline value totals + Follow-Up inline actions tested. Backend: 11/11 pytest tests pass — EOD config GET/PUT (default + persistence + roundtrip), preview returns rendered HTML + wrap dict with all required keys (totals/momentum/wins/losses/rep_rows/hot_untouched/tomorrow_plan), send-now correctly attempts Resend send (returns 200 OK in this run since recipient was eod-tester@example.com — but error path also accepted), 401 enforced without auth, regressions for daily-call-plan, founder-command-center, leads, analytics/dashboard, aria/call-priority. Background loop confirmed via supervisor logs: '[EODWrap] Background loop started (60s tick)'. Frontend: Settings → ARIA tab renders eod-wrap-panel with all 6 testids; toggle Disabled→Active works; PUT /api/aria/eod-wrap/config persists email='eod-tester@example.com', hour=19, tz=5.5, enabled=Active across full page reload. Pipeline: 'Active pipeline' chip shows ₹1.7Cr, 7 stage chips render (new=₹34.8L, qualified=₹45.9L, proposal_sent=₹57.8L, negotiation=₹34.7L, won=₹7.7L, contacted=—), 13 per-card pipeline-card-value-* chips visible. Follow-Ups: 6 +1d, 6 +3d, 6 Done buttons render correctly per row; +1d click successfully reduces 'Due Today' bucket from 6→5 (lead moves to upcoming). REGRESSIONS for /, /leads, /leads/inbox, /aria, /integrations, /billing, /reports all load. Console: only the known react-beautiful-dnd dev-only 'isDropDisabled' warning (pre-existing, non-blocking).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PATCH /api/leads/{lead_id}",
+        "issue": "Cannot null/clear fields via PATCH. server.py:381 uses `{k:v for k,v in lead_update.dict().items() if v is not None}` which drops every null value. As a result, the FollowUps 'Done' button (which PATCHes {next_followup_at: null} to clear the follow-up) silently fails: backend returns HTTP 400 'No fields to update' and the field stays unchanged in DB. Verified via direct curl: lead 69f2051e47eadcfc49c01ae6 next_followup_at='2026-04-29T13:18:22+00:00' → PATCH {next_followup_at: null} → HTTP 400 → field still '2026-04-29T13:18:22+00:00'.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "FollowUps.js → markComplete",
+        "issue": "User clicks 'Done' button, busyId spinner flashes, but row does NOT disappear from 'Due Today' bucket. ROOT CAUSE is the backend PATCH bug above (next_followup_at:null is dropped). Frontend code at FollowUps.js:34 is correct: `await api.patch('/api/leads/${lead.id}', { next_followup_at: null })`. The activity POST at line 33 likely also throws because the subsequent PATCH returns 400 — the alert('Failed to mark complete') would surface but did not in our test run, suggesting the markComplete catch block silently swallows the 400 in some browsers or the state machine moves on. Either way, the bucket UI never refreshes correctly because next_followup_at is never cleared in DB.",
+        "selector": "[data-testid^='followup-complete-']",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Follow-Up Mark Complete",
+        "issue": "Frontend → Backend integration is BROKEN end-to-end due to PATCH null-filter bug. Reschedule (+1d/+3d) works correctly because it sends a non-null ISO datetime string (verified: 'Due Today' bucket count dropped 6→5 after +1d click).",
+        "affected_selectors": ["[data-testid^='followup-complete-']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_eod_pipeline_followups.py",
+    "/app/test_reports/pytest/iter18_eod.xml"
+  ],
+  "action_items": [
+    "[CRITICAL] Fix PATCH /api/leads/{lead_id} at server.py:381. Replace `{k:v for k,v in lead_update.dict().items() if v is not None}` with `lead_update.dict(exclude_unset=True)` (Pydantic v1) or `lead_update.model_dump(exclude_unset=True)` (Pydantic v2). This will allow callers to explicitly null fields like next_followup_at. Verify FollowUps 'Done' click then removes the row.",
+    "[Improvement] FollowUps.js:37 markComplete catch block — when PATCH 400s, the alert fires but the activity record from line 33 is already inserted, leaving an orphan note_added activity. Consider running PATCH first (or using a single backend endpoint /api/leads/{id}/complete-followup that handles both atomically).",
+    "[Pre-existing, non-blocking] react-beautiful-dnd 'isDropDisabled must be a boolean' dev warning persists on Pipeline page — already documented in iter15 and iter17."
+  ],
+  "critical_code_review_comments": [
+    "server.py:381 PATCH update_lead — the `if v is not None` filter is a long-standing footgun: it makes PATCH unable to clear ANY field. This pattern needs to be replaced project-wide with `exclude_unset=True` so optional-with-explicit-null semantics work. Affects every Optional field on LeadUpdate, not just next_followup_at.",
+    "server.py:412 update_lead — broad `except Exception as e: raise HTTPException(400, str(e))` masks the real error. The 400 'No fields to update' here is actually hiding a bug; if it had been a 422 with field-level detail the FE alert would have been more actionable.",
+    "server.py:4621 _send_eod_wrap — good error handling and idempotency via last_sent_date check. Signal: subject-line emoji branching (🏆/📞/😴/📊) is delightful but consider plan-level toggle for emoji-light corporate users.",
+    "server.py:4712 _eod_wrap_loop window — `0 <= (current_minute - target) <= 5` works but the 5-minute window means under high tick-skew the email could send 0–5 minutes late; combined with 60s sleep this is acceptable, just document. The last_sent_date guard correctly prevents double-sends within the same local day.",
+    "FollowUps.js — markComplete + reschedule both have correct frontend logic and good UX (busyId spinner, error alert). When the backend PATCH bug is fixed they will work end-to-end with no FE changes needed.",
+    "Settings.js — EOD panel cleanly mirrors DCP panel structure (great consistency); shared CSS/style tokens. Could be DRYed into a single EmailScheduleCard component shared by DCP + EOD (and any future scheduled emails) — ~140 lines of near-duplicate JSX between dcp-* and eod-* blocks.",
+    "Pipeline.js — fmtInr / stageValue / totalPipelineValue are pure functions, easy to test. Good separation of concerns. Per-card chips render conditionally on deal_value > 0 (correct)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_eod_pipeline_followups.py (NEW — 11 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% on EOD module + regressions (11/11 pytest pass). HOWEVER PATCH /api/leads bug pre-existed and was uncovered while testing the new FollowUps feature.",
+    "frontend": "85% — Settings/EOD panel 100%, Pipeline 100%, FollowUps reschedule (+1d/+3d) 100%, FollowUps Done 0% (blocked by backend PATCH bug). Regression smoke 100%."
+  },
+  "test_credentials": "admin@demo.com / Demo1234! (from /app/memory/test_credentials.md). Resend free-tier limitation noted: send-now to non-meghaagarwaljain2015@gmail.com may 500.",
+  "seed_data_creation": "None — used existing 86 leads in DB.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 18 found one CRITICAL backend bug in PATCH /api/leads (line 381 null-filter) that blocks the new FollowUps Done button. The fix is a one-liner: replace `if v is not None` filter with `exclude_unset=True`. After main agent ships the fix, retest by (1) PATCHing {next_followup_at: null} on any lead with a populated next_followup_at and confirming HTTP 200 + field cleared, and (2) clicking Done on a row in /follow-ups and confirming the row disappears within 5s. Everything else (EOD wrap module, pipeline value totals, follow-up reschedule) is fully working. Test file at /app/backend/tests/test_iter18_eod_pipeline_followups.py covers EOD + regressions; reuse for next iteration's smoke run.",
+  "rca of the issue": "FollowUps 'Done' UI failure RCA: (1) User clicks Done button on /follow-ups page → markComplete handler in FollowUps.js:28 runs → (2) POST /api/activities succeeds (note_added created) → (3) PATCH /api/leads/{id} body={next_followup_at: null} → (4) Backend update_lead at server.py:379 receives LeadUpdate(next_followup_at=None) → (5) Line 381 dict-comprehension `{k:v for k,v in dict.items() if v is not None}` evaluates to empty {} → (6) Line 382 raises HTTPException(400, 'No fields to update') → (7) Frontend catch fires alert('Failed to mark complete') and refreshLeads is NOT called → (8) Stale row remains in 'Due Today' bucket because next_followup_at in DB still equals today's ISO. Mitigation: change line 381 to `update_data = lead_update.dict(exclude_unset=True)` (Pydantic v1) — this preserves explicit-null while still ignoring fields the client didn't send. Also consider POST /api/activities being idempotent or moving it after the PATCH success to avoid orphan activity records when PATCH fails."
+}
