@@ -1,21 +1,29 @@
 import React from 'react';
 
 /**
- * Premium page header for ARIA — large title, subhead, optional right-side actions.
- * Use on every page for consistent rhythm with the GenLeadAI brand.
+ * Premium page header for ARIA — magazine-style display heading,
+ * supporting serif accent for elegance, and a subtle gradient underline.
  */
-const PageHeader = ({ title, subtitle, eyebrow, actions, children }) => {
+const PageHeader = ({ title, subtitle, eyebrow, actions, children, accent }) => {
   return (
-    <div className="flex items-end justify-between flex-wrap gap-4 pb-2">
+    <div className="flex items-end justify-between flex-wrap gap-4 pb-3 aria-fade-up">
       <div className="min-w-0">
         {eyebrow && (
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>{eyebrow}</div>
+          <div className="inline-flex items-center gap-2 mb-3" data-testid="page-header-eyebrow">
+            <span className="block w-6 h-px bg-gradient-to-r from-[#C044E0] to-transparent" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#7C35DC] numeric">{eyebrow}</span>
+          </div>
         )}
-        <h1 className="text-3xl md:text-4xl font-extrabold text-[#1A0A2E] leading-tight" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '-0.01em' }}>
+        <h1 className="font-display text-[2.4rem] md:text-[2.75rem] lg:text-[3.25rem] leading-[1.05] text-[#1A0A2E]">
           {title}
         </h1>
+        {accent && (
+          <div className="text-base md:text-lg text-[#7C35DC] mt-1 font-display-italic">
+            {accent}
+          </div>
+        )}
         {subtitle && (
-          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl">{subtitle}</p>
+          <p className="text-sm md:text-base text-[#5A4A7A] mt-3 max-w-2xl leading-relaxed">{subtitle}</p>
         )}
         {children}
       </div>

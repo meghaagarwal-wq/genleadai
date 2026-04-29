@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,6 +9,8 @@
   --gradient-brand: linear-gradient(135deg, #C044E0 0%, #7C35DC 50%, #5B28D4 100%);
   --gradient-brand-horizontal: linear-gradient(90deg, #C044E0 0%, #5B28D4 100%);
   --gradient-subtle: linear-gradient(135deg, rgba(192,68,224,0.08) 0%, rgba(91,40,212,0.08) 100%);
+  --gradient-aria-deep: linear-gradient(135deg, #0E0820 0%, #1A0F38 35%, #2B1860 75%, #7C35DC 100%);
+  --gradient-aria-glow: radial-gradient(120% 80% at 0% 0%, rgba(192,68,224,0.18) 0%, rgba(124,53,220,0.05) 40%, transparent 70%);
 
   /* Purple Palette */
   --color-primary: #7C35DC;
@@ -32,6 +34,12 @@
   --color-text-secondary: #5A4A7A;
   --color-text-muted: #9B8AB0;
 
+  /* Type system tokens */
+  --font-display: 'Instrument Serif', 'Plus Jakarta Sans', Georgia, serif;
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
+
   /* Semantic */
   --color-success: #16A34A;
   --color-warning: #D97706;
@@ -42,6 +50,7 @@
   --shadow-card: 0 1px 3px rgba(124,53,220,0.08), 0 4px 16px rgba(124,53,220,0.04);
   --shadow-hover: 0 4px 24px rgba(124,53,220,0.16);
   --shadow-glow: 0 0 32px rgba(192,68,224,0.25);
+  --shadow-deep: 0 24px 64px -16px rgba(124,53,220,0.25), 0 8px 24px rgba(26,15,56,0.08);
 
   /* Premium Dark Sidebar (GenLeadAI brand) */
   --sidebar-bg: #0E0820;
@@ -62,20 +71,105 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--color-background);
   color: var(--color-text-primary);
+  font-feature-settings: "ss01" on, "cv11" on;
 }
 
 h1, h2, h3, h4, h5, h6, .heading {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Premium magazine-style display headings (use sparingly on hero/page titles) */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  font-feature-settings: "liga" on, "calt" on;
+}
+.font-display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.005em;
 }
 
 code, .mono {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
+}
+
+/* Numeric tabular alignment for KPI tiles */
+.numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
 }
 
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ━━━ ARIA motion + texture utilities ━━━ */
+@keyframes ariaFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ariaShimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+@keyframes ariaPulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(192,68,224,0.45); }
+  70% { box-shadow: 0 0 0 14px rgba(192,68,224,0); }
+  100% { box-shadow: 0 0 0 0 rgba(192,68,224,0); }
+}
+@keyframes ariaGlow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.aria-fade-up { animation: ariaFadeUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.aria-fade-up-1 { animation-delay: 0.06s; }
+.aria-fade-up-2 { animation-delay: 0.12s; }
+.aria-fade-up-3 { animation-delay: 0.18s; }
+.aria-fade-up-4 { animation-delay: 0.24s; }
+.aria-pulse-ring { animation: ariaPulseRing 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+.aria-glow { animation: ariaGlow 3s ease-in-out infinite; }
+
+/* Subtle grain texture for premium dark hero panels */
+.aria-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  border-radius: inherit;
+}
+
+/* Premium card lift on hover (use additively, not on every card) */
+.aria-card-lift {
+  transition: transform 0.3s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.3s cubic-bezier(0.2,0.8,0.2,1), border-color 0.3s ease;
+}
+.aria-card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* Gradient text for hero numbers */
+.aria-gradient-text {
+  background: linear-gradient(135deg, #7C35DC 0%, #C044E0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.aria-gradient-text-light {
+  background: linear-gradient(135deg, #FFFFFF 0%, #C9B6FF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}

@@ -100,17 +100,18 @@ const AriaReadPanel = ({ leadId }) => {
 
   return (
     <>
-      <div className="bg-white border-2 rounded-xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)', borderColor: data.handoff_needed ? '#DC2626' : '#7C35DC' }} data-testid="aria-read-panel">
-        <div className="px-4 py-3 flex items-center gap-2.5" style={{ background: 'linear-gradient(135deg,#1A0F38 0%,#7C35DC 100%)' }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/15 border border-white/20 flex-shrink-0">
-            <Robot size={15} weight="fill" className="text-white" />
+      <div className="bg-white border-2 rounded-2xl overflow-hidden aria-fade-up" style={{ boxShadow: 'var(--shadow-card)', borderColor: data.handoff_needed ? '#DC2626' : '#7C35DC' }} data-testid="aria-read-panel">
+        <div className="relative px-4 py-3.5 flex items-center gap-2.5 overflow-hidden aria-grain" style={{ background: 'var(--gradient-aria-deep)' }}>
+          <div className="relative w-9 h-9 rounded-xl flex items-center justify-center bg-white/10 border border-white/20 flex-shrink-0">
+            <Robot size={16} weight="fill" className="text-white" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#16A34A] aria-pulse-ring" />
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#C9B6FF]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA'S READ · LIVE</div>
-            <div className="text-xs font-extrabold text-white" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversation intelligence</div>
+          <div className="min-w-0 flex-1 relative">
+            <div className="text-[9px] font-bold uppercase tracking-[0.3em] text-[#C9B6FF] numeric">ARIA'S READ · LIVE</div>
+            <div className="font-display text-base text-white mt-0.5 leading-tight">Conversation intelligence</div>
           </div>
           {data.handoff_needed && (
-            <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-[0.15em] bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/40 flex items-center gap-1" data-testid="aria-read-handoff-needed">
+            <span className="relative px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-[0.18em] bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/40 flex items-center gap-1 numeric" data-testid="aria-read-handoff-needed">
               <Warning size={10} weight="fill" /> NEEDS FOUNDER
             </span>
           )}
@@ -126,9 +127,9 @@ const AriaReadPanel = ({ leadId }) => {
           </div>
 
           {/* ARIA thinks */}
-          <div className="rounded-lg p-3 bg-[#FAF7FF] border border-[#EDE5FA]" data-testid="aria-read-thinks">
-            <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7C35DC] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA THINKS</div>
-            <p className="text-xs text-[#1A0A2E] italic leading-relaxed">"{data.aria_thinks}"</p>
+          <div className="rounded-xl p-3.5 bg-[#FAF7FF] border border-[#EDE5FA]" data-testid="aria-read-thinks">
+            <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-1.5 numeric">ARIA THINKS</div>
+            <p className="font-display-italic text-[15px] text-[#1A0A2E] leading-snug">"{data.aria_thinks}"</p>
           </div>
 
           {/* KV intel */}
@@ -140,20 +141,20 @@ const AriaReadPanel = ({ leadId }) => {
           </div>
 
           {/* Suggested response */}
-          <div className="rounded-lg p-3 border border-[#7C35DC]/25" style={{ background: 'linear-gradient(135deg, rgba(124,53,220,0.04) 0%, rgba(192,68,224,0.03) 100%)' }} data-testid="aria-read-suggested-response">
+          <div className="rounded-xl p-3.5 border border-[#7C35DC]/25" style={{ background: 'linear-gradient(135deg, rgba(124,53,220,0.05) 0%, rgba(192,68,224,0.04) 100%)' }} data-testid="aria-read-suggested-response">
             <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>SUGGESTED RESPONSE</div>
-              <button onClick={copyResponse} className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#7C35DC] hover:underline flex items-center gap-1" data-testid="aria-read-copy-response">
+              <div className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] numeric">SUGGESTED RESPONSE</div>
+              <button onClick={copyResponse} className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#7C35DC] hover:underline flex items-center gap-1 numeric" data-testid="aria-read-copy-response">
                 {copied ? <CheckCircle size={11} weight="fill" /> : <Copy size={11} weight="fill" />}{copied ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <p className="text-xs text-[#1A0A2E] italic leading-relaxed">"{data.suggested_response}"</p>
+            <p className="font-display-italic text-[14px] text-[#1A0A2E] leading-snug">"{data.suggested_response}"</p>
           </div>
 
-          <button onClick={generateBrief} className="w-full btn-gradient py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-[0.1em] flex items-center justify-center gap-1.5" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="aria-read-generate-brief">
-            <FileText size={13} weight="fill" /> Generate Founder Brief
+          <button onClick={generateBrief} className="w-full btn-gradient py-3 rounded-xl text-[11px] font-extrabold uppercase tracking-[0.2em] flex items-center justify-center gap-2 numeric aria-card-lift" data-testid="aria-read-generate-brief">
+            <FileText size={14} weight="fill" /> Generate Founder Brief
           </button>
-          <p className="text-[10px] text-[#9B8AB0] text-center">Your CRM stores leads. ARIA works them.</p>
+          <p className="text-[10px] text-[#9B8AB0] text-center font-display-italic">Your CRM stores leads. ARIA works them.</p>
         </div>
       </div>
 
@@ -205,12 +206,14 @@ const AriaReadPanel = ({ leadId }) => {
                     </div>
                   ))}
                 </div>
-                <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg,#1A0F38 0%,#7C35DC 100%)' }}>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#C9B6FF]" style={{ fontFamily: 'Plus Jakarta Sans' }}>RECOMMENDED PITCH</div>
-                  <div className="text-sm font-extrabold text-white mt-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>{brief.recommended_pitch}</div>
-                  <div className="mt-2.5 px-3 py-2 rounded-lg bg-white/10 border border-white/15">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#C9B6FF] mb-1">Suggested opening</div>
-                    <div className="text-xs italic text-white">"{brief.suggested_opening}"</div>
+                <div className="rounded-2xl p-5 relative overflow-hidden aria-grain" style={{ background: 'var(--gradient-aria-deep)' }}>
+                  <div className="relative">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9B6FF] numeric">RECOMMENDED PITCH</div>
+                    <div className="font-display text-[1.5rem] md:text-[1.7rem] leading-[1.15] text-white mt-2">{brief.recommended_pitch}</div>
+                    <div className="mt-4 px-4 py-3 rounded-xl bg-white/8 border border-white/15 backdrop-blur-sm">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#C9B6FF] mb-1.5 numeric">SUGGESTED OPENING</div>
+                      <div className="font-display-italic text-[15px] md:text-base text-white leading-snug">"{brief.suggested_opening}"</div>
+                    </div>
                   </div>
                 </div>
                 <div>

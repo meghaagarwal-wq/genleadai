@@ -144,12 +144,14 @@ const FounderBriefs = () => {
                 ))}
               </div>
 
-              <div className="mx-6 mb-4 rounded-2xl p-5" style={{ background: 'linear-gradient(135deg,#1A0F38 0%,#7C35DC 100%)' }} data-testid="founder-brief-pitch">
-                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#C9B6FF]" style={{ fontFamily: 'Plus Jakarta Sans' }}>RECOMMENDED PITCH</div>
-                <div className="text-base font-extrabold text-white mt-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>{brief.recommended_pitch}</div>
-                <div className="mt-3 px-3 py-2 rounded-lg bg-white/10 border border-white/15">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#C9B6FF] mb-1">Suggested opening line</div>
-                  <div className="text-sm italic text-white">"{brief.suggested_opening}"</div>
+              <div className="mx-6 mb-4 rounded-2xl p-6 relative overflow-hidden aria-grain" style={{ background: 'var(--gradient-aria-deep)' }} data-testid="founder-brief-pitch">
+                <div className="relative">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#C9B6FF] numeric">RECOMMENDED PITCH</div>
+                  <div className="font-display text-[1.7rem] md:text-[1.95rem] leading-[1.12] text-white mt-2.5">{brief.recommended_pitch}</div>
+                  <div className="mt-5 px-4 py-3.5 rounded-xl bg-white/8 border border-white/15 backdrop-blur-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#C9B6FF] mb-1.5 numeric">SUGGESTED OPENING LINE</div>
+                    <div className="font-display-italic text-[17px] md:text-lg text-white leading-snug">"{brief.suggested_opening}"</div>
+                  </div>
                 </div>
               </div>
 
