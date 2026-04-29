@@ -16,11 +16,12 @@ FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Stripe + Sonner + Me
 
 50 feature flags drive gating across all tiers via `_has_feature` + `require_feature` dependency.
 
-## ARIA Brand Visual System (NEW — iter 15)
-- **Dark premium sidebar** (`linear-gradient(180deg, #0E0820 → #1A0F38)`) with brand block "ARIA / AI SALES PA · GENLEADAI"
+## ARIA Brand Visual System
+- **Dark premium sidebar** (`linear-gradient(180deg, #0E0820 → #1A0F38)`) with brand block "ARIA / AI SALES PA · GENLEADAI" and animated ARIA robot avatar
 - **Premium top bar**: search "Search leads, follow-ups, campaigns…", AI Summary button, gradient "+ Add Lead" CTA, notifications bell with red dot
 - **PageHeader component**: eyebrow (purple uppercase) + 36px h1 + 16px subtitle + actions slot
-- **AriaInsightCard**: dark gradient "ARIA SAYS" callout with dynamic message + CTA, urgent variant for overdue
+- **AriaInsightCard**: dark gradient "ARIA SAYS · 🟢 ONLINE" callout with 48px animated robot avatar, pulse glow, dynamic message + CTA. Urgent tone speeds pulse to 2.4s and shifts halo to coral.
+- **AriaAvatar component (NEW iter 16)**: custom SVG robot face with idle animations — halo pulse, eye blink, antenna LED twinkle, head breathing. Three tones: default (purple), urgent (coral), soft (lilac). Reusable at any size.
 - **Tokens**: --sidebar-bg, --sidebar-active-border (#C044E0 3px left), --shadow-card, --gradient-brand
 - **Language**: replaced generic CRM terms with AI Sales PA / lead leakage / follow-up discipline / revenue movement / command center / next best action
 

@@ -9,6 +9,7 @@ import {
   SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
 } from '@phosphor-icons/react';
+import AriaAvatar from './AriaAvatar';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -102,9 +103,7 @@ const Layout = ({ children }) => {
       <aside className={`hidden md:flex ${sidebarOpen ? 'w-64' : 'w-16'} flex-col transition-all duration-300 shrink-0`} style={{ background: 'linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-end) 100%)' }} data-testid="sidebar">
         <div className="h-16 flex items-center justify-between px-4 border-b border-[var(--sidebar-divider)]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--gradient-brand)' }}>
-              <Sparkle size={16} className="text-white" weight="fill" />
-            </div>
+            <AriaAvatar size={32} tone="default" />
             {sidebarOpen && (
               <div className="min-w-0">
                 <div className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>ARIA</div>
@@ -136,9 +135,7 @@ const Layout = ({ children }) => {
           <aside className="absolute left-0 top-0 bottom-0 w-72 flex flex-col z-10" style={{ background: 'linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-end) 100%)' }}>
             <div className="h-16 flex items-center justify-between px-4 border-b border-[var(--sidebar-divider)]">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
-                  <Sparkle size={16} className="text-white" weight="fill" />
-                </div>
+                <AriaAvatar size={32} tone="default" />
                 <div>
                   <div className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA</div>
                   <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
