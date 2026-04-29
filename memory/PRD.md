@@ -3,66 +3,64 @@
 ## Stack
 FastAPI + React + MongoDB + Claude AI + Resend + Calendly + Stripe + Sonner + Meta WhatsApp Cloud API
 
-## Complete Feature Map
+## Product
+**ARIA**: AI Sales Personal Assistant — captures, qualifies, scores, assigns, follows up, and tracks leads from multiple channels. Reduces lead leakage, improves follow-up discipline, gives founders/sales teams pipeline visibility.
 
-### Core LMS
-Auth (JWT), Lead CRUD, Pipeline Kanban, Campaigns, Analytics, Team, Settings, RBAC
+## 4-Tier Plan Structure (NEW)
+| Plan | Price | Audience | Highlights |
+|------|-------|----------|-----------|
+| **ARIA Starter** | $49/mo | Small teams | Manual lead control, follow-up reminders, Hot/Warm/Cold tagging |
+| **ARIA Growth** | $149/mo | Campaign-driven biz | Multi-source capture, stage pipeline, basic AI scoring, founder summary |
+| **ARIA Pro** | $399/mo | Founder-led companies | AI qualification, follow-up drafts, WhatsApp workflows, full CRM sync, RBAC |
+| **ARIA Custom** | Contact Sales | Complex sales engines | Custom stages/scoring/workflows, AI call scheduling, multi-brand, dedicated support |
 
-### ARIA 3-Phase Sales PA
-Phase 1 → Calendly + briefing; Phase 2 → outcome buttons; Phase 3 → follow-ups, Won/Lost
+50 feature flags drive gating across all tiers.
 
-### Advanced Modules
-Your 5 Today, Sleeping Leads + Revival, No-Show Recovery, Referral Capture, Intent Signals, Broadcast Personalizer
+## Sidebar Navigation (9 items)
+Dashboard · Lead Inbox · Pipeline · Follow-Ups · AI Assistant · Reports · Integrations · Plan & Billing · Settings
 
-### Production Lead Ingestion
-Public REST API, Embed form, Calendly webhook, Meta Lead Ads webhook, WhatsApp webhook (verify + receive)
+## Pages
+- **Dashboard**: Founder view with TTV widget, brochure-opens alert, ARIA Best Time to Call, ARIA daily plan, etc.
+- **Lead Inbox**: Filters, search, hot strip, 25 demo leads (when seeded)
+- **Lead Profile**: Pre-Call Brochure, Best Time to Call, activity timeline, engagement
+- **Pipeline**: Kanban board (default 8 stages; custom stages = ARIA Custom only)
+- **Follow-Ups**: 4 buckets (Due today / Overdue / Upcoming / Completed)
+- **AI Assistant**: 8 tiles — qualification, scoring, drafts, NBA, lost-lead analysis, daily/weekly summaries
+- **Reports**: Aliased to Analytics
+- **Integrations**: 11 cards (Website, Meta, Google, LinkedIn, WhatsApp, Calendly, GCal, Email, Zoho, HubSpot, Sheets) with Connected/Available/Coming Soon/Request states
+- **Plan & Billing**: 4 plan cards + 7-group feature comparison matrix
+- **Settings**: ARIA agent (incl. Daily Call Plan), Lead Magnet, API & Forms, Asset Library, Workspace, Team
 
-### Time-to-Value
-- Live milestone widget on Dashboard, Onboarding step 4 preview, milestone celebration toasts (Sonner)
+## Key Backend Endpoints (NEW in iter 14)
+- `GET /api/billing/plans` — full 4-plan catalog with feature flags
+- `GET /api/billing/current-plan` — current workspace plan + features
+- `POST /api/billing/checkout` — Stripe checkout (rejects 'custom')
+- `POST /api/billing/request-upgrade` — emails admin (UPGRADE_REQUEST_EMAIL env)
+- `POST /api/admin/load-demo-data?force=` — seeds 25 industry-diverse demo leads
+- `POST /api/dev/set-plan?plan_id=` — dev/admin plan switcher (admin-only)
+- `require_feature('key')` — FastAPI dependency raising 402 with structured detail
 
-### Pre-Call Lead Magnet (FULL)
-- Workspace + per-campaign override config; URL or PDF/PPTX upload
-- Auto-send on ARIA ESCALATE + Calendly booked; channel auto-detected
-- LeadDetail Pre-Call Brochure card; Dashboard "They opened" alert; 🔥 Lead Inbox hot strip
-- Public tracking redirect + view logging; Pydantic Literal validators
-
-### Real Meta WhatsApp Cloud API
-- Outbound text via Graph API v23.0; webhook verify + receive
-- Lead matched by exact phone or anchored last-10 regex
-- Graceful logged-only fallback when env empty
-
-### ARIA's Best Time to Call
-- 2 endpoints: `/api/aria/best-time-to-call/{lead_id}` + `/api/aria/call-priority?limit=N`
-- call_score 0-100 from brochure-open + timezone + active hours + ICP
-- Dashboard widget (top-N with tel: Call buttons) + LeadDetail card
-
-### ARIA Daily Call Plan Email (NEW — iter 13)
-- Background asyncio loop (60s tick) sends a daily email to the founder with the top N leads to call today
-- Endpoints: `GET/PUT /api/aria/daily-call-plan/config`, `POST /api/aria/daily-call-plan/send-now`, `GET /api/aria/daily-call-plan/preview`
-- Settings → ARIA Agent → Daily Call Plan panel (toggle, recipient, hour, UTC offset, plan size)
-- Beautiful HTML email with urgency badges (CALL NOW/SOON/LATER), ICP chip, reasons, tel: links per lead
-- Idempotency via `last_sent_date`; fractional-UTC-offset-correct (5-min fire window keyed off minute-of-day-UTC)
-- Pydantic field validators (hour 0-23, tz -12..14, plan_size 1-10)
-
-### Design
-White + Purple (#7C35DC), Plus Jakarta Sans, Sonner toasts
-
-## Recent Changes
-- Iter 9-10: TTV + celebration toasts + Lead Magnet
-- Iter 11: Per-campaign override + Literal validators + Dashboard alert + 🔥 Lead Inbox + WhatsApp Cloud API
-- Iter 12: Best Time to Call (Dashboard widget + LeadDetail card)
-- **Iter 13: Daily Call Plan Email — full feature, 13/13 backend tests + 100% frontend, fractional-UTC offset bug fixed post-test**
+## ARIA AI Modules (existing)
+- 3-Phase Sales PA · Calendly auto-booking · Pre-call brochure (lead magnet) with engagement tracking · Best Time to Call · Daily Call Plan email · TTV milestones with celebration toasts
 
 ## Test Status
-iteration_13.json: 13/13 backend pytests + 100% frontend; cumulative 80+/80+ tests across iterations.
+- iteration_14.json: **18/18 backend pytests + 16/16 frontend testids** after the 2 fixes (sidebar testid regex, LockBadge `<button>` → `<span role=button>` to eliminate React hydration warning)
+
+## Phase 2 Plan (next session)
+- C: Role-based dashboards (Founder/Manager/Rep/Marketing variants — Founder exists)
+- D: Follow-Ups workflow page (mark complete, reschedule, type/channel selector)
+
+## Phase 3 Plan
+- E: AI Assistant unified UI tied to existing ARIA endpoints
+- F: Integrations connection flows (Meta Ads, Google Ads OAuth)
+- J: Reports polish (rep performance, lost-reason chart, time-in-stage)
 
 ## Backlog
-- P1: Refactor server.py (~4100 lines) into modular routers — overdue, deferred to dedicated session
-- P1: Migrate `@app.on_event("startup")` to FastAPI lifespan handler (deprecated)
-- P2: Daily plan visual theme — match dark cards in ARIA Agent tab
-- P2: Multi-workspace support (current single-tenant assumption documented)
-- P2: Friendly error mapping for Resend free-tier verbatim error
-- Production: Set `WHATSAPP_*` env values; verify Resend domain to remove free-tier recipient restriction
+- P1: server.py refactor (~4500 lines) into modular routers — overdue
+- P1: `@app.on_event("startup")` → FastAPI lifespan handler (deprecation warning)
+- P1: Real Stripe price IDs for Pro tier (currently uses amount-based checkout)
+- P2: Customer Stripe webhook to auto-promote plan on payment.succeeded
+- P2: `/api/billing/request-upgrade` to surface email_sent boolean
 
 ## Deployment: READY
-Custom domain target: app.genleadai.com
+Custom domain: app.genleadai.com

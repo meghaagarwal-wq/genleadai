@@ -44,7 +44,7 @@ const Layout = ({ children }) => {
               to={item.path}
               end={item.path === '/'}
               onClick={() => mobile && setMobileMenuOpen(false)}
-              data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
+              data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                   isActive
