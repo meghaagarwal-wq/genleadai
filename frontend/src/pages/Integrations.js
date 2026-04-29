@@ -2,6 +2,7 @@ import React from 'react';
 import { Plug, CheckCircle, Globe, FacebookLogo, GoogleLogo, LinkedinLogo, WhatsappLogo, CalendarBlank, EnvelopeSimple, Database, FileText } from '@phosphor-icons/react';
 import { usePlan } from '../context/PlanContext';
 import LockBadge from '../components/LockBadge';
+import PageHeader from '../components/PageHeader';
 
 const INTEGRATIONS = [
   { id: 'website_forms', name: 'Website Forms', icon: Globe, status: 'connected', feature: 'form_integration', desc: 'Embed a public form & receive leads instantly.' },
@@ -28,10 +29,11 @@ const Integrations = () => {
   const { hasFeature, openUpgrade } = usePlan();
   return (
     <div className="space-y-6" data-testid="integrations-page">
-      <div>
-        <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Integrations</h1>
-        <p className="text-sm text-[#5A4A7A] mt-1">Connect ARIA to every place leads come from.</p>
-      </div>
+      <PageHeader
+        eyebrow="Growth Stack"
+        title="Connect ARIA With Your Growth Stack"
+        subtitle="Bring your marketing channels, CRM, calendar, and WhatsApp workflows into one sales command center."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {INTEGRATIONS.map(i => {

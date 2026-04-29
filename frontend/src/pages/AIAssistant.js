@@ -2,6 +2,7 @@ import React from 'react';
 import { Robot, Sparkle, EnvelopeSimple, WhatsappLogo, Brain, Lightning, ChartLineUp, ClockCounterClockwise } from '@phosphor-icons/react';
 import { usePlan } from '../context/PlanContext';
 import LockBadge from '../components/LockBadge';
+import PageHeader from '../components/PageHeader';
 import { useNavigate } from 'react-router-dom';
 
 const TILES = [
@@ -21,15 +22,11 @@ const AIAssistant = () => {
 
   return (
     <div className="space-y-6" data-testid="ai-assistant-page">
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
-          <Robot size={24} className="text-white" weight="fill" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>AI Assistant</h1>
-          <p className="text-sm text-[#5A4A7A]">Your AI Sales PA — qualifying, drafting, summarising, and chasing leads while you sleep.</p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="ARIA · AI Sales PA"
+        title="ARIA AI Assistant"
+        subtitle="Use AI to qualify leads, draft follow-ups, summarise activity, and recommend the next best action."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {TILES.map(t => {

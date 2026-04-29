@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../config/api';
+import AriaInsightCard from '../components/AriaInsightCard';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -88,14 +89,15 @@ const Dashboard = () => {
   };
 
   return (
-    <div data-testid="dashboard-page" className="space-y-5 max-w-[1400px] mx-auto">
-      {/* Greeting Header */}
-      <div className="flex items-center justify-between">
+    <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto">
+      {/* ARIA Command Center Header */}
+      <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            {greeting()}, {user?.full_name?.split(' ')[0] || 'there'}
+          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>{greeting()}, {user?.full_name?.split(' ')[0] || 'there'}</div>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-[#1A0A2E] leading-tight" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '-0.01em' }}>
+            ARIA Command Center
           </h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Here's what's happening with your leads today</p>
+          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl">Track every lead, follow-up, and revenue movement from one AI-powered command center.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => navigate('/your-5-today')} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-xl hover:bg-[#F9F5FF] hover:text-[#7C35DC] hover:border-[#7C35DC]/20 transition-all text-sm font-medium" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="your5-shortcut">
@@ -106,6 +108,34 @@ const Dashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* ARIA Daily Brief — premium AI insight card matching genleadai.com hero */}
+      {(() => {
+        const hotPriorityCount = (callPriority || []).filter(p => p.urgency === 'now').length;
+        const overdueCount = sleepingCount;
+        const opensCount = recentOpens.length;
+        let title = 'You\'re fully on top of your pipeline.';
+        let message = 'No urgent actions surfaced. Use this clear runway to push proposals forward and book new discovery calls.';
+        let ctaLabel = null, ctaTo = null, tone = 'default';
+        if (hotPriorityCount > 0) {
+          title = `${hotPriorityCount} hot ${hotPriorityCount === 1 ? 'lead is' : 'leads are'} ready to call now.`;
+          message = 'ARIA flagged these because they just engaged or are within their active hours. Hit them before momentum cools.';
+          ctaLabel = 'View Priority Follow-Ups';
+          ctaTo = '/follow-ups';
+          tone = 'urgent';
+        } else if (overdueCount > 5) {
+          title = `${overdueCount} leads are sitting untouched.`;
+          message = 'They went cold for 14+ days. ARIA can re-engage them with personalised messages so revenue movement resumes.';
+          ctaLabel = 'Revive Sleeping Leads';
+          ctaTo = '/sleeping-leads';
+        } else if (opensCount > 0) {
+          title = `${opensCount} ${opensCount === 1 ? 'lead' : 'leads'} just opened your brochure.`;
+          message = 'They\'re warm right now. Reach out while you\'re top of mind — this is the highest-converting window.';
+          ctaLabel = 'See Recent Opens';
+          ctaTo = '/leads';
+        }
+        return <AriaInsightCard title={title} message={message} ctaLabel={ctaLabel} ctaTo={ctaTo} tone={tone} />;
+      })()}
 
       {/* Sleeping Leads Alert Banner */}
       {sleepingCount > 5 && (

@@ -4,6 +4,8 @@ import api from '../config/api';
 import { ListChecks, Clock, Check, ArrowRight, Sparkle, Phone, EnvelopeSimple, WhatsappLogo, CalendarBlank } from '@phosphor-icons/react';
 import { usePlan } from '../context/PlanContext';
 import LockBadge from '../components/LockBadge';
+import PageHeader from '../components/PageHeader';
+import AriaInsightCard from '../components/AriaInsightCard';
 
 const TYPE_ICONS = { call: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo, meeting: CalendarBlank };
 
@@ -40,13 +42,22 @@ const FollowUps = () => {
 
   return (
     <div className="space-y-6" data-testid="follow-ups-page">
-      <div className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Follow-Ups</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Follow-up discipline: zero leakage, no missed calls.</p>
-        </div>
-        {!hasFeature('overdue_alerts') && <LockBadge featureKey="overdue_alerts" label="Overdue alerts on Growth+" size="lg" />}
-      </div>
+      <PageHeader
+        eyebrow="Daily Action Engine"
+        title="Follow-Up Command Center"
+        subtitle="The place where no lead is allowed to quietly go cold. Follow-up discipline = revenue movement."
+        actions={!hasFeature('overdue_alerts') ? <LockBadge featureKey="overdue_alerts" label="Overdue alerts on Growth+" size="lg" /> : null}
+      />
+
+      {buckets.overdue.length > 0 && (
+        <AriaInsightCard
+          title="ARIA Priority Queue"
+          message={`${buckets.overdue.length} ${buckets.overdue.length === 1 ? 'lead' : 'leads'} ${buckets.overdue.length === 1 ? 'is' : 'are'} most likely to go cold if not contacted today. Hit them first.`}
+          ctaLabel="View Overdue Leads"
+          onCtaClick={() => setBucket('overdue')}
+          tone="urgent"
+        />
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {tabs.map(t => {

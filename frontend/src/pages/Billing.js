@@ -3,6 +3,7 @@ import { CheckCircle, X as XIcon, Sparkle, Crown, Rocket, Buildings, ArrowRight 
 import { usePlan } from '../context/PlanContext';
 import api from '../config/api';
 import { toast } from 'sonner';
+import PageHeader from '../components/PageHeader';
 
 const FEATURE_GROUPS = [
   {
@@ -123,15 +124,16 @@ const Billing = () => {
 
   return (
     <div className="space-y-6" data-testid="billing-page">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Plan & Billing</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Choose the plan that matches your sales motion. Upgrade anytime — no contracts.</p>
-        </div>
-        <div className="px-3 py-1.5 rounded-lg border border-[#7C35DC]/30 bg-[#F4F0FF] text-[#7C35DC] text-xs font-bold uppercase tracking-wider" data-testid="current-plan-pill">
-          You're on {allPlans.find(p => p.id === planId)?.name || 'Starter'}
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="ARIA Plans"
+        title="Choose your sales operating layer"
+        subtitle="Pick the plan that fits your team's growth stage. Upgrade anytime — no contracts, no surprises."
+        actions={
+          <div className="px-3 py-1.5 rounded-lg border border-[#7C35DC]/30 bg-[#F4F0FF] text-[#7C35DC] text-xs font-bold uppercase tracking-wider" data-testid="current-plan-pill">
+            You're on {allPlans.find(p => p.id === planId)?.name || 'Starter'}
+          </div>
+        }
+      />
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
