@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { usePlan } from '../context/PlanContext';
 import { Toaster } from 'sonner';
 import { useTtvMilestoneWatcher } from '../hooks/useTtvMilestoneWatcher';
 import {
   House, Tray, ChartBar, MegaphoneSimple, ChartLineUp, UsersThree,
   SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning, X,
-  ClockCounterClockwise,
+  ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
 } from '@phosphor-icons/react';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { planName, planId, openUpgrade } = usePlan();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -22,14 +24,13 @@ const Layout = ({ children }) => {
 
   const navItems = [
     { icon: House, label: 'Dashboard', path: '/' },
-    { icon: Lightning, label: 'Your 5 Today', path: '/your-5-today' },
     { icon: Tray, label: 'Lead Inbox', path: '/leads' },
-    { icon: Moon, label: 'Sleeping Leads', path: '/sleeping-leads' },
     { icon: ChartBar, label: 'Pipeline', path: '/pipeline' },
-    { icon: MegaphoneSimple, label: 'Campaigns', path: '/campaigns' },
-    { icon: Robot, label: 'ARIA Agent', path: '/aria' },
-    { icon: ChartLineUp, label: 'Analytics', path: '/analytics' },
-    { icon: ClockCounterClockwise, label: 'Audit Log', path: '/audit-log' },
+    { icon: ListChecks, label: 'Follow-Ups', path: '/follow-ups' },
+    { icon: Robot, label: 'AI Assistant', path: '/ai-assistant' },
+    { icon: ChartLineUp, label: 'Reports', path: '/reports' },
+    { icon: Plug, label: 'Integrations', path: '/integrations' },
+    { icon: CreditCard, label: 'Plan & Billing', path: '/billing' },
     { icon: UsersThree, label: 'Settings', path: '/settings' },
   ];
 
@@ -60,6 +61,24 @@ const Layout = ({ children }) => {
         </div>
       </nav>
       <div className="p-4 border-t border-[#E8E0F5]">
+        {/* Plan badge */}
+        <button
+          onClick={() => planId === 'custom' ? navigate('/billing') : openUpgrade(null, planId === 'starter' ? 'growth' : planId === 'growth' ? 'pro' : 'custom')}
+          className="w-full flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg border border-[#E0D4F7] bg-gradient-to-r from-[#F4F0FF] to-white hover:from-[#E0D4F7] transition-all text-left"
+          data-testid="plan-badge"
+          title="Click to manage plan"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkle size={14} className="text-[#7C35DC]" weight="fill" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">Current plan</div>
+              <div className="text-xs font-bold text-[#1A0A2E] truncate" style={{ fontFamily: 'Plus Jakarta Sans' }}>{planName}</div>
+            </div>
+          </div>
+          {planId !== 'custom' && (
+            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#7C35DC] text-white flex-shrink-0">Upgrade</span>
+          )}
+        </button>
         <div className="flex items-center gap-3">
           <img src={user?.avatar_url || 'https://ui-avatars.com/api/?name=User&background=7C35DC&color=fff'} alt="User" className="w-9 h-9 rounded-full" />
           <div className="flex-1 min-w-0">

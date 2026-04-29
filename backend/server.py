@@ -2738,40 +2738,250 @@ async def meta_leads_webhook(request_body: Dict[str, Any]):
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
 
 payment_transactions = db["payment_transactions"]
+workspace_settings_collection = db["workspace_settings"]
 
+# ARIA Plan Catalog (4 tiers) with feature flags. Replaces older 3-plan structure.
+# Old "scale" -> renamed to "pro". "custom" is contact-sales (no Stripe checkout).
 SUBSCRIPTION_PLANS = {
-    "starter": {"name": "Starter", "amount": 49.00, "leads": 500, "ai_credits": 100},
-    "growth": {"name": "Growth", "amount": 149.00, "leads": 2000, "ai_credits": 500},
-    "scale": {"name": "Scale", "amount": 399.00, "leads": 10000, "ai_credits": 2000},
+    "starter": {
+        "name": "ARIA Starter",
+        "amount": 49.00,
+        "leads": 500,
+        "ai_credits": 100,
+        "tagline": "For small teams that need basic lead control",
+        "headline_features": [
+            "Manual lead entry & dashboard",
+            "Lead status & owner assignment",
+            "Follow-up reminders & basic notes",
+            "Manual Hot/Warm/Cold tagging",
+            "Daily task list & basic reports",
+        ],
+        "features": {
+            # Core
+            "lead_inbox": True, "lead_profile": True, "manual_lead_entry": True,
+            "follow_up_reminders": True, "basic_notes": True, "source_tagging": True,
+            "manual_temperature": True, "daily_task_list": True, "basic_reports": True,
+            "owner_assignment": True,
+            # Locked
+            "csv_import": False, "multi_source_capture": False,
+            "form_integration": False, "rep_dashboard": False,
+            "overdue_alerts": False, "lead_aging_tracker": False,
+            "stage_pipeline": False, "ai_followup_basic": False,
+            "ai_lead_scoring": False, "founder_summary": False,
+            "whatsapp_click_to_msg": False, "limited_crm_sync": False,
+            "ai_qualification": False, "ai_followup_drafts": False,
+            "whatsapp_workflow": False, "automated_tasks": False,
+            "rep_performance": False, "lost_reason_tracking": False,
+            "proposal_tracking": False, "deal_value": False,
+            "pipeline_value_dashboard": False, "calendar_integration": False,
+            "daily_founder_report": False, "weekly_sales_summary": False,
+            "crm_sync_full": False, "rbac": False,
+            "custom_stages": False, "custom_scoring": False,
+            "custom_workflows": False, "ai_call_scheduling": False,
+            "advanced_whatsapp": False, "multi_brand": False,
+            "advanced_crm": False, "api_integrations": False,
+            "client_dashboards": False, "advanced_attribution": False,
+            "custom_reports": False, "sla_alerts": False,
+            "training_section": False, "dedicated_support": False,
+        },
+    },
+    "growth": {
+        "name": "ARIA Growth",
+        "amount": 149.00,
+        "leads": 2000,
+        "ai_credits": 500,
+        "tagline": "For businesses running campaigns and needing sales accountability",
+        "headline_features": [
+            "Multi-source lead capture & CSV import",
+            "Stage-wise pipeline & sales-rep dashboard",
+            "Overdue follow-up alerts & lead-ageing tracker",
+            "Basic AI follow-up suggestions & lead scoring",
+            "WhatsApp click-to-message & founder summary",
+        ],
+        "features": {
+            "lead_inbox": True, "lead_profile": True, "manual_lead_entry": True,
+            "follow_up_reminders": True, "basic_notes": True, "source_tagging": True,
+            "manual_temperature": True, "daily_task_list": True, "basic_reports": True,
+            "owner_assignment": True,
+            "csv_import": True, "multi_source_capture": True,
+            "form_integration": True, "rep_dashboard": True,
+            "overdue_alerts": True, "lead_aging_tracker": True,
+            "stage_pipeline": True, "ai_followup_basic": True,
+            "ai_lead_scoring": True, "founder_summary": True,
+            "whatsapp_click_to_msg": True, "limited_crm_sync": True,
+            # Locked from here
+            "ai_qualification": False, "ai_followup_drafts": False,
+            "whatsapp_workflow": False, "automated_tasks": False,
+            "rep_performance": False, "lost_reason_tracking": False,
+            "proposal_tracking": False, "deal_value": False,
+            "pipeline_value_dashboard": False, "calendar_integration": False,
+            "daily_founder_report": False, "weekly_sales_summary": False,
+            "crm_sync_full": False, "rbac": False,
+            "custom_stages": False, "custom_scoring": False,
+            "custom_workflows": False, "ai_call_scheduling": False,
+            "advanced_whatsapp": False, "multi_brand": False,
+            "advanced_crm": False, "api_integrations": False,
+            "client_dashboards": False, "advanced_attribution": False,
+            "custom_reports": False, "sla_alerts": False,
+            "training_section": False, "dedicated_support": False,
+        },
+    },
+    "pro": {
+        "name": "ARIA Pro",
+        "amount": 399.00,
+        "leads": 10000,
+        "ai_credits": 2000,
+        "tagline": "For founder-led companies that need serious sales visibility",
+        "headline_features": [
+            "AI lead qualification, scoring & follow-up drafts",
+            "WhatsApp workflows, email templates & automated tasks",
+            "Sales-rep performance, lost-reason & proposal tracking",
+            "Pipeline value, calendar integration & full CRM sync",
+            "Daily founder report, weekly sales summary & RBAC",
+        ],
+        "features": {
+            "lead_inbox": True, "lead_profile": True, "manual_lead_entry": True,
+            "follow_up_reminders": True, "basic_notes": True, "source_tagging": True,
+            "manual_temperature": True, "daily_task_list": True, "basic_reports": True,
+            "owner_assignment": True,
+            "csv_import": True, "multi_source_capture": True,
+            "form_integration": True, "rep_dashboard": True,
+            "overdue_alerts": True, "lead_aging_tracker": True,
+            "stage_pipeline": True, "ai_followup_basic": True,
+            "ai_lead_scoring": True, "founder_summary": True,
+            "whatsapp_click_to_msg": True, "limited_crm_sync": True,
+            "ai_qualification": True, "ai_followup_drafts": True,
+            "whatsapp_workflow": True, "automated_tasks": True,
+            "rep_performance": True, "lost_reason_tracking": True,
+            "proposal_tracking": True, "deal_value": True,
+            "pipeline_value_dashboard": True, "calendar_integration": True,
+            "daily_founder_report": True, "weekly_sales_summary": True,
+            "crm_sync_full": True, "rbac": True,
+            # Locked from here
+            "custom_stages": False, "custom_scoring": False,
+            "custom_workflows": False, "ai_call_scheduling": False,
+            "advanced_whatsapp": False, "multi_brand": False,
+            "advanced_crm": False, "api_integrations": False,
+            "client_dashboards": False, "advanced_attribution": False,
+            "custom_reports": False, "sla_alerts": False,
+            "training_section": False, "dedicated_support": False,
+        },
+    },
+    "custom": {
+        "name": "ARIA Custom",
+        "amount": None,  # contact sales
+        "leads": -1,
+        "ai_credits": -1,
+        "tagline": "For complex sales engines and multi-channel funnels",
+        "contact_sales": True,
+        "headline_features": [
+            "Custom stages, scoring & workflows",
+            "AI call scheduling & qualification forms",
+            "Multi-brand, multi-branch & advanced WhatsApp automation",
+            "Advanced CRM, API integrations & client-specific dashboards",
+            "SLA alerts, training section & dedicated implementation support",
+        ],
+        "features": {  # all true
+            "lead_inbox": True, "lead_profile": True, "manual_lead_entry": True,
+            "follow_up_reminders": True, "basic_notes": True, "source_tagging": True,
+            "manual_temperature": True, "daily_task_list": True, "basic_reports": True,
+            "owner_assignment": True,
+            "csv_import": True, "multi_source_capture": True,
+            "form_integration": True, "rep_dashboard": True,
+            "overdue_alerts": True, "lead_aging_tracker": True,
+            "stage_pipeline": True, "ai_followup_basic": True,
+            "ai_lead_scoring": True, "founder_summary": True,
+            "whatsapp_click_to_msg": True, "limited_crm_sync": True,
+            "ai_qualification": True, "ai_followup_drafts": True,
+            "whatsapp_workflow": True, "automated_tasks": True,
+            "rep_performance": True, "lost_reason_tracking": True,
+            "proposal_tracking": True, "deal_value": True,
+            "pipeline_value_dashboard": True, "calendar_integration": True,
+            "daily_founder_report": True, "weekly_sales_summary": True,
+            "crm_sync_full": True, "rbac": True,
+            "custom_stages": True, "custom_scoring": True,
+            "custom_workflows": True, "ai_call_scheduling": True,
+            "advanced_whatsapp": True, "multi_brand": True,
+            "advanced_crm": True, "api_integrations": True,
+            "client_dashboards": True, "advanced_attribution": True,
+            "custom_reports": True, "sla_alerts": True,
+            "training_section": True, "dedicated_support": True,
+        },
+    },
 }
+
+# Backwards compat: legacy "scale" id maps to "pro"
+_LEGACY_PLAN_ALIASES = {"scale": "pro"}
+
+
+def _workspace_plan_id() -> str:
+    """Return the workspace's current plan id. Defaults to 'starter'."""
+    cfg = workspace_settings_collection.find_one({"scope": "workspace"}, {"_id": 0, "plan_id": 1}) or {}
+    pid = cfg.get("plan_id") or "starter"
+    return _LEGACY_PLAN_ALIASES.get(pid, pid)
+
+
+def _has_feature(feature_key: str, plan_id: Optional[str] = None) -> bool:
+    pid = plan_id or _workspace_plan_id()
+    plan = SUBSCRIPTION_PLANS.get(_LEGACY_PLAN_ALIASES.get(pid, pid))
+    if not plan:
+        return False
+    return bool(plan.get("features", {}).get(feature_key, False))
+
+
+def require_feature(feature_key: str):
+    """FastAPI dependency that raises 402 with a friendly upgrade payload when feature is locked."""
+    async def _check(current_user: dict = Depends(get_current_user)):
+        if _has_feature(feature_key):
+            return current_user
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "feature_locked",
+                "feature": feature_key,
+                "current_plan": _workspace_plan_id(),
+                "message": f"Upgrade your ARIA plan to unlock '{feature_key}'.",
+            },
+        )
+    return _check
+
 
 class CheckoutRequest(BaseModel):
     plan_id: str
     origin_url: str
 
+
+class UpgradeRequest(BaseModel):
+    target_plan_id: str
+    feature_key: Optional[str] = None
+    note: Optional[str] = None
+
+
 @app.post("/api/billing/checkout")
 async def create_checkout(request: CheckoutRequest, http_request: object = None, current_user: dict = Depends(get_current_user)):
-    """Create Stripe checkout session for subscription."""
-    plan = SUBSCRIPTION_PLANS.get(request.plan_id)
+    """Create Stripe checkout session for subscription. Custom plan is contact-sales only."""
+    plan_id = _LEGACY_PLAN_ALIASES.get(request.plan_id, request.plan_id)
+    plan = SUBSCRIPTION_PLANS.get(plan_id)
     if not plan:
         raise HTTPException(status_code=400, detail="Invalid plan")
+    if plan.get("contact_sales") or plan.get("amount") is None:
+        raise HTTPException(status_code=400, detail="ARIA Custom is contact-sales only. Use /api/billing/request-upgrade.")
 
-    from starlette.requests import Request
     stripe_key = os.getenv("STRIPE_API_KEY")
     host_url = request.origin_url.rstrip("/")
     webhook_url = f"{host_url}/api/webhook/stripe"
 
     stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
 
-    success_url = f"{host_url}/settings?session_id={{CHECKOUT_SESSION_ID}}&payment=success"
-    cancel_url = f"{host_url}/settings?payment=cancelled"
+    success_url = f"{host_url}/billing?session_id={{CHECKOUT_SESSION_ID}}&payment=success"
+    cancel_url = f"{host_url}/billing?payment=cancelled"
 
     checkout_req = CheckoutSessionRequest(
         amount=plan["amount"],
         currency="usd",
         success_url=success_url,
         cancel_url=cancel_url,
-        metadata={"plan_id": request.plan_id, "user_email": current_user["email"], "plan_name": plan["name"]}
+        metadata={"plan_id": plan_id, "user_email": current_user["email"], "plan_name": plan["name"]}
     )
 
     session = await stripe_checkout.create_checkout_session(checkout_req)
@@ -2779,7 +2989,7 @@ async def create_checkout(request: CheckoutRequest, http_request: object = None,
     payment_transactions.insert_one({
         "session_id": session.session_id,
         "user_email": current_user["email"],
-        "plan_id": request.plan_id,
+        "plan_id": plan_id,
         "plan_name": plan["name"],
         "amount": plan["amount"],
         "currency": "usd",
@@ -2797,13 +3007,21 @@ async def check_payment_status(session_id: str, current_user: dict = Depends(get
 
     status = await stripe_checkout.get_checkout_status(session_id)
 
-    # Update transaction
     existing = payment_transactions.find_one({"session_id": session_id})
     if existing and existing.get("payment_status") != "paid":
         payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {"payment_status": status.payment_status, "status": status.status, "updated_at": datetime.now(timezone.utc).isoformat()}}
         )
+        # Promote workspace plan on successful payment
+        if status.payment_status == "paid":
+            txn = payment_transactions.find_one({"session_id": session_id}, {"_id": 0, "plan_id": 1})
+            if txn and txn.get("plan_id"):
+                workspace_settings_collection.update_one(
+                    {"scope": "workspace"},
+                    {"$set": {"plan_id": txn["plan_id"], "plan_activated_at": datetime.now(timezone.utc).isoformat()}},
+                    upsert=True,
+                )
 
     return {"status": status.status, "payment_status": status.payment_status, "amount": status.amount_total, "currency": status.currency}
 
@@ -2814,8 +3032,84 @@ async def stripe_webhook(request: object):
 
 @app.get("/api/billing/plans")
 async def get_billing_plans():
-    """Get available subscription plans."""
-    return {"plans": SUBSCRIPTION_PLANS}
+    """Public — full plan catalog with feature matrix."""
+    plans_out = []
+    for pid, p in SUBSCRIPTION_PLANS.items():
+        plans_out.append({
+            "id": pid,
+            "name": p["name"],
+            "amount": p["amount"],
+            "leads": p["leads"],
+            "ai_credits": p["ai_credits"],
+            "tagline": p.get("tagline"),
+            "headline_features": p.get("headline_features", []),
+            "contact_sales": p.get("contact_sales", False),
+            "features": p.get("features", {}),
+        })
+    return {"plans": plans_out, "feature_keys": sorted({k for p in SUBSCRIPTION_PLANS.values() for k in p.get("features", {})})}
+
+
+@app.get("/api/billing/current-plan")
+async def get_current_plan(current_user: dict = Depends(get_current_user)):
+    """Return the workspace's current plan id and unlocked features."""
+    pid = _workspace_plan_id()
+    plan = SUBSCRIPTION_PLANS.get(pid, SUBSCRIPTION_PLANS["starter"])
+    cfg = workspace_settings_collection.find_one({"scope": "workspace"}, {"_id": 0, "plan_activated_at": 1, "plan_id": 1}) or {}
+    return {
+        "plan_id": pid,
+        "name": plan["name"],
+        "amount": plan["amount"],
+        "tagline": plan.get("tagline"),
+        "contact_sales": plan.get("contact_sales", False),
+        "features": plan.get("features", {}),
+        "activated_at": cfg.get("plan_activated_at"),
+    }
+
+
+@app.post("/api/billing/request-upgrade")
+async def request_upgrade(req: UpgradeRequest, current_user: dict = Depends(get_current_user)):
+    """Email a configured admin email asking for upgrade approval. Used by Upgrade modal."""
+    target = _LEGACY_PLAN_ALIASES.get(req.target_plan_id, req.target_plan_id)
+    plan = SUBSCRIPTION_PLANS.get(target)
+    if not plan:
+        raise HTTPException(status_code=400, detail="Invalid target plan")
+    admin_email = os.getenv("UPGRADE_REQUEST_EMAIL") or os.getenv("FOUNDER_EMAIL") or os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
+    current_pid = _workspace_plan_id()
+    current_plan = SUBSCRIPTION_PLANS.get(current_pid, {})
+    feature_label = req.feature_key or "general upgrade"
+    note = (req.note or "").strip()
+    html = f"""<div style="font-family:Plus Jakarta Sans,Arial,sans-serif;color:#1A0A2E;">
+      <h2 style="color:#7C35DC;margin:0 0 12px 0;">ARIA Upgrade Request</h2>
+      <p><strong>{current_user.get('email')}</strong> from <strong>{current_user.get('full_name') or 'their workspace'}</strong> wants to upgrade.</p>
+      <table style="border-collapse:collapse;margin:16px 0;font-size:14px;">
+        <tr><td style="padding:6px 12px;color:#9B8AB0;">Current plan:</td><td style="padding:6px 12px;font-weight:700;">{current_plan.get('name','—')}</td></tr>
+        <tr><td style="padding:6px 12px;color:#9B8AB0;">Target plan:</td><td style="padding:6px 12px;font-weight:700;color:#7C35DC;">{plan.get('name')}</td></tr>
+        <tr><td style="padding:6px 12px;color:#9B8AB0;">Feature requested:</td><td style="padding:6px 12px;">{feature_label}</td></tr>
+      </table>
+      {f'<p style="background:#F4F0FF;padding:12px;border-radius:8px;border:1px solid #E0D4F7;font-size:13px;"><strong>Note:</strong> {note}</p>' if note else ''}
+      <p style="color:#5A4A7A;font-size:13px;margin-top:24px;">Reply to this email to action the request, or open the workspace Stripe to issue the upgrade.</p>
+    </div>"""
+    try:
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [admin_email],
+            "reply_to": current_user.get("email"),
+            "subject": f"[ARIA] Upgrade request: {plan.get('name')} from {current_user.get('email')}",
+            "html": html,
+        })
+    except Exception as e:
+        # Don't fail the user-facing flow even if Resend errors out
+        print(f"Upgrade request email failed: {e}")
+    activities_collection.insert_one({
+        "lead_id": None, "user_id": current_user["email"],
+        "activity_type": "upgrade_requested",
+        "subject": f"Upgrade requested: {current_pid} -> {target}",
+        "body": (note or "")[:500],
+        "outcome": None, "duration_minutes": None,
+        "metadata": {"feature": req.feature_key, "target_plan": target, "from_plan": current_pid, "admin_email": admin_email},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"requested": True, "target_plan": target, "admin_email_used": admin_email}
 
 @app.get("/api/billing/transactions")
 async def get_transactions(current_user: dict = Depends(get_current_user)):
@@ -4122,3 +4416,101 @@ async def _daily_call_plan_loop():
 async def _start_daily_call_plan_loop():
     asyncio.create_task(_daily_call_plan_loop())
     print("[DailyCallPlan] Background loop started (60s tick)")
+
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Demo Data Seeder & Dev Plan Switch
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DEMO_LEADS_FIXTURE = [
+    {"first_name": "Quinn", "last_name": "Varma", "email": "quinn@apexsaas.io", "phone": "+919876512301", "company_name": "ApexSaaS", "job_title": "Head of Growth", "industry": "B2B SaaS", "country": "India", "source_channel": "linkedin", "lead_type": "B2B", "icp_score": 93, "status": "qualified"},
+    {"first_name": "Amelia", "last_name": "Cordeiro", "email": "amelia@northglow.co", "phone": "+447700912334", "company_name": "Northglow Realty", "job_title": "Founder", "industry": "Real Estate", "country": "United Kingdom", "source_channel": "meta_ads", "lead_type": "B2B", "icp_score": 82, "status": "contacted"},
+    {"first_name": "Diego", "last_name": "Fernandes", "email": "diego@finchedu.mx", "phone": "+525512345678", "company_name": "FinchEdu", "job_title": "COO", "industry": "Education", "country": "Mexico", "source_channel": "google_ads", "lead_type": "B2B", "icp_score": 71, "status": "new"},
+    {"first_name": "Priya", "last_name": "Menon", "email": "priya@stratosconsult.in", "phone": "+918888412290", "company_name": "Stratos Consult", "job_title": "Partner", "industry": "Consulting", "country": "India", "source_channel": "website_form", "lead_type": "B2B", "icp_score": 88, "status": "proposal_sent"},
+    {"first_name": "Jamie", "last_name": "Levy", "email": "jamie@blanco-labs.com", "phone": "+14155551122", "company_name": "Blanco Labs", "job_title": "Director", "industry": "D2C", "country": "USA", "source_channel": "referral", "lead_type": "B2B", "icp_score": 64, "status": "contacted"},
+    {"first_name": "Sasha", "last_name": "Ivanov", "email": "sasha@hawkenIT.com", "phone": "+14043332211", "company_name": "Hawken IT", "job_title": "VP Sales", "industry": "Enterprise IT", "country": "USA", "source_channel": "linkedin", "lead_type": "B2B", "icp_score": 95, "status": "negotiation"},
+    {"first_name": "Yuki", "last_name": "Tanaka", "email": "yuki@medora-health.jp", "phone": "+81901234567", "company_name": "Medora Health", "job_title": "CEO", "industry": "Healthcare", "country": "Japan", "source_channel": "webinar", "lead_type": "B2B", "icp_score": 79, "status": "qualified"},
+    {"first_name": "Faiza", "last_name": "Khan", "email": "faiza@deltaprintworks.ae", "phone": "+971501122334", "company_name": "Delta Printworks", "job_title": "Founder", "industry": "Manufacturing", "country": "UAE", "source_channel": "whatsapp", "lead_type": "B2B", "icp_score": 47, "status": "new"},
+    {"first_name": "Marco", "last_name": "Rossi", "email": "marco@vellaproperties.it", "phone": "+393331122334", "company_name": "Vella Properties", "job_title": "Sales Lead", "industry": "Real Estate", "country": "Italy", "source_channel": "meta_ads", "lead_type": "B2C", "icp_score": 58, "status": "lost"},
+    {"first_name": "Hannah", "last_name": "O'Connor", "email": "hannah@rosegold.studio", "phone": "+353871122334", "company_name": "Rosegold Studio", "job_title": "Owner", "industry": "D2C", "country": "Ireland", "source_channel": "referral", "lead_type": "B2B", "icp_score": 73, "status": "contacted"},
+    {"first_name": "Rahul", "last_name": "Bhatt", "email": "rahul@codenova.in", "phone": "+919812334455", "company_name": "Codenova", "job_title": "Co-founder", "industry": "B2B SaaS", "country": "India", "source_channel": "website_form", "lead_type": "B2B", "icp_score": 84, "status": "call_booked"},
+    {"first_name": "Lina", "last_name": "Park", "email": "lina@brightlearn.kr", "phone": "+821011223344", "company_name": "BrightLearn", "job_title": "Director", "industry": "Education", "country": "South Korea", "source_channel": "google_ads", "lead_type": "B2B", "icp_score": 66, "status": "qualified"},
+    {"first_name": "Theo", "last_name": "Ndiaye", "email": "theo@axleconsult.fr", "phone": "+33611223344", "company_name": "Axle Consult", "job_title": "Senior Partner", "industry": "Consulting", "country": "France", "source_channel": "linkedin", "lead_type": "B2B", "icp_score": 91, "status": "proposal_sent"},
+    {"first_name": "Sara", "last_name": "Ahmed", "email": "sara@hempcraft.in", "phone": "+919900112233", "company_name": "Hempcraft", "job_title": "Founder", "industry": "D2C", "country": "India", "source_channel": "meta_ads", "lead_type": "B2C", "icp_score": 53, "status": "new"},
+    {"first_name": "Owen", "last_name": "Brewster", "email": "owen@archipelago-ent.com", "phone": "+12025550199", "company_name": "Archipelago Enterprise", "job_title": "Head of Ops", "industry": "Enterprise IT", "country": "USA", "source_channel": "referral", "lead_type": "B2B", "icp_score": 86, "status": "qualified"},
+    {"first_name": "Mei", "last_name": "Lin", "email": "mei@cleo-pharma.sg", "phone": "+6581234567", "company_name": "Cleo Pharma", "job_title": "Marketing Lead", "industry": "Healthcare", "country": "Singapore", "source_channel": "webinar", "lead_type": "B2B", "icp_score": 70, "status": "contacted"},
+    {"first_name": "Nora", "last_name": "Sandström", "email": "nora@forgeworks.se", "phone": "+46701122334", "company_name": "Forgeworks", "job_title": "VP Strategy", "industry": "Manufacturing", "country": "Sweden", "source_channel": "linkedin", "lead_type": "B2B", "icp_score": 77, "status": "negotiation"},
+    {"first_name": "Kabir", "last_name": "Iyer", "email": "kabir@plotvilla.in", "phone": "+919900445566", "company_name": "PlotVilla", "job_title": "Sales Manager", "industry": "Real Estate", "country": "India", "source_channel": "whatsapp", "lead_type": "B2C", "icp_score": 35, "status": "unqualified"},
+    {"first_name": "Elena", "last_name": "Vasquez", "email": "elena@solarsumm.es", "phone": "+34611223344", "company_name": "SolarSumm", "job_title": "Founder", "industry": "Manufacturing", "country": "Spain", "source_channel": "google_ads", "lead_type": "B2B", "icp_score": 62, "status": "contacted"},
+    {"first_name": "Liam", "last_name": "Wallace", "email": "liam@amberSchool.io", "phone": "+447700119900", "company_name": "Amber School", "job_title": "Director", "industry": "Education", "country": "United Kingdom", "source_channel": "website_form", "lead_type": "B2B", "icp_score": 81, "status": "won"},
+    {"first_name": "Aisha", "last_name": "Karim", "email": "aisha@northgate-it.com", "phone": "+15551234567", "company_name": "Northgate IT", "job_title": "CIO", "industry": "Enterprise IT", "country": "USA", "source_channel": "linkedin", "lead_type": "B2B", "icp_score": 89, "status": "proposal_sent"},
+    {"first_name": "Carlos", "last_name": "Mendes", "email": "carlos@harborlogistics.br", "phone": "+5511933221100", "company_name": "Harbor Logistics", "job_title": "Founder", "industry": "Manufacturing", "country": "Brazil", "source_channel": "referral", "lead_type": "B2B", "icp_score": 68, "status": "qualified"},
+    {"first_name": "Iris", "last_name": "Becker", "email": "iris@rubyclinics.de", "phone": "+4915112233445", "company_name": "Ruby Clinics", "job_title": "Practice Manager", "industry": "Healthcare", "country": "Germany", "source_channel": "meta_ads", "lead_type": "B2C", "icp_score": 45, "status": "lost"},
+    {"first_name": "Ben", "last_name": "Sokolov", "email": "ben@stackbloom.com", "phone": "+14157771010", "company_name": "Stackbloom", "job_title": "Co-founder", "industry": "B2B SaaS", "country": "USA", "source_channel": "webinar", "lead_type": "B2B", "icp_score": 92, "status": "call_booked"},
+    {"first_name": "Anu", "last_name": "Reddy", "email": "anu@petalboutique.in", "phone": "+918111222333", "company_name": "Petal Boutique", "job_title": "Owner", "industry": "D2C", "country": "India", "source_channel": "whatsapp", "lead_type": "B2C", "icp_score": 50, "status": "contacted"},
+]
+
+
+@app.post("/api/admin/load-demo-data")
+async def load_demo_data(force: bool = False, current_user: dict = Depends(get_current_user)):
+    """Seed 25 realistic leads. By default only runs if leads collection is empty.
+    Pass ?force=true to reseed (deletes existing demo leads tagged with metadata.demo=true)."""
+    from random import choice, randint
+    if force:
+        result = leads_collection.delete_many({"metadata.demo": True})
+        print(f"[DemoSeed] Deleted {result.deleted_count} existing demo leads")
+    else:
+        existing = leads_collection.count_documents({})
+        if existing > 0:
+            return {"seeded": 0, "skipped": True, "reason": f"Workspace already has {existing} leads. Use force=true to reseed."}
+
+    now = datetime.now(timezone.utc)
+    inserted = 0
+    for i, fixture in enumerate(DEMO_LEADS_FIXTURE):
+        # Spread created_at over last 30 days, last_contacted over last 14 days
+        days_ago = randint(0, 30)
+        created_at = (now - timedelta(days=days_ago)).isoformat()
+        last_contact_days = randint(0, 14) if fixture["status"] != "new" else None
+        last_contacted = (now - timedelta(days=last_contact_days)).isoformat() if last_contact_days is not None else None
+        # Next follow-up: some overdue, some today, some upcoming
+        offset_days = choice([-5, -3, -1, 0, 0, 1, 2, 4, 7])
+        next_followup = (now + timedelta(days=offset_days)).isoformat() if fixture["status"] not in ["won", "lost", "unqualified"] else None
+        icp = fixture["icp_score"]
+        tier = "hot" if icp >= 80 else "warm" if icp >= 50 else "cold" if icp >= 20 else "low_fit"
+        deal_value = randint(2000, 25000) * 100 if fixture["status"] in ["proposal_sent", "negotiation", "won", "call_booked", "qualified"] else None
+        doc = {
+            **fixture,
+            "lead_temperature": tier,
+            "icp_tier": "A" if tier == "hot" else "B" if tier == "warm" else "C" if tier == "cold" else "D",
+            "deal_value": deal_value,
+            "last_contacted_at": last_contacted,
+            "next_followup_at": next_followup,
+            "aria_state": "AWAITING_FIRST_TOUCH",
+            "aria_handed_off": False,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "campaign_name": choice(["Q1 Outbound", "LinkedIn 2026", "Webinar Funnel", "Inbound", "Referral Engine"]),
+            "metadata": {"demo": True, "industry": fixture.get("industry")},
+        }
+        leads_collection.insert_one(doc)
+        inserted += 1
+
+    return {"seeded": inserted, "skipped": False}
+
+
+@app.post("/api/dev/set-plan")
+async def dev_set_plan(plan_id: str, current_user: dict = Depends(get_current_user)):
+    """Dev/admin only: switch workspace plan instantly without going through Stripe.
+    Useful for testing feature gating. Accessible by admin role only."""
+    if current_user.get("role") not in ("admin", "founder"):
+        raise HTTPException(status_code=403, detail="Admin only")
+    target = _LEGACY_PLAN_ALIASES.get(plan_id, plan_id)
+    if target not in SUBSCRIPTION_PLANS:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    workspace_settings_collection.update_one(
+        {"scope": "workspace"},
+        {"$set": {"plan_id": target, "plan_activated_at": datetime.now(timezone.utc).isoformat(), "set_by": "dev_endpoint", "set_by_user": current_user["email"]}},
+        upsert=True,
+    )
+    return {"plan_id": target, "name": SUBSCRIPTION_PLANS[target]["name"]}

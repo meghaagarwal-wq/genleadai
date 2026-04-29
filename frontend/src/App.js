@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { PlanProvider } from './context/PlanContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -17,7 +18,12 @@ import YourFiveToday from './pages/YourFiveToday';
 import SleepingLeads from './pages/SleepingLeads';
 import AuditLog from './pages/AuditLog';
 import OnboardingWizard from './pages/OnboardingWizard';
+import Billing from './pages/Billing';
+import FollowUps from './pages/FollowUps';
+import AIAssistant from './pages/AIAssistant';
+import Integrations from './pages/Integrations';
 import Layout from './components/Layout';
+import UpgradeModal from './components/UpgradeModal';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -51,43 +57,51 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route
-              path="/onboarding"
-              element={
-                <ProtectedRoute>
-                  <OnboardingWizard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/your-5-today" element={<YourFiveToday />} />
-                      <Route path="/leads" element={<LeadInbox />} />
-                      <Route path="/leads/:id" element={<LeadDetail />} />
-                      <Route path="/sleeping-leads" element={<SleepingLeads />} />
-                      <Route path="/pipeline" element={<Pipeline />} />
-                      <Route path="/campaigns" element={<Campaigns />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/aria" element={<AriaFeed />} />
-                      <Route path="/aria/analytics" element={<AriaAnalytics />} />
-                      <Route path="/audit-log" element={<AuditLog />} />
-                      <Route path="/settings" element={<Settings />} />
-                    </Routes>
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </Router>
+        <PlanProvider>
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute>
+                    <OnboardingWizard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Routes>
+                        <Route path="/" element={<Dashboard />} />
+                        <Route path="/your-5-today" element={<YourFiveToday />} />
+                        <Route path="/leads" element={<LeadInbox />} />
+                        <Route path="/leads/:id" element={<LeadDetail />} />
+                        <Route path="/sleeping-leads" element={<SleepingLeads />} />
+                        <Route path="/pipeline" element={<Pipeline />} />
+                        <Route path="/follow-ups" element={<FollowUps />} />
+                        <Route path="/ai-assistant" element={<AIAssistant />} />
+                        <Route path="/integrations" element={<Integrations />} />
+                        <Route path="/campaigns" element={<Campaigns />} />
+                        <Route path="/reports" element={<Analytics />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/aria" element={<AriaFeed />} />
+                        <Route path="/aria/analytics" element={<AriaAnalytics />} />
+                        <Route path="/audit-log" element={<AuditLog />} />
+                        <Route path="/billing" element={<Billing />} />
+                        <Route path="/settings" element={<Settings />} />
+                      </Routes>
+                      <UpgradeModal />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </PlanProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

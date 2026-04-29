@@ -1,0 +1,51 @@
+{
+  "summary": "Phase 1 (4-tier ARIA plan + feature gating + Upgrade modal + new pages + 25-lead seeder) verified end-to-end. Backend 18/19 pytests passed (1 skipped — Stripe checkout requires real key). Frontend: all new pages render with required data-testids; UpgradeModal flow (open → submit → success → done) works against real /api/billing/request-upgrade; 8 ai-tiles + 8 lock-badges visible on Starter; 11 integration cards; 4 follow-up buckets; 4 plan cards + feature matrix on /billing. Two issues found: (1) Sidebar testid for Plan & Billing is `nav-plan-&-billing` (literal &) instead of expected `nav-plan-billing`; (2) Hydration warning '<button> cannot contain a nested <button>' on /billing plan cards. Final state: workspace plan reset to 'starter'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/billing/checkout", "issue": "With plan_id='pro' returned non-200 in test env (Stripe key likely placeholder). Test marked as skipped. Spec calls for Stripe URL — verify in production with real key."},
+      {"endpoint": "POST /api/billing/request-upgrade", "issue": "Always returns requested:true even when Resend send fails (caught + logged). This is intentional for UX but means callers cannot distinguish 'email queued' vs 'email failed'. Consider adding email_sent boolean in response."},
+      {"endpoint": "GET /api/billing/plans", "issue": "feature_keys returned 50 keys (matches spec). All 4 plans (starter, growth, pro, custom) present with correct amount/contact_sales flags."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout.js sidebar", "issue": "data-testid for Plan & Billing is `nav-plan-&-billing` (because regex only replaces whitespace, '&' is kept). Spec/test expected `nav-plan-billing`. Fix: change Layout.js:47 regex to /[^a-z0-9]+/g to strip non-alphanumerics. All other 8 nav testids match spec.", "selector": "[data-testid=\"nav-plan-&-billing\"]", "priority": "MEDIUM"},
+      {"component": "Billing plan cards (likely Pro 'Most Popular' card)", "issue": "React hydration error: '<button> cannot contain a nested <button>'. Inspect Pro plan-card and headline-features renderer in /app/frontend/src/pages/Billing.js — there's a button wrapping another button.", "selector": "[data-testid=\"plan-card-pro\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_plans.py",
+    "/app/test_reports/pytest/iter14_phase1.xml"
+  ],
+  "action_items": [
+    "Fix Layout.js sidebar testid for 'Plan & Billing': change /\\s/g to /[^a-z0-9]+/g so testid becomes 'nav-plan-billing' (drop '&').",
+    "Fix nested <button> in Billing.js plan cards (React hydration warning) — likely the Pro card header or feature-row inside the action button.",
+    "[Optional] /api/billing/request-upgrade — return email_sent boolean to surface Resend success/failure to caller.",
+    "[Optional] Configure live Stripe key so /api/billing/checkout pro path returns a URL instead of skip."
+  ],
+  "critical_code_review_comments": [
+    "server.py:2917 _workspace_plan_id reads workspace_settings_collection on every check — fine for single-tenant MVP but consider caching once multi-tenant.",
+    "server.py:2932 require_feature dependency raises 402 with structured detail {code,feature,current_plan,message} — verified importable + correct shape in test_helper_importable. No endpoints currently use it (Phase 2/3 will).",
+    "server.py:3069 request_upgrade swallows Resend errors silently and still returns requested:true; activity row is always written. Acceptable for UX, but consider returning email_sent flag.",
+    "server.py:4455 /api/admin/load-demo-data uses metadata.demo=true marker for force-reseed — clean. No auth-role guard — any logged-in user can call. Consider admin-only check.",
+    "server.py:4502 /api/dev/set-plan correctly admin-only (403 verified for sales rep). Stores plan_id, plan_activated_at, set_by — clean.",
+    "Layout.js:47 testid generation uses .replace(/\\s/g, '-') which preserves '&' character — produces invalid-looking testid 'nav-plan-&-billing'. Use /[^a-z0-9]+/g instead.",
+    "Billing.js — nested <button> is a React + a11y violation. Browser-level click handlers may behave unexpectedly on inner element."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase1_plans.py (NEW — 19 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% of executable tests (18/18; 1 Stripe-dependent skipped)",
+    "frontend": "94% (16/17 testid checks pass; nav-plan-billing testid is incorrectly `nav-plan-&-billing`)"
+  },
+  "test_credentials": "admin@demo.com / Demo1234! and sarah@demo.com / Demo1234! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Re-seeded 25 demo leads via /api/admin/load-demo-data?force=true. After tests workspace plan reset to 'starter'. 25 demo leads tagged metadata.demo=true remain in DB.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 1 backend stable. Plan switching via /api/dev/set-plan?plan_id={starter|growth|pro|custom} works, current-plan reflects within same request, non-admin gets 403. Demo seeder force=true delete+inserts 25 leads with diverse statuses (won/lost/proposal_sent/negotiation present), ICP scores 35-95, deal_value on advanced statuses. Upgrade modal flow tested live: opens with correct featureKey from clicked tile, submitting fires POST /api/billing/request-upgrade and shows success state with `upgrade-modal-done-btn`. /api/leads default page size is 50 — use ?limit=200 to fetch all 25 demo leads when other leads exist (workspace already had ~60 non-demo leads). Two frontend bugs documented for main agent: (a) sidebar testid uses '&' literal — needs regex fix in Layout.js:47, (b) nested <button> in Billing.js plan cards — hydration warning.",
+  "rca of the issue": "Issue 1 (testid nav-plan-&-billing): Layout.js:47 generates testid via `label.toLowerCase().replace(/\\s/g, '-')`. For 'Plan & Billing' this yields 'plan-&-billing' because /\\s/g only matches whitespace. Reproduction: open /, inspect sidebar — the Plan & Billing item has data-testid='nav-plan-&-billing'. Fix: replace regex with `/[^a-z0-9]+/g` and trim leading/trailing dashes. Issue 2 (nested button): on /billing the Pro card (Most Popular) renders an outer clickable wrapper plus an inner action <button>. React logs '<button> cannot contain a nested <button>'. Fix: change outer wrapper to a <div> with onClick or remove the wrapper button; inspect Billing.js around plan-card-pro and PRICING_CARDS render."
+}
