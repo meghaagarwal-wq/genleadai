@@ -12,6 +12,7 @@ import {
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
+import AriaToastWatcher from './AriaToastWatcher';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -221,6 +222,7 @@ const Layout = ({ children }) => {
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
       <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
+      <AriaToastWatcher />
     </div>
   );
 };
