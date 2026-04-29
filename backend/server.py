@@ -378,7 +378,8 @@ async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user))
 @app.patch("/api/leads/{lead_id}")
 async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict = Depends(get_current_user)):
     try:
-        update_data = {k: v for k, v in lead_update.dict().items() if v is not None}
+        # Use exclude_unset so callers can explicitly null fields (e.g. clear next_followup_at on follow-up complete)
+        update_data = lead_update.dict(exclude_unset=True)
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
         
