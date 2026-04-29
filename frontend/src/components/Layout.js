@@ -8,6 +8,7 @@ import {
   House, Tray, ChartBar, MegaphoneSimple, ChartLineUp, UsersThree,
   SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
+  GraduationCap, BookOpen, MapTrifold, FileText, ShieldCheck, ArrowClockwise, Brain,
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
 
@@ -35,6 +36,16 @@ const Layout = ({ children }) => {
     { icon: UsersThree, label: 'Settings', path: '/settings' },
   ];
 
+  const ariaAgentItems = [
+    { icon: GraduationCap, label: 'Train ARIA', path: '/aria-agent/train' },
+    { icon: BookOpen, label: 'Sales Playbooks', path: '/aria-agent/playbooks' },
+    { icon: MapTrifold, label: 'Sales Journeys', path: '/aria-agent/journeys' },
+    { icon: FileText, label: 'Founder Briefs', path: '/aria-agent/briefs' },
+    { icon: ShieldCheck, label: 'Human Handoff', path: '/aria-agent/handoff' },
+    { icon: ArrowClockwise, label: 'Revival Engine', path: '/aria-agent/revival' },
+    { icon: Brain, label: 'ARIA Insights', path: '/aria-agent/insights' },
+  ];
+
   const NavContent = ({ mobile = false }) => (
     <>
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
@@ -44,6 +55,34 @@ const Layout = ({ children }) => {
               key={item.path}
               to={item.path}
               end={item.path === '/'}
+              onClick={() => mobile && setMobileMenuOpen(false)}
+              data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? 'text-white font-semibold'
+                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                }`
+              }
+              style={({ isActive }) => isActive ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' } : { fontFamily: 'Plus Jakarta Sans' }}
+            >
+              <item.icon size={18} weight="duotone" />
+              <span className="text-sm">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+
+        <div className="mt-5 mb-2 px-3 flex items-center gap-2" data-testid="nav-section-aria-agent">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[#C9B6FF]/70" style={{ fontFamily: 'Plus Jakarta Sans' }}>AI SALES AGENT</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        <div className="space-y-0.5">
+          {ariaAgentItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
               onClick={() => mobile && setMobileMenuOpen(false)}
               data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
               className={({ isActive }) =>
@@ -118,6 +157,16 @@ const Layout = ({ children }) => {
             <div className="space-y-1">
               {navItems.map((item) => (
                 <NavLink key={item.path} to={item.path} end={item.path === '/'} title={item.label}
+                  className={({ isActive }) => `flex items-center justify-center p-2.5 rounded-lg transition-all ${isActive ? 'text-white' : 'text-[var(--sidebar-text-muted)] hover:bg-white/5 hover:text-white'}`}
+                  style={({ isActive }) => isActive ? { background: 'var(--sidebar-active-bg)' } : {}}>
+                  <item.icon size={18} weight="duotone" />
+                </NavLink>
+              ))}
+            </div>
+            <div className="my-3 mx-2 h-px bg-white/10" />
+            <div className="space-y-1">
+              {ariaAgentItems.map((item) => (
+                <NavLink key={item.path} to={item.path} title={item.label}
                   className={({ isActive }) => `flex items-center justify-center p-2.5 rounded-lg transition-all ${isActive ? 'text-white' : 'text-[var(--sidebar-text-muted)] hover:bg-white/5 hover:text-white'}`}
                   style={({ isActive }) => isActive ? { background: 'var(--sidebar-active-bg)' } : {}}>
                   <item.icon size={18} weight="duotone" />

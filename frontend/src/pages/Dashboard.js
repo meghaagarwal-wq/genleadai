@@ -5,6 +5,7 @@ import api from '../config/api';
 import AriaInsightCard from '../components/AriaInsightCard';
 import FounderCommandCenter from '../components/FounderCommandCenter';
 import AriaTodayWidget from '../components/AriaTodayWidget';
+import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -141,6 +142,9 @@ const Dashboard = () => {
 
       {/* ARIA Today — live momentum snapshot, refreshes every 60s */}
       <AriaTodayWidget />
+
+      {/* ARIA Sales Agent — additive activity section + positioning banner */}
+      <AriaAgentActivitySection />
 
       {/* Founder Command Center — high-conversion demo features */}
       <FounderCommandCenter />

@@ -5133,3 +5133,10 @@ def _demo_command_center_fallback():
         "pipeline_value": 4500000,
         "pipeline_value_label": "₹45L",
     }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Attach ARIA AI Sales Agent routes (additive only)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+from aria_agent_routes import attach_aria_agent_routes  # noqa: E402
+attach_aria_agent_routes(app, get_current_user, db)

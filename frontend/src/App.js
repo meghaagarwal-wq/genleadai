@@ -22,6 +22,13 @@ import Billing from './pages/Billing';
 import FollowUps from './pages/FollowUps';
 import AIAssistant from './pages/AIAssistant';
 import Integrations from './pages/Integrations';
+import TrainAria from './pages/TrainAria';
+import Playbooks from './pages/Playbooks';
+import AISalesJourneys from './pages/AISalesJourneys';
+import FounderBriefs from './pages/FounderBriefs';
+import HumanHandoff from './pages/HumanHandoff';
+import RevivalEngine from './pages/RevivalEngine';
+import AriaInsightsPage from './pages/AriaInsightsPage';
 import Layout from './components/Layout';
 import UpgradeModal from './components/UpgradeModal';
 import './App.css';
@@ -93,6 +100,14 @@ function App() {
                         <Route path="/audit-log" element={<AuditLog />} />
                         <Route path="/billing" element={<Billing />} />
                         <Route path="/settings" element={<Settings />} />
+                        {/* AI Sales Agent additive routes */}
+                        <Route path="/aria-agent/train" element={<TrainAria />} />
+                        <Route path="/aria-agent/playbooks" element={<Playbooks />} />
+                        <Route path="/aria-agent/journeys" element={<AISalesJourneys />} />
+                        <Route path="/aria-agent/briefs" element={<FounderBriefs />} />
+                        <Route path="/aria-agent/handoff" element={<HumanHandoff />} />
+                        <Route path="/aria-agent/revival" element={<RevivalEngine />} />
+                        <Route path="/aria-agent/insights" element={<AriaInsightsPage />} />
                       </Routes>
                       <UpgradeModal />
                     </Layout>
