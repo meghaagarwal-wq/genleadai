@@ -6,11 +6,12 @@ import { Toaster } from 'sonner';
 import { useTtvMilestoneWatcher } from '../hooks/useTtvMilestoneWatcher';
 import {
   House, Tray, ChartBar, MegaphoneSimple, ChartLineUp, UsersThree,
-  SignOut, Bell, MagnifyingGlass, Robot, Moon, List, Lightning, X,
+  SignOut, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
   GraduationCap, BookOpen, MapTrifold, FileText, ShieldCheck, ArrowClockwise, Brain,
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
+import NotificationsBell from './NotificationsBell';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -214,10 +215,7 @@ const Layout = ({ children }) => {
             <button onClick={() => navigate('/leads')} className="hidden md:flex items-center gap-1.5 btn-gradient px-4 py-2 rounded-lg text-xs font-bold" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="topbar-add-lead">
               + Add Lead
             </button>
-            <button className="relative p-2 text-[#5A4A7A] hover:text-[#7C35DC] hover:bg-[#F4F0FF] rounded-lg transition-all" data-testid="notifications-button">
-              <Bell size={18} weight="duotone" />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#DC2626] rounded-full"></span>
-            </button>
+            <NotificationsBell />
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
