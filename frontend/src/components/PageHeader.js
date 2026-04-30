@@ -14,7 +14,7 @@ const PageHeader = ({ title, subtitle, eyebrow, actions, children, accent }) => 
             <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#7C35DC] numeric">{eyebrow}</span>
           </div>
         )}
-        <h1 className="font-display text-[2.4rem] md:text-[2.75rem] lg:text-[3.25rem] leading-[1.05] text-[#1A0A2E]">
+        <h1 className="font-display text-[2rem] md:text-[2.375rem] lg:text-[2.75rem] leading-[1.1] text-[#1A0A2E] tracking-tight">
           {title}
         </h1>
         {accent && (
