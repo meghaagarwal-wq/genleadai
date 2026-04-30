@@ -65,6 +65,46 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 
 ## Iter 21 — Secondary workspace pages + typography (Feb 2026)
 Backend additions in `/app/backend/aria_agent_routes.py`:
+- **Sales Assets**: GET `/assets/catalog`, GET `/assets`, POST `/assets`, PATCH `/assets/{id}`, DELETE `/assets/{id}`, POST `/assets/{id}/use` (7 types) stored in `aria_sales_assets` collection.
+- **ARIA Brain**: GET `/brain` — completion % from training, 6 sections, gaps, live memory.
+- **Weekly Recap**: GET `/weekly-recap` — 7-day vs prev-7-day deltas, biggest win/miss, top channel, 3-item focus.
+
+Frontend new pages: `/aria-agent/assets`, `/aria-agent/brain`, `/aria-agent/weekly-recap` (private, in sidebar).
+
+Typography aligned with genleadai.com: Space Grotesk (display) + Inter (body).
+
+## Iter 22 — Public ARIA content ecosystem (Feb 2026 · SEO/AIO/GEO)
+
+12 public, indexable pages live OUTSIDE auth. The private ARIA workspace is untouched and still gated by ProtectedRoute.
+
+Pages shipped:
+- `/aria` — Main product page (hero, definition, 6 features, who-for, FAQ)
+- `/aria/demo-dashboard` — Public demo with sample data only (Priya/GrowthNest, Rohit/SaaSWorks, Ananya/ScaleHive, Karan/CloudNest). Includes Demo Workspace label + disclaimer.
+- `/aria/lead-feed` — Lead Feed SEO page
+- `/aria/sales-reports` — Sales reports SEO page
+- `/aria/use-cases/{founders,startups,agencies,consultants,sales-teams}` — 5 persona pages from a shared template
+- `/aria/compare/{aria-vs-crm,aria-vs-spreadsheets,ai-sales-assistant-vs-crm}` — 3 comparison pages from a shared template
+
+Per-page SEO (via `useSEO` hook injecting tags + JSON-LD):
+- Unique `<title>`, meta description, canonical link
+- Open Graph (`og:title`, `og:description`, `og:url`, `og:image`, `og:site_name`)
+- Twitter card (`summary_large_image` with title/description/image)
+- JSON-LD: SoftwareApplication, FAQPage, WebPage, BreadcrumbList per page
+- `index.html` ships base Organization + WebSite JSON-LD for non-JS crawlers
+
+Crawlability:
+- `/robots.txt` — explicit Allow for OAI-SearchBot, ChatGPT-User, GPTBot, PerplexityBot, ClaudeBot, Google-Extended, anthropic-ai, Applebot
+- `/sitemap.xml` — all 12 public URLs with priorities
+- All routes mounted in `App.js` BEFORE the protected `/*` catch-all
+
+Branding/Voice:
+- "CRMs store pipeline. ARIA tells founders what to do next" used consistently
+- Answer-first definitions placed at top of every page so AI engines can quote
+- Internal links between product page → use cases → compare → demo dashboard
+
+## Test Status (iter 22)
+- iteration_21.json: 100% pass — all 12 public pages render with title/canonical/JSON-LD/H1/FAQ; demo dashboard uses sample data only; robots.txt + sitemap.xml served; private dashboard regression clean (ProtectedRoute redirects, real workspace pages still work post-login).
+Backend additions in `/app/backend/aria_agent_routes.py`:
 - **Sales Assets**: GET `/assets/catalog`, GET `/assets`, POST `/assets`, PATCH `/assets/{id}`, DELETE `/assets/{id}`, POST `/assets/{id}/use` (7 types: message_template, voice_note, case_study, proposal_template, founder_intro, objection_response, pricing_doc) stored in `aria_sales_assets` collection.
 - **ARIA Brain**: GET `/brain` — computes completion % from training collection, 6 sections (business, icp, qualification, voice, objections, booking), gaps list, live memory stats.
 - **Weekly Recap**: GET `/weekly-recap` — 7-day vs prev-7-day deltas on 6 KPIs (new leads, qualified, replies, calls booked, won, lost), biggest win/miss, top channel, 3-item focus plan.
