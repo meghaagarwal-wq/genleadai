@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only test of 12 new public ARIA SEO/AIO/GEO pages + private dashboard regression. All 12 public routes load without auth with correct title, canonical, >=2 JSON-LD blocks, H1, and FAQ accordions. Demo dashboard has all 7 expected testids and demo-only data. robots.txt and sitemap.xml served with required AI bot rules and all 12 URLs. ProtectedRoute still redirects / to /login when logged out; private pages (/aria-agent/assets, /aria-agent/brain, /aria-agent/weekly-recap) remain accessible after login with admin@demo.com / Demo1234!.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Use case pages (/aria/use-cases/*)", "issues": ["Minor testid-naming mismatch vs review request: spec mentions wrapper testids 'daily-workflow', 'tools-reduced', 'persona-problem' but template uses per-item 'workflow-{i}' and 'tool-{i}'. Content (5 ordered workflow steps, 6 tool chips, 'Who this is for' + 'The problem' sections) is correct — only cosmetic testid naming."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional, nice-to-have) Add wrapper data-testid='daily-workflow' on <ol> and data-testid='tools-reduced' on the chips container in /app/frontend/src/public/UseCaseTemplate.js; add data-testid='persona-problem' on the who-for/problem grid. Functionally everything works; this only aligns with the literal selector names in the review_request."
+  ],
+  "critical_code_review_comments": [
+    "useSEO.js hard-codes BASE_URL = 'https://app.genleadai.com'. Canonicals on preview domain therefore point to prod which is intentional for SEO but double-check before any non-prod deploys that should self-canonicalize.",
+    "robots.txt line 22 has lowercase 'user-agent: GPTBot' (inconsistent case) — parsers accept it but worth normalizing.",
+    "sitemap.xml lacks <lastmod> tags; adding them helps crawl freshness signals.",
+    "AriaHome.js FAQ content is duplicated between FAQ array and faqSchema(FAQ) JSON-LD (expected) — good for GEO/AIO."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% (12/12 public pages pass, private regression passes)"},
+  "test_credentials": "admin@demo.com / Demo1234! (from /app/memory/test_credentials.md) — login worked",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Public ARIA ecosystem (12 pages) is live and fully crawlable. All SEO primitives verified: document.title, link[rel=canonical], script[type='application/ld+json'] count >=2, unique H1, FAQ accordions (with data-testid='faq-accordion' on /aria). robots.txt contains OAI-SearchBot, ChatGPT-User, PerplexityBot, ClaudeBot, GPTBot, Google-Extended, anthropic-ai, Applebot. sitemap.xml lists all 12 URLs at https://app.genleadai.com/... ProtectedRoute integrity preserved — / still redirects to /login; /aria-agent/assets, /brain, /weekly-recap remain authenticated-only. Header CTAs: Sign in -> /login, Book demo -> https://calendly.com/meghaagarwaljain2015/30min. Internal links from /aria to /aria/use-cases/founders, /aria/compare/aria-vs-crm, /aria/demo-dashboard all present. Demo dashboard displays fake data only (Priya, Rohit, Ananya, Karan, Meera, Arjun) with visible demo disclaimer.",
+  "rca of the issue": "No issues found. Initial test script flagged use-case pages for missing wrapper testids, but verification confirmed content & per-item testids exist. Not a bug, just selector naming discrepancy between review_request wording and implementation."
+}

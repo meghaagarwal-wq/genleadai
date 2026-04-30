@@ -32,6 +32,18 @@ import AriaInsightsPage from './pages/AriaInsightsPage';
 import SalesAssets from './pages/SalesAssets';
 import AriaBrain from './pages/AriaBrain';
 import WeeklyRecap from './pages/WeeklyRecap';
+import AriaHome from './public/pages/AriaHome';
+import DemoDashboard from './public/pages/DemoDashboard';
+import LeadFeedSEO from './public/pages/LeadFeedSEO';
+import SalesReportsSEO from './public/pages/SalesReportsSEO';
+import UseFounders from './public/pages/use-cases/Founders';
+import UseStartups from './public/pages/use-cases/Startups';
+import UseAgencies from './public/pages/use-cases/Agencies';
+import UseConsultants from './public/pages/use-cases/Consultants';
+import UseSalesTeams from './public/pages/use-cases/SalesTeams';
+import CompareAriaVsCrm from './public/pages/compare/AriaVsCrm';
+import CompareAriaVsSpreadsheets from './public/pages/compare/AriaVsSpreadsheets';
+import CompareAiVsCrm from './public/pages/compare/AISalesAssistantVsCrm';
 import Layout from './components/Layout';
 import UpgradeModal from './components/UpgradeModal';
 import './App.css';
@@ -72,6 +84,20 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+
+              {/* Public ARIA content ecosystem (crawlable, no auth) */}
+              <Route path="/aria" element={<AriaHome />} />
+              <Route path="/aria/demo-dashboard" element={<DemoDashboard />} />
+              <Route path="/aria/lead-feed" element={<LeadFeedSEO />} />
+              <Route path="/aria/sales-reports" element={<SalesReportsSEO />} />
+              <Route path="/aria/use-cases/founders" element={<UseFounders />} />
+              <Route path="/aria/use-cases/startups" element={<UseStartups />} />
+              <Route path="/aria/use-cases/agencies" element={<UseAgencies />} />
+              <Route path="/aria/use-cases/consultants" element={<UseConsultants />} />
+              <Route path="/aria/use-cases/sales-teams" element={<UseSalesTeams />} />
+              <Route path="/aria/compare/aria-vs-crm" element={<CompareAriaVsCrm />} />
+              <Route path="/aria/compare/aria-vs-spreadsheets" element={<CompareAriaVsSpreadsheets />} />
+              <Route path="/aria/compare/ai-sales-assistant-vs-crm" element={<CompareAiVsCrm />} />
               <Route
                 path="/onboarding"
                 element={

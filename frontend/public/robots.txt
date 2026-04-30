@@ -1,0 +1,51 @@
+# ARIA by GenLeadAI — public content ecosystem
+# Full access granted to traditional search engines and AI answer engines.
+
+User-agent: *
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+user-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# Private app surface (requires auth) — content is gated; these crawlers will
+# simply be redirected to /login, which is allowed. We keep a permissive stance
+# so they can see the login page, then stop at the boundary naturally.
+
+Sitemap: https://genleadai.com/sitemap.xml
+Sitemap: https://app.genleadai.com/sitemap.xml
