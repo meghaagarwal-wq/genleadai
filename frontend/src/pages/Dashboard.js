@@ -6,6 +6,10 @@ import AriaInsightCard from '../components/AriaInsightCard';
 import FounderCommandCenter from '../components/FounderCommandCenter';
 import AriaTodayWidget from '../components/AriaTodayWidget';
 import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
+import WorkspaceHero from '../components/WorkspaceHero';
+import AriaStories from '../components/AriaStories';
+import LeadFeed from '../components/LeadFeed';
+import PipelineMoodCard from '../components/PipelineMoodCard';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -93,6 +97,24 @@ const Dashboard = () => {
 
   return (
     <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto">
+      {/* ━━━ Workspace layer — first impression should be "what ARIA needs me to do today", not "here's what ARIA is" ━━━ */}
+      <WorkspaceHero userName={user?.full_name} />
+
+      {/* ARIA Stories — leads that need attention now */}
+      <AriaStories />
+
+      {/* Lead Feed + Pipeline Mood — the central workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
+        <LeadFeed />
+        <div className="space-y-4">
+          <PipelineMoodCard />
+        </div>
+      </div>
+
+      <div className="h-2" />
+
+      {/* ━━━ Below-the-fold: existing ARIA Command Center content preserved ━━━ */}
+
       {/* ARIA Command Center Header */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
