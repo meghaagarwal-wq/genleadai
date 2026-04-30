@@ -9,6 +9,7 @@ import {
   SignOut, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
   GraduationCap, BookOpen, MapTrifold, FileText, ShieldCheck, ArrowClockwise, Brain,
+  Stack, CalendarCheck,
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
@@ -56,7 +57,10 @@ const Layout = ({ children }) => {
     { icon: FileText, label: 'Founder Briefs', path: '/aria-agent/briefs' },
     { icon: ShieldCheck, label: 'Human Handoff', path: '/aria-agent/handoff' },
     { icon: ArrowClockwise, label: 'Revival Engine', path: '/aria-agent/revival' },
+    { icon: Stack, label: 'Sales Assets', path: '/aria-agent/assets' },
+    { icon: Brain, label: 'ARIA Brain', path: '/aria-agent/brain' },
     { icon: Brain, label: 'ARIA Insights', path: '/aria-agent/insights' },
+    { icon: CalendarCheck, label: 'Weekly Recap', path: '/aria-agent/weekly-recap' },
   ];
 
   const NavContent = ({ mobile = false }) => (

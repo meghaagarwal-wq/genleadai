@@ -1,0 +1,43 @@
+{
+  "summary": "Iter 20 — Sales Assets + ARIA Brain + Weekly Recap (3 new additive pages) fully validated end-to-end. Backend: 15/15 pytest PASS on /app/backend/tests/test_iter20_assets_brain_recap.py. Covered: GET /api/aria-agent/assets/catalog (7 types with id/label/icon/description), GET /api/aria-agent/assets (assets+stats{total,active,used_this_week,top_asset,by_type}+types), POST /api/aria-agent/assets (returns id + created_at + usage_count=0 + last_used_at=null, no _id leak), PATCH /api/aria-agent/assets/{id} (round-trip persistence, no _id), POST /api/aria-agent/assets/{id}/use (usage_count increments by 1 and last_used_at populated — verified via follow-up GET), DELETE /api/aria-agent/assets/{id} ({ok:true}, second delete -> 404), PATCH/DELETE 404 on missing id, GET /api/aria-agent/brain (completion_pct + filled_fields + total_fields + 6 sections with expected ids {business,icp,qualification,voice,objections,booking} + each has items/filled/total/completion_pct + gaps<=8 + learnings>=1 + headline string), GET /api/aria-agent/weekly-recap (headline + narrative + 6 stats with labels {New leads, Qualified, Replies sent, Calls booked, Deals won, Deals lost} each with value+delta + top_channel + biggest_win + biggest_miss + next_week_focus=3). Regressions pass: /api/aria-agent/training, /playbooks, /handoff/alerts, /workspace/stories, /workspace/feed — all 200 with no _id leak. Frontend: logged in as admin@demo.com, all 3 new sidebar nav items (nav-sales-assets, nav-aria-brain, nav-weekly-recap) FOUND. /aria-agent/assets renders sales-assets-page with asset-stats tile, 8 type tabs (All + 7), empty state with empty-create-btn. Full UI CRUD flow verified: create-asset-btn opens asset-form-modal, asset-title-input + asset-body-input + asset-tags-input fill OK, asset-submit-btn creates asset -> card renders with asset-card-{id}, asset-copy-* click fires /use and increments usage (no error), asset-edit-* reopens modal with prefill and saves, asset-delete-* removes. /aria-agent/brain renders aria-brain-page with brain-hero + all 6 brain-section-{business,icp,qualification,voice,objections,booking} + brain-gaps + brain-learnings. /aria-agent/weekly-recap renders weekly-recap-page with recap-hero + 6 recap-stat-* tiles + 3 recap-focus-* bullets + biggest win/miss cards. Regression on previously-shipped pages OK (/aria-agent/train, /aria-agent/playbooks, /aria-agent/insights load with no error boundary). No console errors introduced.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter20_assets_brain_recap.py",
+    "/app/test_reports/pytest/iter20_assets_brain_recap.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "aria_agent_routes.py:1118 list_assets — uses sync pymongo on an async route (assets_collection.find / count_documents / sort). Same pattern as rest of file; not a bug, just confirm alignment with server.py's driver convention. If motor is used project-wide, these should be awaited.",
+    "aria_agent_routes.py:1154 create_asset — good pattern: `dict(doc)` copy passed to insert_one to avoid _id mutation on the returned dict, then explicit dict comprehension drops any stray _id. Defensive and clean.",
+    "aria_agent_routes.py:1155 create_asset response — `{k: v for k, v in doc.items() if k != '_id'}` is belt-and-braces after the copy trick. Safe.",
+    "aria_agent_routes.py:1164 update_asset — uses `find_one({'id': asset_id}, {'_id': 0})` projection to strip _id. Correct.",
+    "aria_agent_routes.py:1235 aria_brain tone handling — has a redundant `filled = bool(val) and val != 'founder_like' if f == 'tone' else bool(val)` line immediately overwritten by the `if f == 'tone': filled = bool(val)` on the next lines. Harmless (second wins) but dead code; cleanup recommended.",
+    "aria_agent_routes.py:1311 weekly_recap `_between` helper — defined but not used (every call inlines `count_documents({field: {$gte: ws_iso}})`). Minor dead-code nit.",
+    "aria_agent_routes.py:1316-1328 weekly_recap — mixes ISO-string dates on created_at/updated_at/last_contacted_at queries. Works only if the collection stores these as ISO strings; would silently return 0 for native datetimes. Consistent with iter19 pattern so presumably fine, but worth a confirmation fixture if ever storage changes.",
+    "aria_agent_routes.py:1387 next_week_focus fallback loop — `while len(focus) < 3` with inner `for f in fallback` always adds at most one per outer iteration; works but easier expressed as `focus.extend([f for f in fallback if f not in focus])[:3-len(focus)]`. Cosmetic only.",
+    "SalesAssets.js:82 copyBody — calls `navigator.clipboard.writeText` which can throw in non-secure contexts; the .catch on the /use endpoint is separate so a clipboard failure bypasses the API call AND shows 'Copy failed' toast. Consider firing the /use call regardless (usage_count should increment when the user intends to use the asset, not only when the clipboard write succeeds).",
+    "SalesAssets.js:22 load — `try {...} catch { /* swallow */ }` silently hides API failures, then `setData(undefined)` leads to empty UI with no error toast. Recommend surfacing a one-line error state.",
+    "AriaBrain.js / WeeklyRecap.js — both pages degrade gracefully when backend returns empty data (tested with real workspace: 8 new leads, 1 qualified, 10 replies, 0 calls). Narrative + biggest-miss render correctly. Clean.",
+    "Layout.js — 3 new nav-{kebab} testids derive deterministically from labels; matches iter19 pattern. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter20_assets_brain_recap.py (NEW — 15 tests, all pass)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 pytest pass; regressions on /api/aria-agent/training, /playbooks, /handoff/alerts, /workspace/stories, /workspace/feed all 200 and clean)",
+    "frontend": "100% (login, 3 new sidebar nav entries, SalesAssets full CRUD + copy/use, AriaBrain with 6 sections, WeeklyRecap with 6 stats + 3 focus items, regression on /aria-agent/train + /playbooks + /insights)"
+  },
+  "test_credentials": "admin@demo.com / Demo1234! (token key: 'token' or 'access_token').",
+  "seed_data_creation": "Created and deleted 1 asset via backend tests (TEST_iter20_asset_* — cleaned up in test_delete_asset). Created and deleted 1 asset via UI test (TEST_UI_Asset_Iter20 → TEST_UI_Asset_UPDATED → deleted).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 20 — Sales Assets + ARIA Brain + Weekly Recap shipped cleanly. Backend endpoints live at /api/aria-agent/assets[/catalog|/{id}|/{id}/use], /api/aria-agent/brain, /api/aria-agent/weekly-recap. Reuse /app/backend/tests/test_iter20_assets_brain_recap.py as regression for future iterations. Asset CRUD testids: create-asset-btn, asset-form-modal, asset-title-input, asset-type-select, asset-body-input, asset-tags-input, asset-channel-input, asset-active-toggle, asset-submit-btn, asset-cancel-btn; per-card asset-card-{id}, asset-copy-{id}, asset-edit-{id}, asset-delete-{id}. Brain section ids exactly: business, icp, qualification, voice, objections, booking (testid prefix brain-section-). Weekly recap testids: recap-hero, recap-stat-{kebab-label} (e.g. recap-stat-new-leads), recap-focus-{0,1,2}. 3 new sidebar testids: nav-sales-assets, nav-aria-brain, nav-weekly-recap."
+}

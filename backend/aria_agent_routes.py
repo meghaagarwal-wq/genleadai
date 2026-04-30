@@ -1075,6 +1075,348 @@ Return ONLY the message text — no JSON, no explanation, no preamble."""
             "live_observation": "ARIA noticed that leads from LinkedIn are asking more pricing-related questions, while website leads are more likely to book a demo after seeing proof.",
         }
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 9. Sales Assets — reusable content ARIA can send on your behalf
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    assets_collection = db["aria_sales_assets"]
+
+    ASSET_TYPES = [
+        {"id": "message_template", "label": "Message templates", "icon": "ChatText",
+         "description": "Short, reusable messages ARIA can personalise per lead."},
+        {"id": "voice_note", "label": "Founder voice notes", "icon": "Microphone",
+         "description": "Pre-recorded founder voice notes for high-value moments."},
+        {"id": "case_study", "label": "Case studies", "icon": "FileText",
+         "description": "Proof stories ARIA weaves into objection responses."},
+        {"id": "proposal_template", "label": "Proposal templates", "icon": "Article",
+         "description": "Structured proposal outlines ARIA tailors to each lead."},
+        {"id": "founder_intro", "label": "Founder intros", "icon": "User",
+         "description": "Personal intros ARIA can deploy when a lead wants the founder."},
+        {"id": "objection_response", "label": "Objection responses", "icon": "ShieldCheck",
+         "description": "Battle-tested responses to common pushbacks."},
+        {"id": "pricing_doc", "label": "Pricing docs", "icon": "CurrencyDollar",
+         "description": "Pricing one-pagers ARIA surfaces at the right time."},
+    ]
+
+    class AssetPayload(BaseModel):
+        title: str
+        type: str = "message_template"
+        body: str = ""
+        tags: List[str] = Field(default_factory=list)
+        channel: Optional[str] = None
+        used_by_aria: bool = True
+
+    @router.get("/assets/catalog")
+    async def assets_catalog(current_user: dict = Depends(get_current_user)):
+        return {"types": ASSET_TYPES}
+
+    @router.get("/assets")
+    async def list_assets(type: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+        q = {}
+        if type:
+            q["type"] = type
+        docs = list(assets_collection.find(q, {"_id": 0}).sort("created_at", -1))
+        # Summary stats
+        total = assets_collection.count_documents({})
+        active = assets_collection.count_documents({"used_by_aria": True})
+        now = datetime.now(timezone.utc)
+        week_start = (now - timedelta(days=7)).isoformat()
+        used_this_week = assets_collection.count_documents({"last_used_at": {"$gte": week_start}})
+        top_cursor = list(assets_collection.find({}, {"_id": 0}).sort("usage_count", -1).limit(1))
+        top = top_cursor[0] if top_cursor else None
+        # By type breakdown
+        by_type = {}
+        for a in assets_collection.find({}, {"_id": 0, "type": 1}):
+            t = a.get("type") or "message_template"
+            by_type[t] = by_type.get(t, 0) + 1
+        return {
+            "assets": docs,
+            "stats": {
+                "total": total,
+                "active": active,
+                "used_this_week": used_this_week,
+                "top_asset": top,
+                "by_type": by_type,
+            },
+            "types": ASSET_TYPES,
+        }
+
+    @router.post("/assets")
+    async def create_asset(payload: AssetPayload, current_user: dict = Depends(get_current_user)):
+        from uuid import uuid4
+        doc = payload.dict()
+        doc["id"] = str(uuid4())
+        doc["created_at"] = datetime.now(timezone.utc).isoformat()
+        doc["updated_at"] = doc["created_at"]
+        doc["usage_count"] = 0
+        doc["last_used_at"] = None
+        doc["created_by"] = current_user.get("id") or current_user.get("_id") or "founder"
+        assets_collection.insert_one(dict(doc))  # copy to avoid _id mutation on our dict
+        return {k: v for k, v in doc.items() if k != "_id"}
+
+    @router.patch("/assets/{asset_id}")
+    async def update_asset(asset_id: str, payload: AssetPayload, current_user: dict = Depends(get_current_user)):
+        data = payload.dict()
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        res = assets_collection.update_one({"id": asset_id}, {"$set": data})
+        if res.matched_count == 0:
+            raise HTTPException(404, "Asset not found")
+        doc = assets_collection.find_one({"id": asset_id}, {"_id": 0})
+        return doc
+
+    @router.delete("/assets/{asset_id}")
+    async def delete_asset(asset_id: str, current_user: dict = Depends(get_current_user)):
+        res = assets_collection.delete_one({"id": asset_id})
+        if res.deleted_count == 0:
+            raise HTTPException(404, "Asset not found")
+        return {"ok": True}
+
+    @router.post("/assets/{asset_id}/use")
+    async def mark_asset_used(asset_id: str, current_user: dict = Depends(get_current_user)):
+        now = datetime.now(timezone.utc).isoformat()
+        res = assets_collection.update_one({"id": asset_id}, {"$inc": {"usage_count": 1}, "$set": {"last_used_at": now}})
+        if res.matched_count == 0:
+            raise HTTPException(404, "Asset not found")
+        return {"ok": True}
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 10. ARIA Brain — consolidated knowledge map
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    BRAIN_SECTIONS = [
+        {"id": "business", "label": "About your business", "icon": "Buildings",
+         "fields": ["what_you_sell", "who_you_sell_to", "problem_you_solve", "differentiator", "main_offerings"]},
+        {"id": "icp", "label": "Your ICP", "icon": "Crosshair",
+         "fields": ["target_industries", "target_roles", "company_size", "geography", "budget_range", "intent_signals", "disqualification_signals"]},
+        {"id": "qualification", "label": "Qualifying logic", "icon": "Funnel",
+         "fields": ["qualifying_questions", "qualified_definition", "low_priority_definition", "when_to_book_call", "when_to_alert_human"]},
+        {"id": "voice", "label": "Brand voice", "icon": "Waveform",
+         "fields": ["tone", "custom_voice"]},
+        {"id": "objections", "label": "Objection handling", "icon": "ShieldCheck",
+         "fields": ["pricing_objections", "timing_objections", "trust_concerns", "competitor_responses", "custom_faq"]},
+        {"id": "booking", "label": "Booking rules", "icon": "CalendarCheck",
+         "fields": ["calendar_link", "booking_criteria", "pre_call_questions", "reminder_timing", "no_show_message"]},
+    ]
+
+    FIELD_LABELS = {
+        "what_you_sell": "What you sell", "who_you_sell_to": "Who you sell to",
+        "problem_you_solve": "Problem you solve", "differentiator": "Differentiator",
+        "main_offerings": "Main offerings",
+        "target_industries": "Target industries", "target_roles": "Target roles",
+        "company_size": "Company size", "geography": "Geography", "budget_range": "Budget range",
+        "intent_signals": "Intent signals", "disqualification_signals": "Disqualifiers",
+        "qualifying_questions": "Qualifying questions", "qualified_definition": "What 'qualified' means",
+        "low_priority_definition": "Low-priority definition", "when_to_book_call": "When to book a call",
+        "when_to_alert_human": "When to alert you",
+        "tone": "Tone", "custom_voice": "Custom voice notes",
+        "pricing_objections": "Pricing objections", "timing_objections": "Timing objections",
+        "trust_concerns": "Trust concerns", "competitor_responses": "Competitor responses",
+        "custom_faq": "Custom FAQ",
+        "calendar_link": "Calendar link", "booking_criteria": "Booking criteria",
+        "pre_call_questions": "Pre-call questions", "reminder_timing": "Reminder timing",
+        "no_show_message": "No-show message",
+    }
+
+    @router.get("/brain")
+    async def aria_brain(current_user: dict = Depends(get_current_user)):
+        training = training_collection_ref.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+        training.pop("scope", None)
+        training.pop("updated_at", None)
+
+        sections_out = []
+        total_fields = 0
+        filled_fields = 0
+        gaps = []
+        for sec in BRAIN_SECTIONS:
+            items = []
+            sec_filled = 0
+            for f in sec["fields"]:
+                val = (training.get(f) or "").strip() if isinstance(training.get(f), str) else training.get(f)
+                filled = bool(val) and val != "founder_like" if f == "tone" else bool(val)
+                # For tone, we count any value (default "founder_like") as filled
+                if f == "tone":
+                    filled = bool(val)
+                items.append({
+                    "key": f,
+                    "label": FIELD_LABELS.get(f, f.replace("_", " ").title()),
+                    "value": val if filled else "",
+                    "filled": filled,
+                })
+                total_fields += 1
+                if filled:
+                    filled_fields += 1
+                    sec_filled += 1
+                else:
+                    gaps.append({"section": sec["id"], "section_label": sec["label"], "field": f, "label": FIELD_LABELS.get(f, f)})
+            sections_out.append({
+                "id": sec["id"], "label": sec["label"], "icon": sec["icon"],
+                "filled": sec_filled, "total": len(sec["fields"]),
+                "completion_pct": round(sec_filled / max(len(sec["fields"]), 1) * 100),
+                "items": items,
+            })
+
+        completion_pct = round(filled_fields / max(total_fields, 1) * 100)
+
+        # Live learnings derived from workspace data
+        leads_total = leads_collection.count_documents({})
+        wins = leads_collection.count_documents({"status": "won"})
+        lost = leads_collection.count_documents({"status": "lost"})
+        hot = leads_collection.count_documents({"icp_score": {"$gte": 80}})
+        # Top source
+        src_counts = {}
+        for l in leads_collection.find({}, {"_id": 0, "source_channel": 1}):
+            s = (l.get("source_channel") or "other").replace("_", " ").title()
+            src_counts[s] = src_counts.get(s, 0) + 1
+        top_source = max(src_counts, key=src_counts.get) if src_counts else "—"
+        # Top objection from lost_reason
+        lost_reasons = {}
+        for l in leads_collection.find({"status": "lost"}, {"_id": 0, "lost_reason": 1}):
+            r = (l.get("lost_reason") or "unspecified").replace("_", " ").title()
+            lost_reasons[r] = lost_reasons.get(r, 0) + 1
+        top_loss = max(lost_reasons, key=lost_reasons.get) if lost_reasons else "—"
+
+        learnings = [
+            {"label": "Leads tracked", "value": str(leads_total), "hint": "Total conversations ARIA has context on."},
+            {"label": "Wins recorded", "value": str(wins), "hint": "ARIA learns from every closed-won."},
+            {"label": "Top source", "value": top_source, "hint": "Where most of your pipeline comes from."},
+            {"label": "Top loss reason", "value": top_loss, "hint": "ARIA watches this and adjusts rebuttals."},
+            {"label": "Hot leads in memory", "value": str(hot), "hint": "ICP ≥ 80 — ARIA prioritises these."},
+        ]
+
+        return {
+            "completion_pct": completion_pct,
+            "filled_fields": filled_fields,
+            "total_fields": total_fields,
+            "sections": sections_out,
+            "gaps": gaps[:8],
+            "learnings": learnings,
+            "headline": (
+                "ARIA is fully trained and running your sales motion." if completion_pct >= 85
+                else f"ARIA is {completion_pct}% trained — close the gaps to sharpen every reply."
+            ),
+        }
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # 11. Weekly Recap
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    @router.get("/weekly-recap")
+    async def weekly_recap(current_user: dict = Depends(get_current_user)):
+        now = datetime.now(timezone.utc)
+        week_start = now - timedelta(days=7)
+        prev_start = now - timedelta(days=14)
+        ws_iso = week_start.isoformat()
+        ps_iso = prev_start.isoformat()
+
+        def _between(col, field, start, end):
+            return col.count_documents({field: {"$gte": start, "$lt": end}})
+
+        # This week
+        now_iso = now.isoformat()
+        new_leads = _between(leads_collection, "created_at", ws_iso, now_iso)
+        qualified = leads_collection.count_documents({"status": "qualified", "updated_at": {"$gte": ws_iso}})
+        replies_sent = activities_collection.count_documents({"activity_type": {"$in": ["email_sent", "whatsapp_sent"]}, "created_at": {"$gte": ws_iso}})
+        calls_booked = activities_collection.count_documents({"activity_type": "meeting_scheduled", "created_at": {"$gte": ws_iso}})
+        deals_won = leads_collection.count_documents({"status": "won", "updated_at": {"$gte": ws_iso}})
+        deals_lost = leads_collection.count_documents({"status": "lost", "updated_at": {"$gte": ws_iso}})
+
+        # Previous week
+        prev_new = leads_collection.count_documents({"created_at": {"$gte": ps_iso, "$lt": ws_iso}})
+        prev_qualified = leads_collection.count_documents({"status": "qualified", "updated_at": {"$gte": ps_iso, "$lt": ws_iso}})
+        prev_replies = activities_collection.count_documents({"activity_type": {"$in": ["email_sent", "whatsapp_sent"]}, "created_at": {"$gte": ps_iso, "$lt": ws_iso}})
+        prev_booked = activities_collection.count_documents({"activity_type": "meeting_scheduled", "created_at": {"$gte": ps_iso, "$lt": ws_iso}})
+        prev_won = leads_collection.count_documents({"status": "won", "updated_at": {"$gte": ps_iso, "$lt": ws_iso}})
+
+        def _delta(cur, prev):
+            if prev == 0 and cur == 0: return 0
+            if prev == 0: return 100
+            return round((cur - prev) / prev * 100)
+
+        # Biggest win / miss
+        win_cursor = list(leads_collection.find({"status": "won", "updated_at": {"$gte": ws_iso}}, {
+            "_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "deal_value": 1,
+        }).sort([("deal_value", -1), ("icp_score", -1)]).limit(1))
+        biggest_win = win_cursor[0] if win_cursor else None
+
+        miss_cursor = list(leads_collection.find({
+            "icp_score": {"$gte": 75},
+            "status": {"$in": ["contacted", "qualified", "proposal_sent"]},
+            "last_contacted_at": {"$lt": ws_iso},
+        }, {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "last_contacted_at": 1})
+            .sort("icp_score", -1).limit(1))
+        biggest_miss = miss_cursor[0] if miss_cursor else None
+
+        # Top signal of the week
+        src_week = {}
+        for l in leads_collection.find({"created_at": {"$gte": ws_iso}}, {"_id": 0, "source_channel": 1}):
+            s = (l.get("source_channel") or "other").replace("_", " ").title()
+            src_week[s] = src_week.get(s, 0) + 1
+        top_channel = max(src_week, key=src_week.get) if src_week else "—"
+
+        # Build narrative
+        if new_leads == 0 and replies_sent == 0 and calls_booked == 0 and deals_won == 0:
+            narrative = (
+                "This week was quiet on the wire — no new leads, replies, or bookings logged yet. "
+                "That's a refill signal, not a red flag. Use tomorrow to run a revival sweep on silent leads "
+                "and trigger fresh capture — ARIA will handle the conversations as they come in."
+            )
+        else:
+            parts = []
+            parts.append(f"ARIA handled {replies_sent} conversations this week")
+            if calls_booked > 0:
+                parts.append(f"booked {calls_booked} call{'s' if calls_booked != 1 else ''}")
+            if qualified > 0:
+                parts.append(f"qualified {qualified} lead{'s' if qualified != 1 else ''}")
+            if deals_won > 0:
+                parts.append(f"closed {deals_won} deal{'s' if deals_won != 1 else ''}")
+            narrative = ", ".join(parts) + "."
+            if top_channel and top_channel != "—":
+                narrative += f" Your strongest source was {top_channel}."
+            if biggest_miss:
+                narrative += f" Watch out — {biggest_miss.get('first_name','a high-ICP lead')} ({biggest_miss.get('company_name','—')}) has gone silent."
+
+        # Next week focus — heuristic 3 bullets
+        focus = []
+        if biggest_miss:
+            miss_name = biggest_miss.get('first_name') or f"your silent ICP-{biggest_miss.get('icp_score', 80)}+"
+            focus.append(f"Revive {miss_name} lead at {biggest_miss.get('company_name','—')} with a founder voice note.")
+        if _delta(replies_sent, prev_replies) < 0:
+            focus.append("Reply volume dropped vs last week — audit your automations and triggers.")
+        if _delta(calls_booked, prev_booked) < 0 and calls_booked < 3:
+            focus.append("Calls booked are trending down — tighten the booking CTA on warm replies.")
+        while len(focus) < 3:
+            fallback = [
+                "Push one proposal to decision with a specific deadline message.",
+                "Add one more case study to the nurture journey — ARIA will weave it into objections.",
+                "Ship one founder voice note this week to your top 3 hot leads.",
+                "Clean qualifier answers in Train ARIA so ARIA escalates to you faster.",
+            ]
+            for f in fallback:
+                if f not in focus:
+                    focus.append(f)
+                    break
+            if len(focus) >= 3:
+                break
+
+        return {
+            "week_start": ws_iso,
+            "week_end": now.isoformat(),
+            "headline": f"Week of {week_start.strftime('%b %d')} → {now.strftime('%b %d')}",
+            "narrative": narrative,
+            "stats": [
+                {"label": "New leads", "value": new_leads, "delta": _delta(new_leads, prev_new), "prev": prev_new},
+                {"label": "Qualified", "value": qualified, "delta": _delta(qualified, prev_qualified), "prev": prev_qualified},
+                {"label": "Replies sent", "value": replies_sent, "delta": _delta(replies_sent, prev_replies), "prev": prev_replies},
+                {"label": "Calls booked", "value": calls_booked, "delta": _delta(calls_booked, prev_booked), "prev": prev_booked},
+                {"label": "Deals won", "value": deals_won, "delta": _delta(deals_won, prev_won), "prev": prev_won},
+                {"label": "Deals lost", "value": deals_lost, "delta": 0, "prev": 0},
+            ],
+            "top_channel": top_channel,
+            "biggest_win": biggest_win,
+            "biggest_miss": biggest_miss,
+            "next_week_focus": focus[:3],
+        }
+
     return router
 
 

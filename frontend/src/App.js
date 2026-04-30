@@ -29,6 +29,9 @@ import FounderBriefs from './pages/FounderBriefs';
 import HumanHandoff from './pages/HumanHandoff';
 import RevivalEngine from './pages/RevivalEngine';
 import AriaInsightsPage from './pages/AriaInsightsPage';
+import SalesAssets from './pages/SalesAssets';
+import AriaBrain from './pages/AriaBrain';
+import WeeklyRecap from './pages/WeeklyRecap';
 import Layout from './components/Layout';
 import UpgradeModal from './components/UpgradeModal';
 import './App.css';
@@ -108,6 +111,9 @@ function App() {
                         <Route path="/aria-agent/handoff" element={<HumanHandoff />} />
                         <Route path="/aria-agent/revival" element={<RevivalEngine />} />
                         <Route path="/aria-agent/insights" element={<AriaInsightsPage />} />
+                        <Route path="/aria-agent/assets" element={<SalesAssets />} />
+                        <Route path="/aria-agent/brain" element={<AriaBrain />} />
+                        <Route path="/aria-agent/weekly-recap" element={<WeeklyRecap />} />
                       </Routes>
                       <UpgradeModal />
                     </Layout>
