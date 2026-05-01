@@ -32,7 +32,7 @@ const REPORTS = [
 const SalesReportsSEO = () => {
   useSEO({
     title: 'AI Sales Reporting Dashboard | ARIA by GenLeadAI',
-    description: 'ARIA's sales reports help founders understand pipeline movement, channel performance, follow-up gaps, lead quality, revenue at risk, and next best actions.',
+    description: 'ARIA\'s sales reports help founders understand pipeline movement, channel performance, follow-up gaps, lead quality, revenue at risk, and next best actions.',
     canonical: URL,
     jsonLd: [
       softwareAppSchema({ description: 'ARIA AI sales reporting dashboard — pipeline intelligence, revenue at risk, channel performance, and recommended actions.', url: URL }),

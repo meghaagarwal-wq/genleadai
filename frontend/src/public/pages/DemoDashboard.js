@@ -45,7 +45,7 @@ const DemoDashboard = () => {
 
   useSEO({
     title: 'ARIA Demo Dashboard | AI Sales Workspace',
-    description: 'Explore ARIA's demo dashboard with Lead Feed, ARIA Stories, Morning Brief, AI reply suggestions, hot leads, follow-ups due, revenue at risk, and sales intelligence reports.',
+    description: 'Explore ARIA\'s demo dashboard with Lead Feed, ARIA Stories, Morning Brief, AI reply suggestions, hot leads, follow-ups due, revenue at risk, and sales intelligence reports.',
     canonical: URL,
     jsonLd: [
       softwareAppSchema({

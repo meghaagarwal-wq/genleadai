@@ -20,11 +20,11 @@ const Founders = () => (
       'Surfaces revenue at risk — stuck proposals, silent ICP-80+, unactioned hot',
     ]}
     dailyWorkflow={[
-      'Morning: open ARIA → read the Morning Brief (3 sentences, what's hot, what's stuck, what to ship first)',
+      'Morning: open ARIA → read the Morning Brief (3 sentences, what\'s hot, what\'s stuck, what to ship first)',
       'Scroll the Lead Feed → tap the 3 highest-urgency cards → approve or edit the ARIA-drafted replies',
       'Demos: ARIA books calls on your Calendly. A Founder Brief waits in your inbox 30 min before each call',
       'Afternoon: ARIA handles follow-ups across channels. You only get pinged when Human Handoff is needed',
-      'Evening: End-of-Day Wrap email summarises the day — what moved, what's at risk, tomorrow's priorities',
+      'Evening: End-of-Day Wrap email summarises the day — what moved, what\'s at risk, tomorrow\'s priorities',
     ]}
     toolsReduced={['Generic CRM', 'Spreadsheet lead tracker', 'Separate follow-up tools', 'Inbox chaos', 'Messaging apps for reminders', 'Manual Calendly round-robin']}
     keyFeatures={[
@@ -32,11 +32,11 @@ const Founders = () => (
       { title: 'Lead Feed', body: 'Every buying signal, ranked by urgency. No more scrolling spreadsheets.' },
       { title: 'Ask ARIA to Reply', body: 'WhatsApp, email, LinkedIn, call script. Founder-led tone. Ready in seconds.' },
       { title: 'Founder Briefs', body: 'Before every call, ARIA prepares a brief: lead context, likely objections, opening lines.' },
-      { title: 'Revenue at Risk', body: 'Live $ figure of stuck proposals and silent leads you're losing right now.' },
+      { title: 'Revenue at Risk', body: 'Live $ figure of stuck proposals and silent leads you\'re losing right now.' },
       { title: 'Human Handoff', body: 'ARIA only pings you when a lead truly needs your voice — not for every reply.' },
     ]}
     faq={[
-      { q: 'I'm the only salesperson. Will ARIA really help?', a: 'Yes. ARIA is designed for founder-led selling. It takes the repetitive 80% (first replies, follow-ups, qualification, scheduling) off your plate so you only show up for founder-only moments — pricing calls, custom scopes, closing conversations.' },
+      { q: 'I\'m the only salesperson. Will ARIA really help?', a: 'Yes. ARIA is designed for founder-led selling. It takes the repetitive 80% (first replies, follow-ups, qualification, scheduling) off your plate so you only show up for founder-only moments — pricing calls, custom scopes, closing conversations.' },
       { q: 'Will ARIA sound like me, or a generic bot?', a: 'ARIA is trained on your positioning, offer, voice, and objection handling. Every reply is grounded in your tone and lead context. You approve before anything goes out — nothing ships without your OK unless you allow auto-send.' },
       { q: 'How long to set up ARIA?', a: 'Under 15 minutes for the Train ARIA wizard (what you sell, ICP, voice, qualifying questions). WhatsApp and Calendly connect in one click each. You can start working real leads on day one.' },
       { q: 'Can I still take over a conversation manually?', a: 'Always. Tap "Take over manually" on any lead and ARIA steps back. When you want ARIA back in the loop, tap "Let ARIA reply" — she picks up right where you left off.' },

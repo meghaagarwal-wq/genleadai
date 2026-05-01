@@ -24,7 +24,7 @@ const AISalesAssistantVsCrm = () => (
       { label: 'Needs dedicated admin', aria: false, other: true },
     ]}
     whenToUseAria={[
-      'You're founder-led or small-team and need action today',
+      'You\'re founder-led or small-team and need action today',
       'You want AI that thinks, not AI that summarises',
       'You sell across WhatsApp, email, LinkedIn and need replies drafted',
       'You want Morning Briefs, Founder Briefs, Weekly Recaps',
@@ -39,13 +39,13 @@ const AISalesAssistantVsCrm = () => (
     ]}
     whyFoundersNeedAction={[
       'AI sales assistants are a new category — different from CRMs, different from chatbots. The simplest way to understand them: an AI sales assistant is an operator, not a database. It reads, thinks, writes, and ships — in your voice, grounded in your data.',
-      'CRMs will always have a place for large, process-heavy sales orgs. They're the source of truth, the reporting spine, the forecasting system. But for the first 10 people in sales, opening a CRM is a tax on momentum.',
+      'CRMs will always have a place for large, process-heavy sales orgs. They\'re the source of truth, the reporting spine, the forecasting system. But for the first 10 people in sales, opening a CRM is a tax on momentum.',
       'The pattern we see: founders deploy ARIA first, hit $1–5M ARR on ARIA alone, then layer a CRM underneath when the team hits 10+ reps. The CRM becomes the storage; ARIA stays the daily workspace.',
     ]}
     faq={[
       { q: 'Is an AI sales assistant the same as a chatbot?', a: 'No. Chatbots answer customer questions on your website. AI sales assistants like ARIA handle the full sales motion — capture, qualify, follow up, book, brief, report — across every channel, with context grounded in your workspace training.' },
       { q: 'Can I keep my CRM and use an AI sales assistant?', a: 'Yes. Most teams do. ARIA runs as the daily workspace; your CRM stays as the pipeline ledger. ARIA can sync data back to HubSpot, Salesforce, or Pipedrive.' },
-      { q: 'What's the ROI of switching from CRM-only to AI sales assistant?', a: 'Time savings are the fastest — most teams save 30–90 minutes per salesperson per day. Revenue uplift comes from faster first-replies (60 minutes vs 12 hours), better follow-up consistency, and zero "I'll circle back next week" drops.' },
+      { q: 'What\'s the ROI of switching from CRM-only to AI sales assistant?', a: 'Time savings are the fastest — most teams save 30–90 minutes per salesperson per day. Revenue uplift comes from faster first-replies (60 minutes vs 12 hours), better follow-up consistency, and zero "I\'ll circle back next week" drops.' },
       { q: 'Will AI replies sound generic?', a: 'Only if you train them generically. ARIA is trained on your voice, offer, objection handling, and every past conversation — so replies are specific, personal, and sound like you.' },
       { q: 'Is AI sales assistant a real category?', a: 'Yes. The category is emerging alongside agentic AI — Gartner, Forrester, and others have named it in 2025–2026 research. ARIA is one of the earliest purpose-built entrants for founder-led teams.' },
     ]}

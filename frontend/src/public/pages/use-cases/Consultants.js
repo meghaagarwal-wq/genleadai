@@ -20,7 +20,7 @@ const Consultants = () => (
     ]}
     dailyWorkflow={[
       'Open ARIA between client calls — 3-minute scan of the Lead Feed',
-      'Approve ARIA's drafted replies for tire-kickers and fit leads alike',
+      'Approve ARIA\'s drafted replies for tire-kickers and fit leads alike',
       'Before every discovery call, open the Founder Brief in your inbox',
       'Let ARIA handle "still thinking?" follow-ups on Day 3, 7, 14',
       'Weekly Recap shows which content or referral partner booked your best call',

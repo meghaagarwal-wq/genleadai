@@ -14,17 +14,17 @@ const FAQ = [
   { q: 'Who is ARIA for?', a: 'ARIA is built for founders, startups, agencies, consultants, and small sales teams that cannot yet hire a full-time sales team but still need predictable pipeline, follow-ups, and booked calls.' },
   { q: 'How is ARIA different from a CRM?', a: 'A CRM stores leads. ARIA works them. CRMs record pipeline data; ARIA reads every conversation, detects buying signals, drafts replies in your voice, books demos, and tells founders what to do next.' },
   { q: 'Can ARIA help with follow-ups?', a: 'Yes. ARIA writes and sends follow-ups across WhatsApp, email, and LinkedIn, and escalates to you only when a human touch is needed — like pricing, objections, or hot leads ready to buy.' },
-  { q: 'Can ARIA write replies?', a: 'Yes. ARIA drafts replies in your tone (founder-led, consultative, premium, closer, nurture) grounded in your workspace training and each lead's conversation history. You approve, edit or send.' },
+  { q: 'Can ARIA write replies?', a: 'Yes. ARIA drafts replies in your tone (founder-led, consultative, premium, closer, nurture) grounded in your workspace training and each lead\'s conversation history. You approve, edit or send.' },
   { q: 'Can ARIA track revenue at risk?', a: 'Yes. ARIA surfaces stuck proposals, silent high-ICP leads, unactioned hot leads, and conversations at risk of going cold — quantified in pipeline value.' },
-  { q: 'Can ARIA help book demos?', a: 'Yes. ARIA qualifies leads against your ICP, then books calls on your Calendly with suggested time slots tailored to each lead's intent level.' },
-  { q: 'What does ARIA's dashboard show?', a: 'ARIA's workspace shows a Morning Brief, ARIA Stories (Instagram-style rings of leads that need attention today), a Lead Feed of buying signals, Pipeline Mood, hot leads, follow-ups due, and live revenue at risk.' },
+  { q: 'Can ARIA help book demos?', a: 'Yes. ARIA qualifies leads against your ICP, then books calls on your Calendly with suggested time slots tailored to each lead\'s intent level.' },
+  { q: 'What does ARIA\'s dashboard show?', a: 'ARIA\'s workspace shows a Morning Brief, ARIA Stories (Instagram-style rings of leads that need attention today), a Lead Feed of buying signals, Pipeline Mood, hot leads, follow-ups due, and live revenue at risk.' },
 ];
 
 const FEATURES = [
   { title: 'Lead Feed', body: 'Every buying signal, ranked by urgency. Proposal opens, pricing questions, silent threads and follow-ups due — all in one living feed.' },
   { title: 'ARIA Stories', body: 'Instagram-style rings of the 10 leads that need attention today. Tap one and ARIA tells you why, what to say, and drafts a reply.' },
   { title: 'Ask ARIA to Reply', body: 'Pick a channel (WhatsApp, email, LinkedIn, call script) and a tone (founder-led, closer, nurture). ARIA writes the message grounded in lead context.' },
-  { title: 'Daily Sales Brief', body: 'A 3-sentence morning brief: what's hot, what's stuck, what to ship first. Claude-powered, grounded in your workspace data.' },
+  { title: 'Daily Sales Brief', body: 'A 3-sentence morning brief: what\'s hot, what\'s stuck, what to ship first. Claude-powered, grounded in your workspace data.' },
   { title: 'Sales Reports', body: 'Pipeline intelligence, channel performance, follow-up gaps, top objections, lost reasons, and ARIA-recommended actions.' },
   { title: 'Revenue at Risk', body: 'Quantified pipeline at risk — stuck proposals, silent ICP-80+ leads, unactioned hot leads — with one-tap revival playbooks.' },
 ];

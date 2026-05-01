@@ -26,23 +26,23 @@ const AriaVsSpreadsheets = () => (
       { label: 'Works offline', aria: false, other: true },
     ]}
     whenToUseAria={[
-      'You're past 30–50 leads per month — the spreadsheet is slowing you down',
+      'You\'re past 30–50 leads per month — the spreadsheet is slowing you down',
       'You need follow-ups to actually happen without setting reminders',
       'You want replies drafted in your voice across channels',
       'You need demos booked, not just rows updated',
       'You want to track revenue at risk live, not at month-end',
     ]}
     whenToUseOther={[
-      'You're pre-first-lead and building the shape of your funnel',
+      'You\'re pre-first-lead and building the shape of your funnel',
       'You have 1–10 leads total and want zero setup',
       'You need very custom column logic (tracking metrics no product supports)',
       'You need offline access consistently',
-      'You're doing a one-off campaign, not an ongoing motion',
+      'You\'re doing a one-off campaign, not an ongoing motion',
     ]}
     whyFoundersNeedAction={[
-      'Spreadsheets are the first tool every founder reaches for — and honestly, that's fine. The pain starts at around 30–50 leads, when "Follow up next Tue" becomes a ritual you skip three weeks in a row.',
+      'Spreadsheets are the first tool every founder reaches for — and honestly, that\'s fine. The pain starts at around 30–50 leads, when "Follow up next Tue" becomes a ritual you skip three weeks in a row.',
       'A spreadsheet cannot read your WhatsApp. It cannot see that Priya opened the proposal three times last week. It cannot draft a founder voice note. It just holds rows.',
-      'ARIA was built for the moment you look at your sheet and realise it's a list of leads you're losing. The jump from spreadsheet to ARIA is small — you keep the same simplicity, but now the tool tells you what to do next.',
+      'ARIA was built for the moment you look at your sheet and realise it\'s a list of leads you\'re losing. The jump from spreadsheet to ARIA is small — you keep the same simplicity, but now the tool tells you what to do next.',
     ]}
     faq={[
       { q: 'Can I import my spreadsheet into ARIA?', a: 'Yes. CSV import is one-click. Map your columns to ARIA fields (name, company, source, notes, ICP), and your existing leads land in the Lead Feed.' },
