@@ -286,7 +286,16 @@ async def get_your_five_today_route(current_user: dict = Depends(get_current_use
     """Redirect to the actual handler below."""
     # This is a forwarding stub — actual logic is in the handler at the bottom of the file
     excluded = ["won", "lost", "do_not_contact"]
-    candidates = list(leads_collection.find({"status": {"$nin": excluded}}).limit(200))
+    candidates = list(leads_collection.find(
+        {"status": {"$nin": excluded}},
+        {
+            "_id": 1, "first_name": 1, "last_name": 1, "email": 1, "phone": 1,
+            "company_name": 1, "status": 1, "icp_score": 1, "source_channel": 1,
+            "last_contacted_at": 1, "created_at": 1, "aria_state": 1,
+            "intent_score_boost": 1, "no_show_count": 1, "deal_value": 1,
+            "tags": 1, "lost_reason": 1,
+        }
+    ).limit(200))
     if not candidates:
         return {"leads": [], "message": "No active leads found"}
     scored = []
