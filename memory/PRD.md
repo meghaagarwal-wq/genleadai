@@ -73,6 +73,12 @@ Frontend new pages: `/aria-agent/assets`, `/aria-agent/brain`, `/aria-agent/week
 
 Typography aligned with genleadai.com: Space Grotesk (display) + Inter (body).
 
+## Iter 23 — CSV bulk lead upload (Feb 2026)
+- Backend: `POST /api/leads/bulk` accepts up to 5,000 leads, uses MongoDB `insert_many(ordered=False)`, dedupes within-payload by email, returns `{created, failed, errors[]}` with row-level error reasons (validation + duplicate-key tolerated).
+- Frontend: `LeadInbox` Add Lead modal now has dual-mode tabs: **Single lead** (existing form) and **CSV upload** (new). CSV mode uses `papaparse` with drag-drop, required column validation, live preview with row-level error highlighting, and a downloadable template (`aria-leads-template.csv`).
+- New dependency: `papaparse@5.5.3`.
+- Test data IDs: `mode-tab-csv`, `csv-dropzone`, `csv-file-input`, `csv-template-btn`, `csv-preview`, `csv-valid-count`, `csv-invalid-count`, `csv-submit-btn`, `csv-result-screen`, `csv-created-count`.
+
 ## Iter 22 — Public ARIA content ecosystem (Feb 2026 · SEO/AIO/GEO)
 
 12 public, indexable pages live OUTSIDE auth. The private ARIA workspace is untouched and still gated by ProtectedRoute.

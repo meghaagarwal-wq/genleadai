@@ -246,6 +246,68 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
     
     return lead_doc
 
+class BulkLeadsPayload(BaseModel):
+    leads: List[LeadCreate]
+
+@app.post("/api/leads/bulk")
+async def bulk_create_leads(payload: BulkLeadsPayload, current_user: dict = Depends(get_current_user)):
+    """Create many leads at once (CSV upload). Tolerates per-row failures."""
+    if not payload.leads:
+        return {"created": 0, "failed": 0, "errors": [], "leads": []}
+    if len(payload.leads) > 5000:
+        raise HTTPException(status_code=400, detail="Maximum 5000 leads per upload")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    docs = []
+    seen_emails = set()
+    errors = []
+    for idx, l in enumerate(payload.leads):
+        try:
+            email_lc = (l.email or "").lower().strip()
+            if email_lc in seen_emails:
+                errors.append({"row": idx + 1, "email": l.email, "error": "Duplicate email in upload"})
+                continue
+            seen_emails.add(email_lc)
+            doc = l.dict()
+            doc["created_at"] = now_iso
+            doc["updated_at"] = now_iso
+            doc["created_by"] = current_user["email"]
+            doc["icp_score"] = 0
+            doc["icp_tier"] = "cold"
+            doc["assigned_to"] = None
+            doc["last_contacted_at"] = None
+            doc["next_followup_at"] = None
+            docs.append(doc)
+        except Exception as ex:
+            errors.append({"row": idx + 1, "email": getattr(l, "email", None), "error": str(ex)})
+
+    created = 0
+    inserted_docs = []
+    if docs:
+        try:
+            res = leads_collection.insert_many(docs, ordered=False)
+            created = len(res.inserted_ids)
+            inserted_docs = [serialize_doc(d) for d in docs]
+        except Exception as ex:
+            # Some succeeded, some failed (e.g. duplicate key)
+            details = getattr(ex, "details", {}) or {}
+            write_errors = details.get("writeErrors", []) if isinstance(details, dict) else []
+            created = len(docs) - len(write_errors)
+            inserted_docs = [serialize_doc(d) for d in docs]
+            for we in write_errors:
+                errors.append({
+                    "row": (we.get("index") or 0) + 1,
+                    "email": (docs[we.get("index", 0)].get("email") if we.get("index") is not None and we.get("index") < len(docs) else None),
+                    "error": we.get("errmsg", "Insert failed"),
+                })
+
+    return {
+        "created": created,
+        "failed": len(errors),
+        "errors": errors[:50],
+        "leads": inserted_docs[:200],
+    }
+
 @app.get("/api/leads")
 async def get_leads(
     skip: int = 0,

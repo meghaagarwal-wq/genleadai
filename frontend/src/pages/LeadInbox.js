@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Papa from 'papaparse';
+import { toast } from 'sonner';
 import api from '../config/api';
-import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle } from '@phosphor-icons/react';
+import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv, CheckCircle, Warning, DownloadSimple } from '@phosphor-icons/react';
 
 const NEXT_BEST_ACTION = (lead) => {
   const s = lead.status;
@@ -182,13 +184,47 @@ const LeadInbox = () => {
 };
 
 const AddLeadModal = ({ onClose, onSuccess }) => {
+  const [mode, setMode] = useState('manual'); // 'manual' | 'csv'
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" data-testid="add-lead-modal">
+      <div className="bg-white border border-[#E8E0F5] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" style={{ boxShadow:'var(--shadow-hover)' }}>
+        <div className="flex items-center justify-between p-6 border-b border-[#E8E0F5]">
+          <div>
+            <h2 className="text-xl font-bold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }}>Add Leads</h2>
+            <p className="text-xs text-[#9B8AB0] mt-0.5">Add one lead manually or upload a CSV with hundreds.</p>
+          </div>
+          <button onClick={onClose} className="text-[#9B8AB0] hover:text-[#7C35DC] transition-colors" data-testid="close-modal-btn"><X size={24} /></button>
+        </div>
+
+        <div className="px-6 pt-4">
+          <div className="inline-flex p-1 bg-[#F4F0FF] rounded-xl border border-[#E8E0F5]" data-testid="add-lead-mode-tabs">
+            <button onClick={() => setMode('manual')} data-testid="mode-tab-manual"
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${mode === 'manual' ? 'bg-white text-[#7C35DC] shadow-sm' : 'text-[#5A4A7A] hover:text-[#7C35DC]'}`}>
+              <Plus size={14} weight="bold" /> Single lead
+            </button>
+            <button onClick={() => setMode('csv')} data-testid="mode-tab-csv"
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${mode === 'csv' ? 'bg-white text-[#7C35DC] shadow-sm' : 'text-[#5A4A7A] hover:text-[#7C35DC]'}`}>
+              <FileCsv size={14} weight="fill" /> CSV upload
+            </button>
+          </div>
+        </div>
+
+        {mode === 'manual'
+          ? <ManualLeadForm onClose={onClose} onSuccess={onSuccess} />
+          : <CSVUploadForm onClose={onClose} onSuccess={onSuccess} />}
+      </div>
+    </div>
+  );
+};
+
+const ManualLeadForm = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({ lead_type:'B2B', first_name:'', last_name:'', email:'', phone:'', company_name:'', job_title:'', industry:'', source_channel:'website_form', notes:'' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('');
-    try { await api.post('/api/leads', formData); onSuccess(); }
+    try { await api.post('/api/leads', formData); toast.success('Lead created'); onSuccess(); }
     catch(err) { setError(err.response?.data?.detail || 'Failed to create lead'); }
     finally { setLoading(false); }
   };
@@ -196,39 +232,290 @@ const AddLeadModal = ({ onClose, onSuccess }) => {
   const inputCls = "w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3 py-2.5 rounded-lg text-sm focus:border-[#7C35DC] focus:ring-2 focus:ring-[rgba(124,53,220,0.12)] transition-all";
 
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" data-testid="add-lead-modal">
-      <div className="bg-white border border-[#E8E0F5] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" style={{ boxShadow:'var(--shadow-hover)' }}>
-        <div className="flex items-center justify-between p-6 border-b border-[#E8E0F5]">
-          <h2 className="text-xl font-bold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }}>Add New Lead</h2>
-          <button onClick={onClose} className="text-[#9B8AB0] hover:text-[#7C35DC] transition-colors" data-testid="close-modal-btn"><X size={24} /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && <div className="bg-red-50 border border-red-200 text-[#DC2626] rounded-lg p-3 text-sm">{error}</div>}
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Lead Type</label><select value={formData.lead_type} onChange={(e) => setFormData({...formData, lead_type:e.target.value})} className={inputCls} data-testid="form-lead-type"><option value="B2B">B2B</option><option value="B2C">B2C</option></select></div>
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Source Channel</label><select value={formData.source_channel} onChange={(e) => setFormData({...formData, source_channel:e.target.value})} className={inputCls} data-testid="form-channel">{CHANNELS.map(c => <option key={c} value={c}>{c.replace('_',' ')}</option>)}</select></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>First Name *</label><input type="text" value={formData.first_name} onChange={(e) => setFormData({...formData, first_name:e.target.value})} required className={inputCls} data-testid="form-first-name" /></div>
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Last Name *</label><input type="text" value={formData.last_name} onChange={(e) => setFormData({...formData, last_name:e.target.value})} required className={inputCls} data-testid="form-last-name" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Email *</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email:e.target.value})} required className={inputCls} data-testid="form-email" /></div>
-            <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Phone</label><input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone:e.target.value})} className={inputCls} data-testid="form-phone" /></div>
-          </div>
-          {formData.lead_type === 'B2B' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Company</label><input type="text" value={formData.company_name} onChange={(e) => setFormData({...formData, company_name:e.target.value})} className={inputCls} data-testid="form-company" /></div>
-              <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Job Title</label><input type="text" value={formData.job_title} onChange={(e) => setFormData({...formData, job_title:e.target.value})} className={inputCls} data-testid="form-job-title" /></div>
-            </div>
-          )}
-          <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Notes</label><textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes:e.target.value})} rows={3} className={`${inputCls} resize-none`} data-testid="form-notes" /></div>
-          <div className="flex justify-end gap-3 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="cancel-add-lead-btn">Cancel</button>
-            <button type="submit" disabled={loading} className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }} data-testid="submit-lead-btn">{loading ? 'Creating...' : 'Create Lead'}</button>
-          </div>
-        </form>
+    <form onSubmit={handleSubmit} className="p-6 space-y-4" data-testid="manual-lead-form">
+      {error && <div className="bg-red-50 border border-red-200 text-[#DC2626] rounded-lg p-3 text-sm">{error}</div>}
+      <div className="grid grid-cols-2 gap-4">
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Lead Type</label><select value={formData.lead_type} onChange={(e) => setFormData({...formData, lead_type:e.target.value})} className={inputCls} data-testid="form-lead-type"><option value="B2B">B2B</option><option value="B2C">B2C</option></select></div>
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Source Channel</label><select value={formData.source_channel} onChange={(e) => setFormData({...formData, source_channel:e.target.value})} className={inputCls} data-testid="form-channel">{CHANNELS.map(c => <option key={c} value={c}>{c.replace('_',' ')}</option>)}</select></div>
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>First Name *</label><input type="text" value={formData.first_name} onChange={(e) => setFormData({...formData, first_name:e.target.value})} required className={inputCls} data-testid="form-first-name" /></div>
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Last Name *</label><input type="text" value={formData.last_name} onChange={(e) => setFormData({...formData, last_name:e.target.value})} required className={inputCls} data-testid="form-last-name" /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Email *</label><input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email:e.target.value})} required className={inputCls} data-testid="form-email" /></div>
+        <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Phone</label><input type="text" value={formData.phone} onChange={(e) => setFormData({...formData, phone:e.target.value})} className={inputCls} data-testid="form-phone" /></div>
+      </div>
+      {formData.lead_type === 'B2B' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Company</label><input type="text" value={formData.company_name} onChange={(e) => setFormData({...formData, company_name:e.target.value})} className={inputCls} data-testid="form-company" /></div>
+          <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Job Title</label><input type="text" value={formData.job_title} onChange={(e) => setFormData({...formData, job_title:e.target.value})} className={inputCls} data-testid="form-job-title" /></div>
+        </div>
+      )}
+      <div><label className="block text-sm font-medium text-[#1A0A2E] mb-1.5" style={{ fontFamily:'Plus Jakarta Sans' }}>Notes</label><textarea value={formData.notes} onChange={(e) => setFormData({...formData, notes:e.target.value})} rows={3} className={`${inputCls} resize-none`} data-testid="form-notes" /></div>
+      <div className="flex justify-end gap-3 pt-4">
+        <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="cancel-add-lead-btn">Cancel</button>
+        <button type="submit" disabled={loading} className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }} data-testid="submit-lead-btn">{loading ? 'Creating...' : 'Create Lead'}</button>
+      </div>
+    </form>
+  );
+};
+
+// === CSV upload mode ===
+const REQUIRED_HEADERS = ['first_name', 'last_name', 'email'];
+const OPTIONAL_HEADERS = ['lead_type', 'phone', 'company_name', 'job_title', 'industry', 'source_channel', 'notes', 'tags'];
+const ALL_HEADERS = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS];
+
+const CSVUploadForm = ({ onClose, onSuccess }) => {
+  const fileRef = useRef(null);
+  const [fileName, setFileName] = useState('');
+  const [rows, setRows] = useState([]);          // parsed rows (object form)
+  const [headers, setHeaders] = useState([]);    // detected headers
+  const [parseError, setParseError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);    // {created, failed, errors}
+  const [dragOver, setDragOver] = useState(false);
+
+  const validateRow = (r) => {
+    if (!r.first_name || !String(r.first_name).trim()) return 'first_name is required';
+    if (!r.last_name || !String(r.last_name).trim()) return 'last_name is required';
+    const email = String(r.email || '').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'invalid email';
+    return null;
+  };
+
+  const onFile = (file) => {
+    if (!file) return;
+    setParseError(''); setResult(null);
+    setFileName(file.name);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => String(h || '').trim().toLowerCase().replace(/\s+/g, '_'),
+      complete: (res) => {
+        if (res.errors && res.errors.length) {
+          setParseError(res.errors.slice(0, 3).map(e => `Row ${e.row}: ${e.message}`).join(' · '));
+        }
+        const detected = res.meta?.fields || [];
+        const missingRequired = REQUIRED_HEADERS.filter(h => !detected.includes(h));
+        if (missingRequired.length) {
+          setParseError(`Missing required column(s): ${missingRequired.join(', ')}. Required: first_name, last_name, email.`);
+          setRows([]); setHeaders([]); return;
+        }
+        setHeaders(detected);
+        setRows(res.data.slice(0, 5000));
+      },
+      error: (err) => setParseError(err.message || 'Failed to parse CSV'),
+    });
+  };
+
+  const stats = (() => {
+    let valid = 0, invalid = 0;
+    for (const r of rows) {
+      if (validateRow(r)) invalid++; else valid++;
+    }
+    return { valid, invalid, total: rows.length };
+  })();
+
+  const handleSubmit = async () => {
+    if (!rows.length) return;
+    setSubmitting(true); setResult(null);
+    const payload = {
+      leads: rows
+        .filter(r => !validateRow(r))
+        .map(r => ({
+          lead_type: ['B2B', 'B2C'].includes(String(r.lead_type || '').toUpperCase()) ? String(r.lead_type).toUpperCase() : 'B2B',
+          first_name: String(r.first_name).trim(),
+          last_name: String(r.last_name).trim(),
+          email: String(r.email).trim(),
+          phone: r.phone ? String(r.phone).trim() : null,
+          company_name: r.company_name ? String(r.company_name).trim() : null,
+          job_title: r.job_title ? String(r.job_title).trim() : null,
+          industry: r.industry ? String(r.industry).trim() : null,
+          source_channel: CHANNELS.includes(String(r.source_channel || '').toLowerCase()) ? String(r.source_channel).toLowerCase() : 'other',
+          notes: r.notes ? String(r.notes).trim() : null,
+          tags: r.tags ? String(r.tags).split(',').map(t => t.trim()).filter(Boolean) : [],
+          status: 'new',
+        })),
+    };
+    if (!payload.leads.length) {
+      setResult({ created: 0, failed: stats.invalid, errors: [] });
+      setSubmitting(false);
+      return;
+    }
+    try {
+      const r = await api.post('/api/leads/bulk', payload);
+      setResult(r.data);
+      if (r.data.created > 0) {
+        toast.success(`${r.data.created} lead${r.data.created !== 1 ? 's' : ''} added`);
+      }
+      if (r.data.failed === 0 && r.data.created > 0) {
+        // Auto-close after a short delay only on full success
+        setTimeout(() => onSuccess(), 1200);
+      } else {
+        // Refresh table behind us so user sees added rows even if some failed
+        // (parent re-fetches in onSuccess; here we keep modal open to show errors)
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Bulk upload failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const csv = ALL_HEADERS.join(',') + '\n'
+      + 'B2B,Priya,Sharma,priya@example.com,+919999999999,GrowthNest,VP Growth,SaaS,linkedin,Asked about pricing twice,"hot,enterprise"\n'
+      + 'B2B,Rohit,Verma,rohit@example.com,,SaaSWorks,Founder,SaaS,whatsapp,Demo booked,\n'
+      + 'B2C,Ananya,Iyer,ananya@example.com,+919876543210,,,,website_form,Newsletter signup,';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'aria-leads-template.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // Drag & drop handlers
+  const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f);
+  };
+
+  // Result screen
+  if (result) {
+    return (
+      <div className="p-6 space-y-4" data-testid="csv-result-screen">
+        <div className="flex items-start gap-3 bg-[#DCFCE7] border border-[#16A34A]/30 rounded-xl px-4 py-3">
+          <CheckCircle size={20} weight="fill" className="text-[#16A34A] mt-0.5 flex-shrink-0" />
+          <div>
+            <div className="font-extrabold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }} data-testid="csv-created-count">{result.created} lead{result.created !== 1 ? 's' : ''} added to ARIA</div>
+            <div className="text-xs text-[#5A4A7A]">ARIA will start working them in the next sync.</div>
+          </div>
+        </div>
+        {result.failed > 0 && (
+          <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-xl px-4 py-3" data-testid="csv-failed-block">
+            <div className="flex items-center gap-2 mb-2">
+              <Warning size={16} weight="fill" className="text-[#D97706]" />
+              <span className="font-extrabold text-[#1A0A2E]">{result.failed} skipped</span>
+            </div>
+            <ul className="text-xs text-[#5A4A7A] space-y-1 max-h-44 overflow-y-auto">
+              {(result.errors || []).map((e, i) => (
+                <li key={i} className="flex gap-2"><span className="text-[#D97706] font-mono">row {e.row}</span><span className="truncate">{e.email || '—'}</span><span className="text-[#9B8AB0]">·</span><span>{e.error}</span></li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex justify-end gap-3 pt-2">
+          <button onClick={() => { setResult(null); setRows([]); setFileName(''); }} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-upload-another-btn">Upload another</button>
+          <button onClick={onSuccess} className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }} data-testid="csv-done-btn">Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-4" data-testid="csv-upload-form">
+      {/* Help / template strip */}
+      <div className="flex items-center justify-between flex-wrap gap-2 bg-[#F4F0FF] border border-[#E0D4F7] rounded-xl px-4 py-3">
+        <div className="text-xs text-[#5A4A7A] leading-relaxed">
+          Required columns: <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] text-[11px] font-mono">first_name, last_name, email</code>.<br />
+          Optional: <span className="font-mono text-[11px]">{OPTIONAL_HEADERS.join(', ')}</span>
+        </div>
+        <button onClick={downloadTemplate} type="button" data-testid="csv-template-btn"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#7C35DC] bg-white border border-[#7C35DC]/30 hover:bg-[#F4F0FF]">
+          <DownloadSimple size={14} weight="bold" /> Download template
+        </button>
+      </div>
+
+      {/* Drop zone */}
+      {!rows.length && !parseError && (
+        <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} data-testid="csv-dropzone"
+          className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${dragOver ? 'border-[#7C35DC] bg-[#F4F0FF]' : 'border-[#E0D4F7] bg-[#FAF7FF] hover:bg-[#F4F0FF]'}`}
+          onClick={() => fileRef.current?.click()}>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background:'var(--gradient-brand)', boxShadow:'var(--shadow-glow)' }}>
+            <UploadSimple size={22} weight="bold" className="text-white" />
+          </div>
+          <div className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }}>Drop your CSV here</div>
+          <div className="text-xs text-[#5A4A7A] mt-1">or click to browse · max 5,000 rows</div>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" data-testid="csv-file-input"
+            onChange={(e) => onFile(e.target.files?.[0])} />
+        </div>
+      )}
+
+      {parseError && (
+        <div className="bg-[#FEE2E2] border border-[#DC2626]/30 text-[#DC2626] rounded-xl px-4 py-3 text-sm flex items-start gap-2" data-testid="csv-parse-error">
+          <Warning size={16} weight="fill" className="flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="font-bold">Couldn't read this CSV</div>
+            <div className="text-xs mt-1">{parseError}</div>
+            <button onClick={() => { setParseError(''); setRows([]); setFileName(''); }} className="text-xs font-bold underline mt-2">Try another file</button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview */}
+      {!!rows.length && (
+        <div className="space-y-3" data-testid="csv-preview">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-sm">
+              <FileCsv size={16} weight="fill" className="text-[#7C35DC]" />
+              <span className="font-bold text-[#1A0A2E]">{fileName}</span>
+              <span className="text-[#9B8AB0]">·</span>
+              <span className="text-[#16A34A] font-semibold" data-testid="csv-valid-count">{stats.valid} valid</span>
+              {stats.invalid > 0 && (<><span className="text-[#9B8AB0]">·</span><span className="text-[#D97706] font-semibold" data-testid="csv-invalid-count">{stats.invalid} skipped (validation)</span></>)}
+            </div>
+            <button onClick={() => { setRows([]); setFileName(''); fileRef.current && (fileRef.current.value = ''); }} className="text-xs font-bold text-[#7C35DC] hover:underline" data-testid="csv-reset-btn">
+              Choose different file
+            </button>
+          </div>
+
+          <div className="border border-[#E8E0F5] rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-[#F4F0FF]">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#7C35DC]">#</th>
+                    {ALL_HEADERS.filter(h => headers.includes(h)).map(h => (
+                      <th key={h} className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">{h}</th>
+                    ))}
+                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0ECF9]">
+                  {rows.slice(0, 6).map((r, i) => {
+                    const err = validateRow(r);
+                    return (
+                      <tr key={i} className={err ? 'bg-[#FEF3C7]/40' : ''} data-testid={`csv-preview-row-${i}`}>
+                        <td className="px-3 py-2 text-[#9B8AB0] font-mono">{i + 1}</td>
+                        {ALL_HEADERS.filter(h => headers.includes(h)).map(h => (
+                          <td key={h} className="px-3 py-2 text-[#1A0A2E] truncate max-w-[140px]">{String(r[h] ?? '')}</td>
+                        ))}
+                        <td className="px-3 py-2">
+                          {err ? <span className="text-[#D97706] font-bold">{err}</span> : <span className="text-[#16A34A] font-bold">ready</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {rows.length > 6 && <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-bold text-[#9B8AB0] bg-[#FAF7FF] border-t border-[#F0ECF9]">+ {rows.length - 6} more rows ready to upload</div>}
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-cancel-btn">Cancel</button>
+            <button type="button" onClick={handleSubmit} disabled={submitting || stats.valid === 0} data-testid="csv-submit-btn"
+              className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }}>
+              {submitting ? 'Uploading…' : `Upload ${stats.valid} lead${stats.valid !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
