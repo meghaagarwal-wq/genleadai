@@ -266,62 +266,138 @@ const REQUIRED_HEADERS = ['first_name', 'last_name', 'email'];
 const OPTIONAL_HEADERS = ['lead_type', 'phone', 'company_name', 'job_title', 'industry', 'source_channel', 'notes', 'tags'];
 const ALL_HEADERS = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS];
 
+// Common header synonyms across HubSpot, Pipedrive, Salesforce, spreadsheets
+const HEADER_SYNONYMS = {
+  first_name: ['first_name', 'firstname', 'first', 'fname', 'given_name', 'givenname'],
+  last_name: ['last_name', 'lastname', 'last', 'lname', 'surname', 'family_name', 'familyname'],
+  email: ['email', 'email_address', 'emailaddress', 'e_mail', 'mail', 'work_email', 'workemail', 'business_email'],
+  phone: ['phone', 'phone_number', 'phonenumber', 'mobile', 'mobile_number', 'cell', 'cell_phone', 'contact_number', 'work_phone', 'whatsapp'],
+  company_name: ['company', 'company_name', 'companyname', 'organization', 'organisation', 'org', 'account', 'account_name', 'business', 'employer'],
+  job_title: ['job_title', 'jobtitle', 'title', 'role', 'position', 'designation'],
+  industry: ['industry', 'sector', 'vertical', 'category'],
+  source_channel: ['source_channel', 'source', 'channel', 'lead_source', 'leadsource', 'origin', 'utm_source'],
+  lead_type: ['lead_type', 'leadtype', 'type', 'segment', 'b2b_or_b2c'],
+  notes: ['notes', 'note', 'comments', 'comment', 'description', 'remark', 'remarks', 'message'],
+  tags: ['tags', 'tag', 'labels', 'label', 'categories'],
+};
+
+// Build a flat lookup: normalized synonym → ARIA field
+const SYNONYM_LOOKUP = (() => {
+  const m = {};
+  for (const [aria, syns] of Object.entries(HEADER_SYNONYMS)) {
+    for (const s of syns) m[s.replace(/[^a-z0-9]/g, '')] = aria;
+  }
+  return m;
+})();
+
+const FIELD_LABELS = {
+  first_name: 'First name *', last_name: 'Last name *', email: 'Email *',
+  lead_type: 'Lead type', phone: 'Phone', company_name: 'Company',
+  job_title: 'Job title', industry: 'Industry', source_channel: 'Source channel',
+  notes: 'Notes', tags: 'Tags',
+};
+
 const CSVUploadForm = ({ onClose, onSuccess }) => {
   const fileRef = useRef(null);
+  const [step, setStep] = useState('upload'); // 'upload' | 'map' | 'preview' | 'result'
   const [fileName, setFileName] = useState('');
-  const [rows, setRows] = useState([]);          // parsed rows (object form)
-  const [headers, setHeaders] = useState([]);    // detected headers
+  const [rawRows, setRawRows] = useState([]);     // rows keyed by CSV header (raw)
+  const [csvHeaders, setCsvHeaders] = useState([]); // CSV column names as-uploaded
+  const [mapping, setMapping] = useState({});     // { csvHeader: ariaField | '__skip__' }
   const [parseError, setParseError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState(null);    // {created, failed, errors}
+  const [result, setResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const validateRow = (r) => {
-    if (!r.first_name || !String(r.first_name).trim()) return 'first_name is required';
-    if (!r.last_name || !String(r.last_name).trim()) return 'last_name is required';
-    const email = String(r.email || '').trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'invalid email';
-    return null;
+  // Auto-suggest mapping based on synonym lookup
+  const autoSuggest = (cols) => {
+    const m = {};
+    const used = new Set();
+    for (const c of cols) {
+      const key = String(c).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const guess = SYNONYM_LOOKUP[key];
+      if (guess && !used.has(guess)) {
+        m[c] = guess;
+        used.add(guess);
+      } else {
+        m[c] = '__skip__';
+      }
+    }
+    return m;
   };
 
   const onFile = (file) => {
     if (!file) return;
-    setParseError(''); setResult(null);
+    setParseError(''); setResult(null); setMapping({});
     setFileName(file.name);
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h) => String(h || '').trim().toLowerCase().replace(/\s+/g, '_'),
+      // Keep raw header so user sees their actual column names
+      transformHeader: (h) => String(h || '').trim(),
       complete: (res) => {
-        if (res.errors && res.errors.length) {
-          setParseError(res.errors.slice(0, 3).map(e => `Row ${e.row}: ${e.message}`).join(' · '));
+        const fatal = (res.errors || []).filter(e => e.code !== 'TooFewFields' && e.code !== 'TooManyFields');
+        if (fatal.length) {
+          setParseError(fatal.slice(0, 3).map(e => `Row ${e.row}: ${e.message}`).join(' · '));
+          return;
         }
-        const detected = res.meta?.fields || [];
-        const missingRequired = REQUIRED_HEADERS.filter(h => !detected.includes(h));
-        if (missingRequired.length) {
-          setParseError(`Missing required column(s): ${missingRequired.join(', ')}. Required: first_name, last_name, email.`);
-          setRows([]); setHeaders([]); return;
-        }
-        setHeaders(detected);
-        setRows(res.data.slice(0, 5000));
+        const detected = (res.meta?.fields || []).filter(Boolean);
+        if (!detected.length) { setParseError('No columns detected. Make sure your CSV has a header row.'); return; }
+        const data = res.data.slice(0, 5000);
+        if (!data.length) { setParseError('CSV has headers but no data rows.'); return; }
+        setCsvHeaders(detected);
+        setRawRows(data);
+        setMapping(autoSuggest(detected));
+        setStep('map');
       },
       error: (err) => setParseError(err.message || 'Failed to parse CSV'),
     });
   };
 
+  // Build "mapped rows" (ARIA-field keyed) using current mapping
+  const mappedRows = (() => {
+    if (!rawRows.length) return [];
+    return rawRows.map(raw => {
+      const out = {};
+      for (const [csvCol, ariaField] of Object.entries(mapping)) {
+        if (ariaField && ariaField !== '__skip__') out[ariaField] = raw[csvCol];
+      }
+      return out;
+    });
+  })();
+
+  const validateRow = (r) => {
+    if (!r.first_name || !String(r.first_name).trim()) return 'first_name missing';
+    if (!r.last_name || !String(r.last_name).trim()) return 'last_name missing';
+    const email = String(r.email || '').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'invalid email';
+    return null;
+  };
+
   const stats = (() => {
     let valid = 0, invalid = 0;
-    for (const r of rows) {
-      if (validateRow(r)) invalid++; else valid++;
+    for (const r of mappedRows) { if (validateRow(r)) invalid++; else valid++; }
+    return { valid, invalid, total: mappedRows.length };
+  })();
+
+  // Mapping completeness — required fields must be mapped to a CSV column
+  const mappingStatus = (() => {
+    const mappedTo = new Set(Object.values(mapping).filter(v => v && v !== '__skip__'));
+    const missing = REQUIRED_HEADERS.filter(h => !mappedTo.has(h));
+    // Detect duplicate ARIA field assignments
+    const counts = {};
+    for (const v of Object.values(mapping)) {
+      if (v && v !== '__skip__') counts[v] = (counts[v] || 0) + 1;
     }
-    return { valid, invalid, total: rows.length };
+    const duplicates = Object.entries(counts).filter(([_, n]) => n > 1).map(([f]) => f);
+    return { missing, duplicates, ready: missing.length === 0 && duplicates.length === 0 };
   })();
 
   const handleSubmit = async () => {
-    if (!rows.length) return;
+    if (!mappedRows.length) return;
     setSubmitting(true); setResult(null);
     const payload = {
-      leads: rows
+      leads: mappedRows
         .filter(r => !validateRow(r))
         .map(r => ({
           lead_type: ['B2B', 'B2C'].includes(String(r.lead_type || '').toUpperCase()) ? String(r.lead_type).toUpperCase() : 'B2B',
@@ -340,21 +416,14 @@ const CSVUploadForm = ({ onClose, onSuccess }) => {
     };
     if (!payload.leads.length) {
       setResult({ created: 0, failed: stats.invalid, errors: [] });
-      setSubmitting(false);
-      return;
+      setStep('result'); setSubmitting(false); return;
     }
     try {
       const r = await api.post('/api/leads/bulk', payload);
-      setResult(r.data);
-      if (r.data.created > 0) {
-        toast.success(`${r.data.created} lead${r.data.created !== 1 ? 's' : ''} added`);
-      }
+      setResult(r.data); setStep('result');
+      if (r.data.created > 0) toast.success(`${r.data.created} lead${r.data.created !== 1 ? 's' : ''} added`);
       if (r.data.failed === 0 && r.data.created > 0) {
-        // Auto-close after a short delay only on full success
-        setTimeout(() => onSuccess(), 1200);
-      } else {
-        // Refresh table behind us so user sees added rows even if some failed
-        // (parent re-fetches in onSuccess; here we keep modal open to show errors)
+        setTimeout(() => onSuccess(), 1500);
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Bulk upload failed');
@@ -376,18 +445,19 @@ const CSVUploadForm = ({ onClose, onSuccess }) => {
     URL.revokeObjectURL(a.href);
   };
 
+  const reset = () => {
+    setStep('upload'); setFileName(''); setRawRows([]); setCsvHeaders([]);
+    setMapping({}); setParseError(''); setResult(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
   // Drag & drop handlers
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true); };
   const onDragLeave = () => setDragOver(false);
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) onFile(f);
-  };
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); };
 
-  // Result screen
-  if (result) {
+  // ===== STEP: RESULT =====
+  if (step === 'result' && result) {
     return (
       <div className="p-6 space-y-4" data-testid="csv-result-screen">
         <div className="flex items-start gap-3 bg-[#DCFCE7] border border-[#16A34A]/30 rounded-xl px-4 py-3">
@@ -411,111 +481,229 @@ const CSVUploadForm = ({ onClose, onSuccess }) => {
           </div>
         )}
         <div className="flex justify-end gap-3 pt-2">
-          <button onClick={() => { setResult(null); setRows([]); setFileName(''); }} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-upload-another-btn">Upload another</button>
+          <button onClick={reset} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-upload-another-btn">Upload another</button>
           <button onClick={onSuccess} className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }} data-testid="csv-done-btn">Done</button>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="p-6 space-y-4" data-testid="csv-upload-form">
-      {/* Help / template strip */}
-      <div className="flex items-center justify-between flex-wrap gap-2 bg-[#F4F0FF] border border-[#E0D4F7] rounded-xl px-4 py-3">
-        <div className="text-xs text-[#5A4A7A] leading-relaxed">
-          Required columns: <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] text-[11px] font-mono">first_name, last_name, email</code>.<br />
-          Optional: <span className="font-mono text-[11px]">{OPTIONAL_HEADERS.join(', ')}</span>
+  // Step indicator
+  const Steps = () => (
+    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em]" data-testid="csv-stepper">
+      {['Upload', 'Map fields', 'Preview'].map((label, i) => {
+        const active = (step === 'upload' && i === 0) || (step === 'map' && i === 1) || (step === 'preview' && i === 2);
+        const done = (step === 'map' && i < 1) || (step === 'preview' && i < 2);
+        return (
+          <React.Fragment key={label}>
+            {i > 0 && <span className="text-[#E0D4F7]">—</span>}
+            <span className={`px-2 py-1 rounded-md ${active ? 'bg-[#7C35DC] text-white' : done ? 'text-[#16A34A]' : 'text-[#9B8AB0]'}`}>
+              {done ? '✓ ' : `${i + 1}. `}{label}
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+
+  // ===== STEP: UPLOAD =====
+  if (step === 'upload') {
+    return (
+      <div className="p-6 space-y-4" data-testid="csv-upload-form">
+        <Steps />
+        <div className="flex items-center justify-between flex-wrap gap-2 bg-[#F4F0FF] border border-[#E0D4F7] rounded-xl px-4 py-3">
+          <div className="text-xs text-[#5A4A7A] leading-relaxed">
+            Map any CSV — HubSpot, Pipedrive, Salesforce, Google Sheets. Required: <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] text-[11px] font-mono">first_name, last_name, email</code> (or any column you can map to them).
+          </div>
+          <button onClick={downloadTemplate} type="button" data-testid="csv-template-btn"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#7C35DC] bg-white border border-[#7C35DC]/30 hover:bg-[#F4F0FF]">
+            <DownloadSimple size={14} weight="bold" /> Download template
+          </button>
         </div>
-        <button onClick={downloadTemplate} type="button" data-testid="csv-template-btn"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#7C35DC] bg-white border border-[#7C35DC]/30 hover:bg-[#F4F0FF]">
-          <DownloadSimple size={14} weight="bold" /> Download template
+
+        {!parseError && (
+          <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} data-testid="csv-dropzone"
+            className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${dragOver ? 'border-[#7C35DC] bg-[#F4F0FF]' : 'border-[#E0D4F7] bg-[#FAF7FF] hover:bg-[#F4F0FF]'}`}
+            onClick={() => fileRef.current?.click()}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background:'var(--gradient-brand)', boxShadow:'var(--shadow-glow)' }}>
+              <UploadSimple size={22} weight="bold" className="text-white" />
+            </div>
+            <div className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }}>Drop your CSV here</div>
+            <div className="text-xs text-[#5A4A7A] mt-1">or click to browse · max 5,000 rows</div>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" data-testid="csv-file-input"
+              onChange={(e) => onFile(e.target.files?.[0])} />
+          </div>
+        )}
+
+        {parseError && (
+          <div className="bg-[#FEE2E2] border border-[#DC2626]/30 text-[#DC2626] rounded-xl px-4 py-3 text-sm flex items-start gap-2" data-testid="csv-parse-error">
+            <Warning size={16} weight="fill" className="flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold">Couldn't read this CSV</div>
+              <div className="text-xs mt-1">{parseError}</div>
+              <button onClick={reset} className="text-xs font-bold underline mt-2">Try another file</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ===== STEP: MAP =====
+  if (step === 'map') {
+    const ariaOptions = ALL_HEADERS;
+    const sampleRow = rawRows[0] || {};
+    return (
+      <div className="p-6 space-y-4" data-testid="csv-mapping-form">
+        <Steps />
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <FileCsv size={16} weight="fill" className="text-[#7C35DC]" />
+            <span className="font-bold text-[#1A0A2E]">{fileName}</span>
+            <span className="text-[#9B8AB0]">·</span>
+            <span className="text-[#5A4A7A]">{rawRows.length} rows · {csvHeaders.length} columns</span>
+          </div>
+          <button onClick={reset} className="text-xs font-bold text-[#7C35DC] hover:underline" data-testid="mapping-change-file-btn">Choose different file</button>
+        </div>
+
+        <div className="bg-[#F4F0FF] border border-[#E0D4F7] rounded-xl px-4 py-3 text-xs text-[#5A4A7A]">
+          <span className="font-bold text-[#1A0A2E]">Map your columns to ARIA fields.</span> ARIA auto-suggested matches for common synonyms — review and adjust below. Required fields: <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] font-mono">first_name</code>, <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] font-mono">last_name</code>, <code className="bg-white px-1.5 py-0.5 rounded text-[#7C35DC] font-mono">email</code>.
+        </div>
+
+        <div className="border border-[#E8E0F5] rounded-xl overflow-hidden" data-testid="mapping-table">
+          <div className="grid grid-cols-12 gap-0 bg-[#F4F0FF] border-b border-[#E8E0F5] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[#5A4A7A]">
+            <div className="col-span-4">Your CSV column</div>
+            <div className="col-span-4">Sample value</div>
+            <div className="col-span-4">→ ARIA field</div>
+          </div>
+          <div className="divide-y divide-[#F0ECF9] max-h-72 overflow-y-auto">
+            {csvHeaders.map((col) => {
+              const current = mapping[col] || '__skip__';
+              const isReq = REQUIRED_HEADERS.includes(current);
+              const sample = String(sampleRow[col] ?? '').slice(0, 50);
+              // Available options: skip + ARIA fields not used by other columns (or current value)
+              const usedByOthers = new Set(
+                Object.entries(mapping).filter(([c, _]) => c !== col).map(([_, v]) => v).filter(v => v && v !== '__skip__')
+              );
+              return (
+                <div key={col} className="grid grid-cols-12 gap-2 items-center px-3 py-2.5" data-testid={`mapping-row-${col}`}>
+                  <div className="col-span-4 text-sm font-semibold text-[#1A0A2E] truncate" title={col}>{col}</div>
+                  <div className="col-span-4 text-xs text-[#5A4A7A] truncate font-mono bg-[#FAF7FF] px-2 py-1 rounded" title={sample}>{sample || <span className="text-[#9B8AB0] italic">empty</span>}</div>
+                  <div className="col-span-4 flex items-center gap-2">
+                    <select value={current}
+                      onChange={(e) => setMapping({ ...mapping, [col]: e.target.value })}
+                      data-testid={`mapping-select-${col}`}
+                      className={`w-full text-sm px-2.5 py-1.5 rounded-lg border focus:ring-2 focus:ring-[#7C35DC]/30 focus:outline-none ${isReq ? 'border-[#7C35DC]/40 bg-[#F4F0FF] text-[#7C35DC] font-bold' : 'border-[#E8E0F5] bg-white text-[#1A0A2E]'}`}>
+                      <option value="__skip__">— Skip this column —</option>
+                      {ariaOptions.map(f => (
+                        <option key={f} value={f} disabled={usedByOthers.has(f)}>
+                          {FIELD_LABELS[f]}{usedByOthers.has(f) ? ' (used)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Required field status */}
+        <div className="flex flex-wrap gap-2" data-testid="mapping-required-status">
+          {REQUIRED_HEADERS.map(req => {
+            const ok = Object.values(mapping).includes(req);
+            return (
+              <span key={req} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold ${ok ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/30'}`}>
+                {ok ? <CheckCircle size={12} weight="fill" /> : <Warning size={12} weight="fill" />}
+                {FIELD_LABELS[req]}
+              </span>
+            );
+          })}
+        </div>
+        {!mappingStatus.ready && mappingStatus.missing.length > 0 && (
+          <div className="text-xs text-[#DC2626] font-semibold" data-testid="mapping-missing-msg">
+            Map a column to: {mappingStatus.missing.map(f => FIELD_LABELS[f]).join(', ')}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button type="button" onClick={reset}
+            className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="mapping-back-btn">
+            Back
+          </button>
+          <button type="button" onClick={() => setStep('preview')}
+            disabled={!mappingStatus.ready} data-testid="mapping-continue-btn"
+            className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }}>
+            Continue → Preview
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== STEP: PREVIEW =====
+  return (
+    <div className="p-6 space-y-4" data-testid="csv-preview">
+      <Steps />
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 text-sm">
+          <FileCsv size={16} weight="fill" className="text-[#7C35DC]" />
+          <span className="font-bold text-[#1A0A2E]">{fileName}</span>
+          <span className="text-[#9B8AB0]">·</span>
+          <span className="text-[#16A34A] font-semibold" data-testid="csv-valid-count">{stats.valid} valid</span>
+          {stats.invalid > 0 && (<><span className="text-[#9B8AB0]">·</span><span className="text-[#D97706] font-semibold" data-testid="csv-invalid-count">{stats.invalid} skipped (validation)</span></>)}
+        </div>
+        <button onClick={() => setStep('map')} className="text-xs font-bold text-[#7C35DC] hover:underline" data-testid="preview-back-to-map-btn">
+          Back to mapping
         </button>
       </div>
 
-      {/* Drop zone */}
-      {!rows.length && !parseError && (
-        <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} data-testid="csv-dropzone"
-          className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${dragOver ? 'border-[#7C35DC] bg-[#F4F0FF]' : 'border-[#E0D4F7] bg-[#FAF7FF] hover:bg-[#F4F0FF]'}`}
-          onClick={() => fileRef.current?.click()}>
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background:'var(--gradient-brand)', boxShadow:'var(--shadow-glow)' }}>
-            <UploadSimple size={22} weight="bold" className="text-white" />
-          </div>
-          <div className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily:'Plus Jakarta Sans' }}>Drop your CSV here</div>
-          <div className="text-xs text-[#5A4A7A] mt-1">or click to browse · max 5,000 rows</div>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" data-testid="csv-file-input"
-            onChange={(e) => onFile(e.target.files?.[0])} />
-        </div>
-      )}
-
-      {parseError && (
-        <div className="bg-[#FEE2E2] border border-[#DC2626]/30 text-[#DC2626] rounded-xl px-4 py-3 text-sm flex items-start gap-2" data-testid="csv-parse-error">
-          <Warning size={16} weight="fill" className="flex-shrink-0 mt-0.5" />
-          <div>
-            <div className="font-bold">Couldn't read this CSV</div>
-            <div className="text-xs mt-1">{parseError}</div>
-            <button onClick={() => { setParseError(''); setRows([]); setFileName(''); }} className="text-xs font-bold underline mt-2">Try another file</button>
-          </div>
-        </div>
-      )}
-
-      {/* Preview */}
-      {!!rows.length && (
-        <div className="space-y-3" data-testid="csv-preview">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2 text-sm">
-              <FileCsv size={16} weight="fill" className="text-[#7C35DC]" />
-              <span className="font-bold text-[#1A0A2E]">{fileName}</span>
-              <span className="text-[#9B8AB0]">·</span>
-              <span className="text-[#16A34A] font-semibold" data-testid="csv-valid-count">{stats.valid} valid</span>
-              {stats.invalid > 0 && (<><span className="text-[#9B8AB0]">·</span><span className="text-[#D97706] font-semibold" data-testid="csv-invalid-count">{stats.invalid} skipped (validation)</span></>)}
-            </div>
-            <button onClick={() => { setRows([]); setFileName(''); fileRef.current && (fileRef.current.value = ''); }} className="text-xs font-bold text-[#7C35DC] hover:underline" data-testid="csv-reset-btn">
-              Choose different file
-            </button>
-          </div>
-
-          <div className="border border-[#E8E0F5] rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-[#F4F0FF]">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#7C35DC]">#</th>
-                    {ALL_HEADERS.filter(h => headers.includes(h)).map(h => (
-                      <th key={h} className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">{h}</th>
+      <div className="border border-[#E8E0F5] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-[#F4F0FF]">
+              <tr>
+                <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#7C35DC]">#</th>
+                {ALL_HEADERS.filter(h => Object.values(mapping).includes(h)).map(h => (
+                  <th key={h} className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">{FIELD_LABELS[h]}</th>
+                ))}
+                <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F0ECF9]">
+              {mappedRows.slice(0, 6).map((r, i) => {
+                const err = validateRow(r);
+                return (
+                  <tr key={i} className={err ? 'bg-[#FEF3C7]/40' : ''} data-testid={`csv-preview-row-${i}`}>
+                    <td className="px-3 py-2 text-[#9B8AB0] font-mono">{i + 1}</td>
+                    {ALL_HEADERS.filter(h => Object.values(mapping).includes(h)).map(h => (
+                      <td key={h} className="px-3 py-2 text-[#1A0A2E] truncate max-w-[140px]">{String(r[h] ?? '')}</td>
                     ))}
-                    <th className="px-3 py-2 text-left font-bold uppercase tracking-wider text-[#5A4A7A]">status</th>
+                    <td className="px-3 py-2">
+                      {err ? <span className="text-[#D97706] font-bold">{err}</span> : <span className="text-[#16A34A] font-bold">ready</span>}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0ECF9]">
-                  {rows.slice(0, 6).map((r, i) => {
-                    const err = validateRow(r);
-                    return (
-                      <tr key={i} className={err ? 'bg-[#FEF3C7]/40' : ''} data-testid={`csv-preview-row-${i}`}>
-                        <td className="px-3 py-2 text-[#9B8AB0] font-mono">{i + 1}</td>
-                        {ALL_HEADERS.filter(h => headers.includes(h)).map(h => (
-                          <td key={h} className="px-3 py-2 text-[#1A0A2E] truncate max-w-[140px]">{String(r[h] ?? '')}</td>
-                        ))}
-                        <td className="px-3 py-2">
-                          {err ? <span className="text-[#D97706] font-bold">{err}</span> : <span className="text-[#16A34A] font-bold">ready</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {rows.length > 6 && <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-bold text-[#9B8AB0] bg-[#FAF7FF] border-t border-[#F0ECF9]">+ {rows.length - 6} more rows ready to upload</div>}
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-cancel-btn">Cancel</button>
-            <button type="button" onClick={handleSubmit} disabled={submitting || stats.valid === 0} data-testid="csv-submit-btn"
-              className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }}>
-              {submitting ? 'Uploading…' : `Upload ${stats.valid} lead${stats.valid !== 1 ? 's' : ''}`}
-            </button>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
+        {mappedRows.length > 6 && <div className="px-3 py-2 text-[10px] uppercase tracking-wider font-bold text-[#9B8AB0] bg-[#FAF7FF] border-t border-[#F0ECF9]">+ {mappedRows.length - 6} more rows ready to upload</div>}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 pt-2">
+        <button type="button" onClick={() => setStep('map')}
+          className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="preview-back-btn">
+          ← Back to mapping
+        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-lg hover:bg-[#F9F5FF] text-sm font-medium" data-testid="csv-cancel-btn">Cancel</button>
+          <button type="button" onClick={handleSubmit} disabled={submitting || stats.valid === 0} data-testid="csv-submit-btn"
+            className="px-6 py-2 btn-gradient rounded-lg text-sm font-semibold disabled:opacity-50" style={{ fontFamily:'Plus Jakarta Sans' }}>
+            {submitting ? 'Uploading…' : `Upload ${stats.valid} lead${stats.valid !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

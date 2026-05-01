@@ -73,6 +73,14 @@ Frontend new pages: `/aria-agent/assets`, `/aria-agent/brain`, `/aria-agent/week
 
 Typography aligned with genleadai.com: Space Grotesk (display) + Inter (body).
 
+## Iter 24 — CSV field mapping (Feb 2026)
+- Frontend `CSVUploadForm` evolved into a 3-step wizard: **Upload → Map fields → Preview**.
+- Auto-suggests ARIA field for each CSV column using a synonym lookup table covering HubSpot, Pipedrive, Salesforce, and spreadsheet conventions (e.g. "First Name" → `first_name`, "Email Address" → `email`, "Lead Source" → `source_channel`, "Phone Number" → `phone`).
+- Manual override per-column with disabled options preventing duplicate mapping.
+- Required-field status chips with green/red indicators; Continue button gated on required fields being mapped.
+- Verified end-to-end with a HubSpot-style CSV — all 7 columns auto-mapped correctly with 0 manual clicks.
+- Test data IDs added: `csv-stepper`, `mapping-row-{col}`, `mapping-select-{col}`, `mapping-required-status`, `mapping-missing-msg`, `mapping-continue-btn`, `preview-back-btn`, `preview-back-to-map-btn`.
+
 ## Iter 23 — CSV bulk lead upload (Feb 2026)
 - Backend: `POST /api/leads/bulk` accepts up to 5,000 leads, uses MongoDB `insert_many(ordered=False)`, dedupes within-payload by email, returns `{created, failed, errors[]}` with row-level error reasons (validation + duplicate-key tolerated).
 - Frontend: `LeadInbox` Add Lead modal now has dual-mode tabs: **Single lead** (existing form) and **CSV upload** (new). CSV mode uses `papaparse` with drag-drop, required column validation, live preview with row-level error highlighting, and a downloadable template (`aria-leads-template.csv`).
