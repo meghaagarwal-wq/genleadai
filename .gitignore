@@ -77,6 +77,18 @@ agenthub/agents/youtube/db
 .cache/
 
 memory/test_credentials.md
+/app/memory/test_credentials.md
+
+# Environment files (sensitive)
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+
+# Test artifacts (should not be committed)
+/app/test_reports/iteration_*.json
+test_reports/iteration_*.json
 
 # Mobile development
 android-sdk/frontend/node_modules/.cache/default-development/8.pack

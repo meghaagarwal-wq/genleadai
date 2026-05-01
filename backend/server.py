@@ -464,17 +464,35 @@ async def create_campaign(campaign: CampaignCreate, current_user: dict = Depends
 
 @app.get("/api/campaigns")
 async def get_campaigns(current_user: dict = Depends(get_current_user)):
-    campaigns = list(campaigns_collection.find({}).sort("created_at", DESCENDING).limit(100))
-    
-    # Enrich with lead counts
+    # Fetch only needed campaign fields
+    campaigns = list(campaigns_collection.find(
+        {},
+        {"_id": 1, "name": 1, "description": 1, "status": 1, "channel": 1, "campaign_type": 1,
+         "created_at": 1, "updated_at": 1, "created_by": 1, "tags": 1, "metadata": 1}
+    ).sort("created_at", DESCENDING).limit(100))
+
+    if not campaigns:
+        return {"campaigns": []}
+
+    # Single aggregation to compute total + qualified counts for all campaigns at once
+    campaign_ids = [str(c["_id"]) for c in campaigns]
+    qualified_statuses = ["qualified", "proposal_sent", "negotiation", "won"]
+    pipeline = [
+        {"$match": {"campaign_id": {"$in": campaign_ids}}},
+        {"$group": {
+            "_id": "$campaign_id",
+            "total_leads": {"$sum": 1},
+            "qualified_leads": {"$sum": {"$cond": [{"$in": ["$status", qualified_statuses]}, 1, 0]}},
+        }},
+    ]
+    counts_by_id = {row["_id"]: row for row in leads_collection.aggregate(pipeline)}
+
     for campaign in campaigns:
-        campaign_id = str(campaign["_id"])
-        campaign["total_leads"] = leads_collection.count_documents({"campaign_id": campaign_id})
-        campaign["qualified_leads"] = leads_collection.count_documents({
-            "campaign_id": campaign_id,
-            "status": {"$in": ["qualified", "proposal_sent", "negotiation", "won"]}
-        })
-    
+        cid = str(campaign["_id"])
+        bucket = counts_by_id.get(cid, {})
+        campaign["total_leads"] = bucket.get("total_leads", 0)
+        campaign["qualified_leads"] = bucket.get("qualified_leads", 0)
+
     campaigns = [serialize_doc(campaign) for campaign in campaigns]
     return {"campaigns": campaigns}
 
