@@ -528,6 +528,51 @@ def attach_integrations_routes(app, get_current_user, db):
     # Expose the helper so other routers (server.py lead status update) can call it
     app.state.apply_integration_rules = apply_rules_to_lead
 
+    @router.post("/automation/rules/{rule_id}/test")
+    async def test_rule(rule_id: str, current_user: dict = Depends(get_current_user)):
+        """Dry-run a rule against a recent matching lead — show what WOULD happen."""
+        rule = rules_collection.find_one({"id": rule_id, "workspace_id": _ws_key()}, {"_id": 0})
+        if not rule:
+            raise HTTPException(404, "Rule not found")
+        # Find a recent lead matching the trigger
+        match_field = "status" if rule["trigger"] == "status" else ("source_channel" if rule["trigger"] == "source" else "icp_tier")
+        sample = leads_collection.find_one(
+            {match_field: rule["trigger_value"]},
+            {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "email": 1, "company_name": 1, status: 1 if False else 1, match_field: 1},
+            sort=[("created_at", -1)],
+        )
+        if not sample:
+            return {
+                "would_run": False,
+                "reason": f"No leads currently match {rule['trigger']}={rule['trigger_value']}.",
+                "sample": None,
+                "rule": rule,
+            }
+        # Check if would actually push (not already synced)
+        already = synced_prospects.find_one({
+            "aria_lead_id": sample.get("id"),
+            "platform": rule["platform"],
+            "sequence_id": rule["sequence_id"],
+        })
+        s = _get_settings()
+        enc = (s.get("integrations") or {}).get(f"{rule['platform']}_api_key")
+        connected = bool(_dec(enc) if enc else "")
+        return {
+            "would_run": connected and not already,
+            "reason": (
+                "Would push this lead now." if connected and not already
+                else f"{rule['platform']} not connected." if not connected
+                else "Already pushed to this sequence — would skip."
+            ),
+            "sample": {
+                "id": sample.get("id"),
+                "name": f"{sample.get('first_name', '')} {sample.get('last_name', '')}".strip() or sample.get("email"),
+                "email": sample.get("email"),
+                "company": sample.get("company_name"),
+            },
+            "rule": rule,
+        }
+
     # ─── SalesHandy background auto-poll loop (every 5 min) ───
     async def _saleshandy_poll_loop():
         """Background loop: every 5 minutes, poll SalesHandy for activity."""

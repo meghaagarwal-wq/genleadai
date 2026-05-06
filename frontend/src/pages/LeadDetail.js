@@ -160,8 +160,32 @@ const LeadDetail = () => {
   const tierColor = { hot: '#7C35DC', warm: '#D97706', cold: '#94A3B8' };
   const STATUSES = ['new', 'contacted', 'qualified', 'unqualified', 'proposal_sent', 'negotiation', 'won', 'lost', 'nurture'];
 
+  const INTEGRATION_EVENT_META = {
+    email_sent: { label: 'Email sent', color: '#7C35DC' },
+    email_opened: { label: 'Email opened', color: '#16A34A' },
+    email_clicked: { label: 'Link clicked', color: '#16A34A' },
+    replied: { label: 'Replied', color: '#16A34A' },
+    bounced: { label: 'Bounced', color: '#DC2626' },
+    unsubscribed: { label: 'Unsubscribed', color: '#9B8AB0' },
+    interested: { label: 'Interested', color: '#16A34A' },
+    not_interested: { label: 'Not interested', color: '#9B8AB0' },
+    meeting_scheduled: { label: 'Meeting booked', color: '#7C35DC' },
+    pushed_to_lemlist: { label: 'Pushed to Lemlist', color: '#7C35DC' },
+    pushed_to_saleshandy: { label: 'Pushed to SalesHandy', color: '#16A34A' },
+    auto_pushed_to_lemlist: { label: 'Auto-pushed (rule) → Lemlist', color: '#7C35DC' },
+    auto_pushed_to_saleshandy: { label: 'Auto-pushed (rule) → SalesHandy', color: '#16A34A' },
+  };
+  const platformOf = (act) => {
+    const meta = act.metadata || {};
+    if (meta.platform === 'lemlist') return 'Lemlist';
+    if (meta.platform === 'saleshandy') return 'SalesHandy';
+    if ((act.created_by || '').includes('lemlist')) return 'Lemlist';
+    if ((act.created_by || '').includes('saleshandy')) return 'SalesHandy';
+    return null;
+  };
+
   const activityIcon = (type) => {
-    const icons = { call: Phone, email_sent: EnvelopeSimple, email_received: EnvelopeSimple, whatsapp_sent: WhatsappLogo, whatsapp_received: WhatsappLogo, meeting_scheduled: CalendarBlank, meeting_done: CalendarBlank, note_added: NoteBlank, status_changed: Lightning, score_updated: Sparkle };
+    const icons = { call: Phone, email_sent: EnvelopeSimple, email_received: EnvelopeSimple, email_opened: EnvelopeSimple, email_clicked: EnvelopeSimple, replied: EnvelopeSimple, bounced: EnvelopeSimple, whatsapp_sent: WhatsappLogo, whatsapp_received: WhatsappLogo, meeting_scheduled: CalendarBlank, meeting_done: CalendarBlank, note_added: NoteBlank, status_changed: Lightning, score_updated: Sparkle, pushed_to_lemlist: Sparkle, pushed_to_saleshandy: Sparkle, auto_pushed_to_lemlist: Lightning, auto_pushed_to_saleshandy: Lightning, interested: Sparkle, meeting_booked: CalendarBlank };
     const Icon = icons[type] || NoteBlank;
     return <Icon size={16} weight="duotone" />;
   };
@@ -391,25 +415,35 @@ const LeadDetail = () => {
                 <div className="text-center py-12 text-[#9B8AB0]">No activities yet</div>
               ) : (
                 <div className="space-y-4">
-                  {activities.map((activity, index) => (
-                    <div key={activity.id || index} className="flex gap-4" data-testid={`activity-${activity.id || index}`}>
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#F4F0FF] flex items-center justify-center text-[#7C35DC]">
-                        {activityIcon(activity.activity_type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-[#1A0A2E]">{activity.subject || activity.activity_type.replace('_', ' ')}</span>
-                          <span className="text-xs text-[#9B8AB0]">{activity.user_id}</span>
+                  {activities.map((activity, index) => {
+                    const meta = INTEGRATION_EVENT_META[activity.activity_type];
+                    const platform = platformOf(activity);
+                    return (
+                      <div key={activity.id || index} className="flex gap-4" data-testid={`activity-${activity.id || index}`}>
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                          style={meta ? { background: `${meta.color}14`, color: meta.color, border: `1px solid ${meta.color}33` } : { background: '#F4F0FF', color: '#7C35DC' }}>
+                          {activityIcon(activity.activity_type)}
                         </div>
-                        {activity.body && <p className="text-sm text-[#5A4A7A] mt-1">{activity.body}</p>}
-                        {activity.outcome && <p className="text-xs text-[#7C35DC] mt-1">Outcome: {activity.outcome}</p>}
-                        <span className="text-xs text-[#9B8AB0] mt-1 block">
-                          <Clock size={12} className="inline mr-1" />
-                          {new Date(activity.created_at).toLocaleString()}
-                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-[#1A0A2E]">{meta?.label || activity.subject || activity.activity_type.replace(/_/g, ' ')}</span>
+                            {platform && (
+                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-[0.18em] text-white" style={{ background: platform === 'SalesHandy' ? '#16A34A' : '#7C35DC' }}>
+                                {platform}
+                              </span>
+                            )}
+                            {activity.user_id && <span className="text-xs text-[#9B8AB0]">{activity.user_id}</span>}
+                          </div>
+                          {(activity.body || activity.description) && <p className="text-sm text-[#5A4A7A] mt-1">{activity.body || activity.description}</p>}
+                          {activity.outcome && <p className="text-xs text-[#7C35DC] mt-1">Outcome: {activity.outcome}</p>}
+                          <span className="text-xs text-[#9B8AB0] mt-1 block">
+                            <Clock size={12} className="inline mr-1" />
+                            {new Date(activity.created_at).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
