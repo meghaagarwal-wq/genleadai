@@ -170,10 +170,29 @@ Typography alignment:
 - `PageHeader.js` H1 sizes tuned down to 2rem/2.375rem/2.75rem for sans-serif readability.
 
 ## Backlog
-- P1: server.py refactor (~5160 lines) into `/app/backend/routes/`
+- P1: continue server.py extraction — remaining 4818 lines still hold aria/*, leads/*, lead-magnets/*, billing/*, assets/*, webhooks/*
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler
 - P2: DRY shared `EmailScheduleCard` for DCP + EOD
-- P2: react-beautiful-dnd `isDropDisabled` dev warning on Pipeline (pre-existing)
+- P2: (Security) /api/auth/register is open; lock behind invite/admin-only
+- P2: Seed sample automation rule + Lemlist activity for UI demo of rule-test button + timeline badges
+
+## Iter 27 — Rule testing + badges + modular backend refactor (Feb 2026)
+**Frontend**:
+- `LeadDetail.js` activity timeline renders Lemlist / SalesHandy badges when `activity.metadata.platform` is set (INTEGRATION_EVENT_META + platformOf helper).
+- `SalesEngagement.js` AutomationRules each row now shows a `Test` button (testid `rule-test-{id}`) that calls `POST /api/integrations/automation/rules/{id}/test` and displays a result panel with `would_run` state, skip/push reason, and sample matching lead.
+- Silenced 21 Pipeline.js react-beautiful-dnd dev warnings by passing explicit `isDropDisabled={false}` on every `<Droppable>`.
+
+**Backend bug fix**: `integrations_routes.py` line 541 — `test_rule` endpoint projection had a Python bareword bug (`status: 1 if False else 1` → NameError). Fixed to `'status': 1`.
+
+**Backend modular refactor (major)**: server.py reduced from 5252 → 4818 lines.
+- New `/app/backend/deps.py` centralises DB handle, collections (8 core), JWT helpers, `get_current_user`, `verify_password`, `get_password_hash`, `create_access_token`, `serialize_doc`.
+- New `/app/backend/routes/` directory with:
+  - `auth.py` — `/api/auth/register|login|me`
+  - `meta.py` — `/api/health`, `/api/users`, `/api/calendly/event-types|user|availability`
+  - `campaigns.py` — `/api/campaigns` CRUD
+  - `ai.py` — `/api/ai/score|email-generate|chat|summarize`
+  - `analytics.py` — `/api/analytics/dashboard`, `/api/email/send`
+- server.py uses `app.include_router(...)` for each; zero behaviour change verified via iteration_22 testing agent (23/24 pytest pass, frontend 6/6 pass, 0 console errors, 100% regression clean).
 
 ## Deployment: READY
 Custom domain target: app.genleadai.com

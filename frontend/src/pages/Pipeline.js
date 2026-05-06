@@ -69,7 +69,7 @@ const Pipeline = () => {
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="flex gap-4 overflow-x-auto pb-4" data-testid="kanban-board">
             {stages.map(stage => (
-              <Droppable key={stage} droppableId={stage}>
+              <Droppable key={stage} droppableId={stage} isDropDisabled={false} isCombineEnabled={false} ignoreContainerClipping={false}>
                 {(provided, snapshot) => (
                   <div ref={provided.innerRef} {...provided.droppableProps}
                     className={`flex-shrink-0 w-72 bg-white border rounded-xl ${snapshot.isDraggingOver ? 'border-[#7C35DC]/40 bg-[#F9F5FF]' : 'border-[#E8E0F5]'}`}
