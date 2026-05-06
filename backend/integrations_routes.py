@@ -538,7 +538,7 @@ def attach_integrations_routes(app, get_current_user, db):
         match_field = "status" if rule["trigger"] == "status" else ("source_channel" if rule["trigger"] == "source" else "icp_tier")
         sample = leads_collection.find_one(
             {match_field: rule["trigger_value"]},
-            {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "email": 1, "company_name": 1, status: 1 if False else 1, match_field: 1},
+            {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "email": 1, "company_name": 1, "status": 1, match_field: 1},
             sort=[("created_at", -1)],
         )
         if not sample:

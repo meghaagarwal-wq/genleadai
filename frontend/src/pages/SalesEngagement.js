@@ -245,6 +245,18 @@ const AutomationRules = ({ status }) => {
   const toggle = async (id) => { try { await api.patch(`/api/integrations/automation/rules/${id}`); refresh(); } catch { toast.error('Could not toggle'); } };
   const remove = async (id) => { if (!window.confirm('Delete this rule?')) return; try { await api.delete(`/api/integrations/automation/rules/${id}`); refresh(); } catch { toast.error('Could not delete'); } };
 
+  const [testResults, setTestResults] = useState({});
+  const [testing, setTesting] = useState(null);
+  const testRule = async (id) => {
+    setTesting(id);
+    try {
+      const r = await api.post(`/api/integrations/automation/rules/${id}/test`);
+      setTestResults(prev => ({ ...prev, [id]: r.data }));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Test failed');
+    } finally { setTesting(null); }
+  };
+
   const noConnection = !status.saleshandy?.connected && !status.lemlist?.connected;
   const triggerMeta = TRIGGERS.find(t => t.id === form.trigger);
 
@@ -276,7 +288,8 @@ const AutomationRules = ({ status }) => {
       ) : (
         <div className="divide-y divide-[#F0ECF9]">
           {rules.map(r => (
-            <div key={r.id} className="px-6 py-4 flex items-center gap-3 flex-wrap" data-testid={`rule-${r.id}`}>
+            <div key={r.id} className="px-6 py-4" data-testid={`rule-${r.id}`}>
+              <div className="flex items-center gap-3 flex-wrap">
               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.18em] text-white" style={{ background: r.platform === 'saleshandy' ? '#16A34A' : '#7C35DC' }}>
                 {r.platform === 'saleshandy' ? 'SalesHandy' : 'Lemlist'}
               </span>
@@ -284,6 +297,10 @@ const AutomationRules = ({ status }) => {
                 <span className="text-[#5A4A7A]">When</span> <span className="font-bold text-[#1A0A2E]">{r.trigger.replace('_', ' ')}</span> <span className="text-[#5A4A7A]">=</span> <span className="font-bold text-[#7C35DC]">{r.trigger_value}</span> <span className="text-[#5A4A7A]">→ push to</span> <span className="font-bold text-[#1A0A2E]">{r.sequence_name || r.sequence_id.slice(0, 12)}</span>
               </div>
               {r.runs > 0 && <span className="text-[10px] text-[#9B8AB0]">{r.runs} run{r.runs === 1 ? '' : 's'}</span>}
+              <button onClick={() => testRule(r.id)} disabled={testing === r.id} data-testid={`rule-test-${r.id}`}
+                className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/25 hover:bg-[#EDE4FF] disabled:opacity-50">
+                {testing === r.id ? 'Testing…' : 'Test'}
+              </button>
               <button onClick={() => toggle(r.id)} data-testid={`rule-toggle-${r.id}`}
                 className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] ${r.active ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#F1F5F9] text-[#9B8AB0] border border-[#E2E8F0]'}`}>
                 {r.active ? 'ON' : 'OFF'}
@@ -292,6 +309,24 @@ const AutomationRules = ({ status }) => {
                 className="text-[#9B8AB0] hover:text-[#DC2626]">
                 <Trash size={14} weight="fill" />
               </button>
+              </div>
+              {testResults[r.id] && (
+                <div className="mt-3 p-3 rounded-lg bg-[#FAF7FF] border border-[#E8E0F5]" data-testid={`rule-test-result-${r.id}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-md ${testResults[r.id].would_run ? 'bg-[#DCFCE7] text-[#16A34A]' : 'bg-[#FEF3C7] text-[#D97706]'}`}>
+                      {testResults[r.id].would_run ? 'Would push' : 'Would skip'}
+                    </span>
+                    <span className="text-xs text-[#5A4A7A]">{testResults[r.id].reason}</span>
+                  </div>
+                  {testResults[r.id].sample && (
+                    <div className="text-xs text-[#1A0A2E]">
+                      Sample lead: <span className="font-bold">{testResults[r.id].sample.name}</span>
+                      {testResults[r.id].sample.company && <span className="text-[#5A4A7A]"> · {testResults[r.id].sample.company}</span>}
+                      <span className="text-[#9B8AB0]"> · {testResults[r.id].sample.email}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
