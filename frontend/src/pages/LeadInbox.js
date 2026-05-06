@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import Papa from 'papaparse';
 import { toast } from 'sonner';
 import api from '../config/api';
-import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv, CheckCircle, Warning, DownloadSimple } from '@phosphor-icons/react';
+import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv, CheckCircle, Warning, DownloadSimple, PaperPlaneTilt } from '@phosphor-icons/react';
+import PushToSequenceModal from '../components/PushToSequenceModal';
 
 const NEXT_BEST_ACTION = (lead) => {
   const s = lead.status;
@@ -33,6 +34,7 @@ const LeadInbox = () => {
   const [filters, setFilters] = useState({ lead_type:'', status:'', source_channel:'', icp_tier:'' });
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showPushModal, setShowPushModal] = useState(false);
   const [page, setPage] = useState(0);
   const [engagementMap, setEngagementMap] = useState({});
   const limit = 20;
@@ -74,9 +76,16 @@ const LeadInbox = () => {
           <h1 className="text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily:'Plus Jakarta Sans' }}>Lead Inbox</h1>
           <p className="text-sm text-[#5A4A7A] mt-1">{total} leads total</p>
         </div>
-        <button onClick={() => setShowAddModal(true)} data-testid="add-lead-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }}>
-          <Plus size={16} weight="bold" /> Add Lead
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowPushModal(true)} disabled={!leads.length} data-testid="push-to-sequence-btn"
+            className="flex items-center gap-2 bg-white border border-[#E8E0F5] hover:border-[#7C35DC]/40 text-[#5A4A7A] hover:text-[#7C35DC] px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ fontFamily:'Plus Jakarta Sans' }}>
+            <PaperPlaneTilt size={16} weight="fill" /> Send to sequence
+          </button>
+          <button onClick={() => setShowAddModal(true)} data-testid="add-lead-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }}>
+            <Plus size={16} weight="bold" /> Add Lead
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -179,6 +188,7 @@ const LeadInbox = () => {
       </div>
 
       {showAddModal && <AddLeadModal onClose={() => setShowAddModal(false)} onSuccess={() => { setShowAddModal(false); fetchLeads(); }} />}
+      {showPushModal && <PushToSequenceModal leadIds={leads.map(l => l.id)} onClose={() => setShowPushModal(false)} onSuccess={() => { setShowPushModal(false); fetchLeads(); }} />}
     </div>
   );
 };

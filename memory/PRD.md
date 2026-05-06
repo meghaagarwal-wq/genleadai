@@ -73,6 +73,28 @@ Frontend new pages: `/aria-agent/assets`, `/aria-agent/brain`, `/aria-agent/week
 
 Typography aligned with genleadai.com: Space Grotesk (display) + Inter (body).
 
+## Iter 25 — SalesHandy + Lemlist integrations (Feb 2026)
+**Bring-your-own-key model** — each workspace pastes its own API keys, Fernet-encrypted (AES-128) before storage.
+
+Backend (`/app/backend/integrations_routes.py` — new modular file):
+- `GET /api/integrations/status` — connection state + masked key preview
+- `POST /api/integrations/keys` — save encrypted (auto-registers Lemlist webhook)
+- `DELETE /api/integrations/keys/{platform}` — disconnect
+- `POST /api/integrations/test/{platform}` — test connection by listing sequences/campaigns
+- `GET /api/integrations/sequences/{platform}` — list available sequences (SH) / campaigns (LL)
+- `POST /api/integrations/push` — push selected ARIA leads into a chosen sequence (with dedup)
+- `POST /api/integrations/lemlist/webhook` — real-time inbound: contacted/opened/clicked/replied/bounced/meetingBooked → ARIA activity feed
+- `POST /api/integrations/saleshandy/poll` — manual polling endpoint (no webhooks on SH)
+
+Two API client classes: `SalesHandyClient` (x-api-key) + `LemlistClient` (Basic auth with `:APIKEY` format).
+
+Required env: `ENCRYPTION_KEY` (Fernet) — added to `/app/backend/.env`.
+
+Frontend:
+- `/sales-engagement` page — `SalesEngagement.js` with both platform cards
+- `PushToSequenceModal.js` — used from Lead Inbox "Send to sequence" button
+- Sidebar entry "Sales Engagement"
+
 ## Iter 24 — CSV field mapping (Feb 2026)
 - Frontend `CSVUploadForm` evolved into a 3-step wizard: **Upload → Map fields → Preview**.
 - Auto-suggests ARIA field for each CSV column using a synonym lookup table covering HubSpot, Pipedrive, Salesforce, and spreadsheet conventions (e.g. "First Name" → `first_name`, "Email Address" → `email`, "Lead Source" → `source_channel`, "Phone Number" → `phone`).

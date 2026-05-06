@@ -46,6 +46,7 @@ const Layout = ({ children }) => {
     { icon: Robot, label: 'AI Assistant', path: '/ai-assistant' },
     { icon: ChartLineUp, label: 'Reports', path: '/reports' },
     { icon: Plug, label: 'Integrations', path: '/integrations' },
+    { icon: Plug, label: 'Sales Engagement', path: '/sales-engagement' },
     { icon: CreditCard, label: 'Plan & Billing', path: '/billing' },
     { icon: UsersThree, label: 'Settings', path: '/settings' },
   ];

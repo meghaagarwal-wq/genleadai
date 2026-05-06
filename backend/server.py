@@ -5236,3 +5236,6 @@ def _demo_command_center_fallback():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 from aria_agent_routes import attach_aria_agent_routes  # noqa: E402
 attach_aria_agent_routes(app, get_current_user, db)
+
+from integrations_routes import attach_integrations_routes  # noqa: E402
+attach_integrations_routes(app, get_current_user, db)
