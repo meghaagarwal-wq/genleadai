@@ -5,6 +5,7 @@ Inbound: Lemlist via webhook (real-time) + SalesHandy via 5-min poller.
 Outbound: list sequences/campaigns + push leads from ARIA into them.
 """
 import os
+import asyncio
 import base64
 import hmac
 import hashlib
@@ -426,6 +427,160 @@ def attach_integrations_routes(app, get_current_user, db):
             upsert=True,
         )
         return {"polled": True, "events_synced": synced, "since": last_iso}
+
+    # ─── Automation rules ───────────────────────────────
+    rules_collection = db["integration_automation_rules"]
+    rules_collection.create_index([("workspace_id", 1), ("active", 1)])
+
+    class AutomationRule(BaseModel):
+        platform: str          # 'saleshandy' | 'lemlist'
+        sequence_id: str
+        sequence_name: Optional[str] = None
+        trigger: str           # 'status' | 'source' | 'icp_tier'
+        trigger_value: str     # e.g. 'qualified', 'website_form', 'hot'
+        active: bool = True
+
+    @router.get("/automation/rules")
+    async def list_rules(current_user: dict = Depends(get_current_user)):
+        rules = list(rules_collection.find({"workspace_id": _ws_key()}, {"_id": 0}).sort("created_at", -1))
+        return {"rules": rules}
+
+    @router.post("/automation/rules")
+    async def create_rule(rule: AutomationRule, current_user: dict = Depends(get_current_user)):
+        if rule.platform not in ("saleshandy", "lemlist"):
+            raise HTTPException(400, "Invalid platform")
+        if rule.trigger not in ("status", "source", "icp_tier"):
+            raise HTTPException(400, "Invalid trigger")
+        from uuid import uuid4
+        doc = rule.dict()
+        doc["id"] = str(uuid4())
+        doc["workspace_id"] = _ws_key()
+        doc["created_at"] = datetime.now(timezone.utc).isoformat()
+        doc["created_by"] = current_user.get("email", "system")
+        doc["last_run_at"] = None
+        doc["runs"] = 0
+        rules_collection.insert_one(dict(doc))
+        return {k: v for k, v in doc.items() if k != "_id"}
+
+    @router.patch("/automation/rules/{rule_id}")
+    async def toggle_rule(rule_id: str, current_user: dict = Depends(get_current_user)):
+        r = rules_collection.find_one({"id": rule_id, "workspace_id": _ws_key()}, {"_id": 0})
+        if not r:
+            raise HTTPException(404, "Rule not found")
+        rules_collection.update_one({"id": rule_id}, {"$set": {"active": not r.get("active", True)}})
+        return {"ok": True, "active": not r.get("active", True)}
+
+    @router.delete("/automation/rules/{rule_id}")
+    async def delete_rule(rule_id: str, current_user: dict = Depends(get_current_user)):
+        rules_collection.delete_one({"id": rule_id, "workspace_id": _ws_key()})
+        return {"ok": True}
+
+    # ─── Auto-apply rules to a single lead (called from lead-status routes) ───
+    async def apply_rules_to_lead(lead: Dict, trigger_change: Dict):
+        """trigger_change: {'status': 'qualified'} or {'source': 'linkedin'} etc."""
+        if not lead or not lead.get("email"):
+            return
+        rules = list(rules_collection.find({"workspace_id": _ws_key(), "active": True}, {"_id": 0}))
+        if not rules:
+            return
+        s = _get_settings()
+        for rule in rules:
+            trigger = rule.get("trigger")
+            value = rule.get("trigger_value")
+            if trigger not in trigger_change:
+                continue
+            if trigger_change[trigger] != value:
+                continue
+            # Match — push the lead
+            platform = rule["platform"]
+            enc = (s.get("integrations") or {}).get(f"{platform}_api_key")
+            key = _dec(enc) if enc else ""
+            if not key:
+                continue
+            # Skip if already synced to this sequence
+            if synced_prospects.find_one({"aria_lead_id": lead["id"], "platform": platform, "sequence_id": rule["sequence_id"]}):
+                continue
+            try:
+                client = SalesHandyClient(key) if platform == "saleshandy" else LemlistClient(key)
+                if platform == "saleshandy":
+                    await client.add_prospect(rule["sequence_id"], lead)
+                else:
+                    await client.add_lead(rule["sequence_id"], lead)
+                now_iso = datetime.now(timezone.utc).isoformat()
+                synced_prospects.insert_one({
+                    "workspace_id": _ws_key(), "aria_lead_id": lead["id"],
+                    "platform": platform, "email": lead["email"].lower().strip(),
+                    "sequence_id": rule["sequence_id"], "synced_at": now_iso,
+                    "via_rule": rule["id"],
+                })
+                activities_collection.insert_one({
+                    "id": f"act_rule_{datetime.now(timezone.utc).timestamp()}",
+                    "lead_id": lead["id"],
+                    "activity_type": f"auto_pushed_to_{platform}",
+                    "description": f"Auto-pushed via rule: {trigger}={value} → {platform} {rule.get('sequence_name', rule['sequence_id'])}",
+                    "created_at": now_iso, "created_by": "automation",
+                    "metadata": {"rule_id": rule["id"], "platform": platform},
+                })
+                rules_collection.update_one({"id": rule["id"]}, {"$set": {"last_run_at": now_iso}, "$inc": {"runs": 1}})
+            except Exception as e:
+                print(f"[AutomationRule] {rule['id']} failed for lead {lead['id']}: {e}")
+
+    # Expose the helper so other routers (server.py lead status update) can call it
+    app.state.apply_integration_rules = apply_rules_to_lead
+
+    # ─── SalesHandy background auto-poll loop (every 5 min) ───
+    async def _saleshandy_poll_loop():
+        """Background loop: every 5 minutes, poll SalesHandy for activity."""
+        while True:
+            try:
+                s = _get_settings()
+                enc = (s.get("integrations") or {}).get("saleshandy_api_key")
+                key = _dec(enc) if enc else ""
+                if key:
+                    last_iso = (s.get("integrations") or {}).get("saleshandy_last_polled_at") or (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+                    client = SalesHandyClient(key)
+                    try:
+                        activity = await client.list_prospect_activity(last_iso)
+                    except Exception:
+                        activity = []
+                    SH_EVENT_MAP = {
+                        "EMAIL_SENT": "email_sent", "EMAIL_OPENED": "email_opened",
+                        "LINK_CLICKED": "email_clicked", "REPLIED": "replied",
+                        "BOUNCED": "bounced", "UNSUBSCRIBED": "unsubscribed",
+                    }
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    synced = 0
+                    for evt in activity or []:
+                        email = ((evt.get("prospect") or {}).get("email") or evt.get("email") or "").lower().strip()
+                        if not email:
+                            continue
+                        evt_type = SH_EVENT_MAP.get((evt.get("activityType") or evt.get("type") or "").upper(), "saleshandy_event")
+                        lead = leads_collection.find_one({"email": email}, {"_id": 0, "id": 1})
+                        if not lead:
+                            continue
+                        activities_collection.insert_one({
+                            "id": f"act_sh_auto_{datetime.now(timezone.utc).timestamp()}_{synced}",
+                            "lead_id": lead["id"], "activity_type": evt_type,
+                            "description": f"SalesHandy {evt_type}",
+                            "created_at": now_iso, "created_by": "saleshandy_auto",
+                            "metadata": {"platform": "saleshandy"},
+                        })
+                        synced += 1
+                    settings_collection.update_one(
+                        {"scope": _ws_key()},
+                        {"$set": {"integrations.saleshandy_last_polled_at": now_iso}},
+                        upsert=True,
+                    )
+                    if synced > 0:
+                        print(f"[SalesHandyAutoPoll] synced {synced} events")
+            except Exception as e:
+                print(f"[SalesHandyAutoPoll] loop error: {e}")
+            await asyncio.sleep(300)  # 5 min
+
+    @app.on_event("startup")
+    async def _start_saleshandy_poll_loop():
+        asyncio.create_task(_saleshandy_poll_loop())
+        print("[SalesHandyAutoPoll] Background loop started (5 min tick)")
 
     app.include_router(router)
     return router

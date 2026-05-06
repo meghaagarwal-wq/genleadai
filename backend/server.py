@@ -480,7 +480,18 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
             activities_collection.insert_one(activity_doc)
         
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
-        return serialize_doc(lead)
+        lead_serialized = serialize_doc(lead)
+
+        # Apply integration automation rules if status changed
+        if "status" in update_data:
+            try:
+                apply_rules = getattr(app.state, "apply_integration_rules", None)
+                if apply_rules:
+                    await apply_rules(lead_serialized, {"status": update_data["status"]})
+            except Exception as _re:
+                print(f"[IntegrationRules] error applying on status change: {_re}")
+
+        return lead_serialized
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

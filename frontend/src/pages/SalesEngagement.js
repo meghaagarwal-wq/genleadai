@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle, Warning, Plug, Eye, EyeSlash, ArrowSquareOut, Trash, ArrowsClockwise, Sparkle } from '@phosphor-icons/react';
+import { CheckCircle, Warning, Plug, Eye, EyeSlash, ArrowSquareOut, Trash, ArrowsClockwise, Sparkle, Lightning, Plus, Toggle } from '@phosphor-icons/react';
 import api from '../config/api';
 import PageHeader from '../components/PageHeader';
 
@@ -193,6 +193,158 @@ const SalesEngagement = () => {
           <span className="font-extrabold text-[#1A0A2E]">Privacy:</span> API keys are encrypted (Fernet AES-128) before being saved to MongoDB and never logged. Each workspace stores its own keys — perfect for client deployments.
         </div>
       </div>
+
+      <AutomationRules status={status} />
+    </div>
+  );
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Automation rules — auto-push leads to sequences when triggers fire
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const TRIGGERS = [
+  { id: 'status', label: 'Status changes to', values: ['new', 'contacted', 'qualified', 'proposal_sent', 'negotiation', 'won', 'lost'] },
+  { id: 'source', label: 'Source channel is', values: ['website_form', 'whatsapp', 'linkedin', 'email', 'referral', 'webinar', 'paid', 'other'] },
+  { id: 'icp_tier', label: 'ICP tier is', values: ['hot', 'warm', 'cold'] },
+];
+
+const AutomationRules = ({ status }) => {
+  const [rules, setRules] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ platform: 'lemlist', trigger: 'status', trigger_value: 'qualified', sequence_id: '', sequence_name: '' });
+  const [sequences, setSequences] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try { const r = await api.get('/api/integrations/automation/rules'); setRules(r.data.rules || []); } catch { /* */ }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  // Load sequences when platform changes in the form
+  useEffect(() => {
+    if (!showForm || !status[form.platform]?.connected) { setSequences([]); return; }
+    api.get(`/api/integrations/sequences/${form.platform}`).then(r => {
+      setSequences(r.data.sequences || []);
+      if (r.data.sequences?.[0]) setForm(f => ({ ...f, sequence_id: r.data.sequences[0].id, sequence_name: r.data.sequences[0].name }));
+    }).catch(() => setSequences([]));
+  }, [form.platform, showForm, status]);
+
+  const submit = async () => {
+    if (!form.sequence_id) { toast.error('Pick a sequence'); return; }
+    setBusy(true);
+    try {
+      await api.post('/api/integrations/automation/rules', form);
+      toast.success('Rule created · ARIA will auto-push when this trigger fires');
+      setShowForm(false); setForm({ platform: 'lemlist', trigger: 'status', trigger_value: 'qualified', sequence_id: '', sequence_name: '' });
+      refresh();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Could not save rule'); }
+    finally { setBusy(false); }
+  };
+
+  const toggle = async (id) => { try { await api.patch(`/api/integrations/automation/rules/${id}`); refresh(); } catch { toast.error('Could not toggle'); } };
+  const remove = async (id) => { if (!window.confirm('Delete this rule?')) return; try { await api.delete(`/api/integrations/automation/rules/${id}`); refresh(); } catch { toast.error('Could not delete'); } };
+
+  const noConnection = !status.saleshandy?.connected && !status.lemlist?.connected;
+  const triggerMeta = TRIGGERS.find(t => t.id === form.trigger);
+
+  return (
+    <div className="bg-white border border-[#E8E0F5] rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="automation-rules">
+      <div className="px-6 py-4 border-b border-[#F0ECF9] flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
+            <Lightning size={18} weight="fill" className="text-white" />
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>AUTOMATION RULES</div>
+            <h3 className="text-lg font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Auto-push leads when triggers fire</h3>
+          </div>
+        </div>
+        <button onClick={() => setShowForm(true)} disabled={noConnection} data-testid="add-rule-btn"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
+          style={{ background: 'var(--gradient-brand)' }}>
+          <Plus size={14} weight="bold" /> New rule
+        </button>
+      </div>
+
+      {noConnection ? (
+        <div className="px-6 py-8 text-center text-sm text-[#9B8AB0]">Connect SalesHandy or Lemlist above to create automation rules.</div>
+      ) : rules.length === 0 && !showForm ? (
+        <div className="px-6 py-8 text-center" data-testid="rules-empty-state">
+          <p className="text-sm text-[#5A4A7A]">No rules yet. Set ARIA to auto-push leads to a sequence when status changes, source matches, or ICP tier hits hot.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-[#F0ECF9]">
+          {rules.map(r => (
+            <div key={r.id} className="px-6 py-4 flex items-center gap-3 flex-wrap" data-testid={`rule-${r.id}`}>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-[0.18em] text-white" style={{ background: r.platform === 'saleshandy' ? '#16A34A' : '#7C35DC' }}>
+                {r.platform === 'saleshandy' ? 'SalesHandy' : 'Lemlist'}
+              </span>
+              <div className="flex-1 min-w-0 text-sm">
+                <span className="text-[#5A4A7A]">When</span> <span className="font-bold text-[#1A0A2E]">{r.trigger.replace('_', ' ')}</span> <span className="text-[#5A4A7A]">=</span> <span className="font-bold text-[#7C35DC]">{r.trigger_value}</span> <span className="text-[#5A4A7A]">→ push to</span> <span className="font-bold text-[#1A0A2E]">{r.sequence_name || r.sequence_id.slice(0, 12)}</span>
+              </div>
+              {r.runs > 0 && <span className="text-[10px] text-[#9B8AB0]">{r.runs} run{r.runs === 1 ? '' : 's'}</span>}
+              <button onClick={() => toggle(r.id)} data-testid={`rule-toggle-${r.id}`}
+                className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-[0.15em] ${r.active ? 'bg-[#DCFCE7] text-[#16A34A] border border-[#16A34A]/30' : 'bg-[#F1F5F9] text-[#9B8AB0] border border-[#E2E8F0]'}`}>
+                {r.active ? 'ON' : 'OFF'}
+              </button>
+              <button onClick={() => remove(r.id)} data-testid={`rule-delete-${r.id}`}
+                className="text-[#9B8AB0] hover:text-[#DC2626]">
+                <Trash size={14} weight="fill" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="border-t border-[#F0ECF9] bg-[#FAF7FF] px-6 py-5 space-y-3" data-testid="rule-form">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#7B6D9C] mb-1.5">Push to</label>
+              <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} data-testid="rule-platform-select"
+                className="w-full px-3 py-2 rounded-lg border border-[#E8E0F5] focus:ring-2 focus:ring-[#7C35DC]/20 text-sm">
+                {status.lemlist?.connected && <option value="lemlist">Lemlist</option>}
+                {status.saleshandy?.connected && <option value="saleshandy">SalesHandy</option>}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#7B6D9C] mb-1.5">{form.platform === 'saleshandy' ? 'Sequence' : 'Campaign'}</label>
+              <select value={form.sequence_id} onChange={(e) => {
+                const seq = sequences.find(s => s.id === e.target.value);
+                setForm({ ...form, sequence_id: e.target.value, sequence_name: seq?.name || '' });
+              }} data-testid="rule-sequence-select" className="w-full px-3 py-2 rounded-lg border border-[#E8E0F5] focus:ring-2 focus:ring-[#7C35DC]/20 text-sm">
+                {sequences.length === 0 ? <option value="">Loading…</option> : sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#7B6D9C] mb-1.5">Trigger</label>
+              <select value={form.trigger} onChange={(e) => setForm({ ...form, trigger: e.target.value, trigger_value: TRIGGERS.find(t => t.id === e.target.value).values[0] })}
+                data-testid="rule-trigger-select" className="w-full px-3 py-2 rounded-lg border border-[#E8E0F5] focus:ring-2 focus:ring-[#7C35DC]/20 text-sm">
+                {TRIGGERS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#7B6D9C] mb-1.5">Value</label>
+              <select value={form.trigger_value} onChange={(e) => setForm({ ...form, trigger_value: e.target.value })}
+                data-testid="rule-value-select" className="w-full px-3 py-2 rounded-lg border border-[#E8E0F5] focus:ring-2 focus:ring-[#7C35DC]/20 text-sm">
+                {triggerMeta.values.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="text-[11px] text-[#5A4A7A] bg-white border border-[#E8E0F5] rounded-xl px-3 py-2">
+            <span className="font-bold text-[#1A0A2E]">Preview:</span> When a lead's <span className="font-bold text-[#7C35DC]">{form.trigger.replace('_', ' ')}</span> changes to <span className="font-bold text-[#7C35DC]">{form.trigger_value}</span>, ARIA will push it to <span className="font-bold text-[#1A0A2E]">{form.sequence_name || '—'}</span> on {form.platform === 'saleshandy' ? 'SalesHandy' : 'Lemlist'}.
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm font-semibold text-[#5A4A7A] hover:bg-white" data-testid="rule-cancel-btn">Cancel</button>
+            <button onClick={submit} disabled={busy || !form.sequence_id} data-testid="rule-save-btn"
+              className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50"
+              style={{ background: 'var(--gradient-brand)' }}>
+              {busy ? 'Saving…' : 'Save rule'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

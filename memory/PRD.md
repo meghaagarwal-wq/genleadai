@@ -73,6 +73,18 @@ Frontend new pages: `/aria-agent/assets`, `/aria-agent/brain`, `/aria-agent/week
 
 Typography aligned with genleadai.com: Space Grotesk (display) + Inter (body).
 
+## Iter 26 — SalesHandy auto-poll cron + Automation rules (Feb 2026)
+**Auto-poll cron:** `_saleshandy_poll_loop` async task started in `attach_integrations_routes` startup hook — polls SalesHandy activity every 5 min, dedupes events, syncs to ARIA activities collection. Verified in backend logs: `[SalesHandyAutoPoll] Background loop started (5 min tick)`.
+
+**Automation rules** (3 new endpoints):
+- `GET/POST/PATCH/DELETE /api/integrations/automation/rules` — CRUD on rules with triggers (`status`, `source`, `icp_tier`)
+- `apply_rules_to_lead` helper exposed via `app.state.apply_integration_rules` — called from `PATCH /api/leads/{id}` whenever status changes
+- Auto-pushes lead to configured SalesHandy sequence / Lemlist campaign on trigger match
+- Dedup via `synced_prospects` collection (won't push twice to same sequence)
+- Logs activity event `auto_pushed_to_{platform}` with rule_id metadata
+
+**Frontend:** AutomationRules section added to SalesEngagement page with rule list, on/off toggle, run count display, and inline create form (platform → sequence → trigger → value with live preview).
+
 ## Iter 25 — SalesHandy + Lemlist integrations (Feb 2026)
 **Bring-your-own-key model** — each workspace pastes its own API keys, Fernet-encrypted (AES-128) before storage.
 
