@@ -627,5 +627,110 @@ def attach_integrations_routes(app, get_current_user, db):
         asyncio.create_task(_saleshandy_poll_loop())
         print("[SalesHandyAutoPoll] Background loop started (5 min tick)")
 
+    @router.get("/digest/today")
+    async def digest_today(current_user: dict = Depends(get_current_user)):
+        """
+        Today's sequence activity digest — powers the Dashboard 'Sync Activity Digest' card.
+        Counts today's (UTC) activities coming from Lemlist / SalesHandy (auto-poll + webhooks)
+        plus pushes from automation rules or manual push.
+        """
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+        # Activity types we care about for the digest
+        EVENT_TYPES = [
+            "email_sent", "email_opened", "email_clicked", "replied",
+            "bounced", "meeting_scheduled", "interested",
+            "pushed_to_lemlist", "pushed_to_saleshandy",
+            "auto_pushed_to_lemlist", "auto_pushed_to_saleshandy",
+        ]
+
+        pipeline = [
+            {"$match": {
+                "created_at": {"$gte": today_start},
+                "activity_type": {"$in": EVENT_TYPES},
+            }},
+            {"$group": {"_id": "$activity_type", "count": {"$sum": 1}}},
+        ]
+        rows = {row["_id"]: row["count"] for row in activities_collection.aggregate(pipeline)}
+
+        opened = rows.get("email_opened", 0)
+        clicked = rows.get("email_clicked", 0)
+        replied = rows.get("replied", 0)
+        bounced = rows.get("bounced", 0)
+        meetings = rows.get("meeting_scheduled", 0) + rows.get("interested", 0)
+        pushed = (
+            rows.get("pushed_to_lemlist", 0)
+            + rows.get("pushed_to_saleshandy", 0)
+            + rows.get("auto_pushed_to_lemlist", 0)
+            + rows.get("auto_pushed_to_saleshandy", 0)
+        )
+        auto_pushed = rows.get("auto_pushed_to_lemlist", 0) + rows.get("auto_pushed_to_saleshandy", 0)
+        sent = rows.get("email_sent", 0)
+
+        # Connection state for empty-state messaging
+        s = _get_settings()
+        integ = s.get("integrations") or {}
+        lemlist_connected = bool(_dec(integ.get("lemlist_api_key")) if integ.get("lemlist_api_key") else "")
+        saleshandy_connected = bool(_dec(integ.get("saleshandy_api_key")) if integ.get("saleshandy_api_key") else "")
+
+        # Last 5 recent events for the activity list
+        recent_cursor = activities_collection.find(
+            {"created_at": {"$gte": today_start}, "activity_type": {"$in": EVENT_TYPES}},
+            {"_id": 0, "id": 1, "lead_id": 1, "activity_type": 1, "created_at": 1, "metadata": 1, "created_by": 1, "description": 1},
+        ).sort("created_at", -1).limit(5)
+        recent = list(recent_cursor)
+
+        # Hydrate recent events with lead name
+        lead_ids = list({r["lead_id"] for r in recent if r.get("lead_id")})
+        leads_by_id = {}
+        if lead_ids:
+            from bson import ObjectId as _OID
+            object_ids = []
+            string_ids = []
+            for lid in lead_ids:
+                try:
+                    object_ids.append(_OID(lid))
+                except Exception:
+                    string_ids.append(lid)
+            if object_ids:
+                for doc in leads_collection.find(
+                    {"_id": {"$in": object_ids}},
+                    {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "email": 1},
+                ):
+                    leads_by_id[str(doc["_id"])] = {
+                        "name": f"{doc.get('first_name', '')} {doc.get('last_name', '')}".strip() or doc.get("email"),
+                        "company": doc.get("company_name"),
+                    }
+            if string_ids:
+                for doc in leads_collection.find(
+                    {"id": {"$in": string_ids}},
+                    {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "email": 1},
+                ):
+                    leads_by_id[doc["id"]] = {
+                        "name": f"{doc.get('first_name', '')} {doc.get('last_name', '')}".strip() or doc.get("email"),
+                        "company": doc.get("company_name"),
+                    }
+        for r in recent:
+            info = leads_by_id.get(r.get("lead_id") or "", {})
+            r["lead_name"] = info.get("name")
+            r["company"] = info.get("company")
+
+        return {
+            "today_start": today_start,
+            "connected": {"lemlist": lemlist_connected, "saleshandy": saleshandy_connected},
+            "any_connected": lemlist_connected or saleshandy_connected,
+            "counts": {
+                "emails_sent": sent,
+                "emails_opened": opened,
+                "links_clicked": clicked,
+                "replies": replied,
+                "meetings_booked": meetings,
+                "bounced": bounced,
+                "pushed_to_sequences": pushed,
+                "auto_pushed": auto_pushed,
+            },
+            "recent": recent,
+        }
+
     app.include_router(router)
     return router

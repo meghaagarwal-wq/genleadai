@@ -6,6 +6,7 @@ import AriaInsightCard from '../components/AriaInsightCard';
 import FounderCommandCenter from '../components/FounderCommandCenter';
 import AriaTodayWidget from '../components/AriaTodayWidget';
 import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
+import SyncActivityDigest from '../components/SyncActivityDigest';
 import WorkspaceHero from '../components/WorkspaceHero';
 import AriaStories from '../components/AriaStories';
 import LeadFeed from '../components/LeadFeed';
@@ -167,6 +168,9 @@ const Dashboard = () => {
 
       {/* ARIA Sales Agent — additive activity section + positioning banner */}
       <AriaAgentActivitySection />
+
+      {/* Sync Activity Digest — today's Lemlist + SalesHandy events at a glance */}
+      <SyncActivityDigest />
 
       {/* Founder Command Center — high-conversion demo features */}
       <FounderCommandCenter />
