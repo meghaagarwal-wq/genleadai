@@ -169,6 +169,22 @@ Typography alignment:
 - `.font-display` weight 700 + `-0.02em` tracking for display legibility.
 - `PageHeader.js` H1 sizes tuned down to 2rem/2.375rem/2.75rem for sans-serif readability.
 
+## Iter 28 — Sync Activity Digest card on Dashboard (Feb 2026)
+**Backend** new endpoint: `GET /api/integrations/digest/today` (in `integrations_routes.py`).
+- Aggregates today's UTC activities by type from `activities_collection`.
+- Tracked event types: `email_sent`, `email_opened`, `email_clicked`, `replied`, `bounced`, `meeting_scheduled`, `interested`, `pushed_to_lemlist`, `pushed_to_saleshandy`, `auto_pushed_to_lemlist`, `auto_pushed_to_saleshandy`.
+- Returns `{today_start, connected:{lemlist, saleshandy}, any_connected, counts:{...}, recent:[]}` where recent is the latest 5 events hydrated with `lead_name` and `company`.
+
+**Frontend** new component: `/app/frontend/src/components/SyncActivityDigest.js`
+- Mounted on Dashboard between `<AriaAgentActivitySection />` and `<FounderCommandCenter />`.
+- 6 KPI tiles: Sent / Opened / Clicked / Replies / Meetings / Pushed.
+- 3 states: populated (today has events), quiet (connected but no events yet), empty (not connected — CTA to /sales-engagement).
+- Header shows Lemlist / SalesHandy connection pills + "Manage" link to /sales-engagement.
+- Auto-refreshes every 90 seconds.
+- Test data IDs: `sync-activity-digest`, `digest-tile-{name}`, `digest-recent-{i}`, `digest-manage-link`, `digest-empty-state`, `digest-quiet-state`, `digest-connect-cta`.
+
+**Test status (iter 23)**: Backend 100%, Frontend 100%, zero regressions.
+
 ## Backlog
 - P1: continue server.py extraction — remaining 4818 lines still hold aria/*, leads/*, lead-magnets/*, billing/*, assets/*, webhooks/*
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler
