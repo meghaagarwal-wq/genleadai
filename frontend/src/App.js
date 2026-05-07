@@ -33,6 +33,7 @@ import SalesAssets from './pages/SalesAssets';
 import AriaBrain from './pages/AriaBrain';
 import WeeklyRecap from './pages/WeeklyRecap';
 import SalesEngagement from './pages/SalesEngagement';
+import AdminFeedback from './pages/AdminFeedback';
 import AriaHome from './public/pages/AriaHome';
 import DemoDashboard from './public/pages/DemoDashboard';
 import LeadFeedSEO from './public/pages/LeadFeedSEO';
@@ -142,6 +143,7 @@ function App() {
                         <Route path="/aria-agent/brain" element={<AriaBrain />} />
                         <Route path="/aria-agent/weekly-recap" element={<WeeklyRecap />} />
                         <Route path="/sales-engagement" element={<SalesEngagement />} />
+                        <Route path="/admin/feedback" element={<AdminFeedback />} />
                       </Routes>
                       <UpgradeModal />
                     </Layout>

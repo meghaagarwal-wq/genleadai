@@ -14,6 +14,7 @@ import {
 import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
+import BetaFeedbackButton from './BetaFeedbackButton';
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -150,6 +151,9 @@ const Layout = ({ children }) => {
           style={{ fontFamily: 'Plus Jakarta Sans' }}>
           <SignOut size={16} /> Sign Out
         </button>
+        <div className="mt-2">
+          <BetaFeedbackButton variant="sidebar" />
+        </div>
       </div>
     </>
   );
