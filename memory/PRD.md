@@ -185,6 +185,21 @@ Typography alignment:
 
 **Test status (iter 23)**: Backend 100%, Frontend 100%, zero regressions.
 
+## Iter 29 — Beta badge + Beta feedback (Feb 2026)
+**Beta badges:** amber pill next to the ARIA brand on Login page, authenticated sidebar (desktop + mobile), public nav (all 12 SEO pages). Browser tab title updated to "ARIA (Beta) | AI Sales Assistant...". Testids: `beta-badge-login`, `beta-badge-sidebar`, `beta-badge-mobile`, `beta-badge-public`.
+
+**Beta feedback** — new modular router `/app/backend/routes/beta_feedback.py`:
+- `POST /api/beta-feedback` — any authenticated user; message 3–2000 chars; category ∈ {bug, idea, praise, other}; optional page_url.
+- `GET /api/beta-feedback` — admin-only; returns `{feedback:[], counts:{total, unresolved, by_category}}`; filter by `resolved` and `category`.
+- `PATCH /api/beta-feedback/{id}` — admin-only; resolve/reopen + admin_note.
+- `DELETE /api/beta-feedback/{id}` — admin-only.
+
+**Frontend:**
+- `BetaFeedbackButton.js` — amber pill button below Sign Out in sidebar. Opens modal with 4-category picker (Bug/Idea/Love it/Other with Phosphor icons), textarea with char counter, "attach page URL" checkbox. Sonner toast on success.
+- `AdminFeedback.js` mounted at `/admin/feedback` — 4 stat tiles + filter chips + resolve-toggle + delete rows.
+
+**Test status (iter 24)**: Backend 15/15 pytest, Frontend e2e 100%, zero issues.
+
 ## Backlog
 - P1: continue server.py extraction — remaining 4818 lines still hold aria/*, leads/*, lead-magnets/*, billing/*, assets/*, webhooks/*
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler
