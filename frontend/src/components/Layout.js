@@ -163,7 +163,10 @@ const Layout = ({ children }) => {
             <AriaAvatar size={32} tone="default" />
             {sidebarOpen && (
               <div className="min-w-0">
-                <div className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>ARIA</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>ARIA</span>
+                  <span data-testid="beta-badge-sidebar" className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#FDE68A] border border-[#F59E0B]/40" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
+                </div>
                 <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
               </div>
             )}
@@ -204,7 +207,10 @@ const Layout = ({ children }) => {
               <div className="flex items-center gap-2.5">
                 <AriaAvatar size={32} tone="default" />
                 <div>
-                  <div className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA</span>
+                    <span data-testid="beta-badge-mobile" className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#FDE68A] border border-[#F59E0B]/40" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
+                  </div>
                   <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
                 </div>
               </div>

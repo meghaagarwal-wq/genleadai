@@ -36,6 +36,7 @@ const PublicNav = () => {
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-base font-extrabold text-white tracking-tight" style={{ fontFamily: 'Space Grotesk, Inter, sans-serif' }}>ARIA</span>
+            <span data-testid="beta-badge-public" className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#FDE68A] border border-[#F59E0B]/40 relative -top-0.5" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#C9B6FF]">by GenLeadAI</span>
           </div>
         </Link>

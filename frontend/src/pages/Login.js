@@ -36,7 +36,10 @@ const Login = () => {
               <span className="text-white font-bold text-xl" style={{ fontFamily: 'Plus Jakarta Sans' }}>G</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>GenLead<span className="gradient-text">AI</span></h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>GenLead<span className="gradient-text">AI</span></h1>
+                <span data-testid="beta-badge-login" className="px-1.5 py-[1px] rounded-[4px] text-[9px] font-bold uppercase tracking-[0.18em] text-[#B45309] border border-[#F59E0B]/50" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
+              </div>
               <p className="text-sm text-[#9B8AB0]">Lead Management System</p>
             </div>
           </div>
