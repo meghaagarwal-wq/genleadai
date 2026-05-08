@@ -27,6 +27,28 @@ const Settings = () => {
   const [eodSaving, setEodSaving] = useState(false);
   const [eodSending, setEodSending] = useState(false);
 
+  // Security / password change
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState(null);
+
+  const submitPasswordChange = async (e) => {
+    e?.preventDefault?.();
+    setPwMsg(null);
+    if (pwNew.length < 8) { setPwMsg({ type: 'err', text: 'New password must be at least 8 characters' }); return; }
+    if (pwNew !== pwConfirm) { setPwMsg({ type: 'err', text: 'New password and confirmation do not match' }); return; }
+    setPwSaving(true);
+    try {
+      await api.post('/api/auth/change-password', { current_password: pwCurrent, new_password: pwNew });
+      setPwMsg({ type: 'ok', text: 'Password updated. Use the new password next time you sign in.' });
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+    } catch (err) {
+      setPwMsg({ type: 'err', text: err.response?.data?.detail || 'Could not update password' });
+    } finally { setPwSaving(false); }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchAriaSettings();
@@ -246,6 +268,7 @@ const Settings = () => {
           { id: 'integrations', label: 'API & Forms', icon: Key },
           { id: 'magnet', label: 'Lead Magnet', icon: Paperclip },
           { id: 'workspace', label: 'Workspace', icon: Gear },
+          { id: 'security', label: 'Security', icon: Key },
         ].map(tab => (
           <button
             key={tab.id}
@@ -819,6 +842,66 @@ const Settings = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Tab */}
+      {activeTab === 'security' && (
+        <div className="space-y-4 max-w-xl" data-testid="security-tab">
+          <div className="bg-[#141414] border border-[#262626] rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white">Change password</h3>
+            <p className="text-sm text-[#A3A3A3] mt-1">
+              Signed in as <span className="font-mono text-white">{user?.email}</span>. Use at least 8 characters.
+            </p>
+
+            <form onSubmit={submitPasswordChange} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Current password</label>
+                <input
+                  type="password" autoComplete="current-password" required
+                  value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)}
+                  data-testid="security-current-password"
+                  className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#0055FF] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">New password</label>
+                <input
+                  type="password" autoComplete="new-password" required minLength={8}
+                  value={pwNew} onChange={(e) => setPwNew(e.target.value)}
+                  data-testid="security-new-password"
+                  className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#0055FF] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Confirm new password</label>
+                <input
+                  type="password" autoComplete="new-password" required minLength={8}
+                  value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)}
+                  data-testid="security-confirm-password"
+                  className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#0055FF] outline-none"
+                />
+              </div>
+
+              {pwMsg && (
+                <div
+                  data-testid="security-password-msg"
+                  className={`text-sm px-3 py-2 rounded-md border ${pwMsg.type === 'ok' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`}
+                >
+                  {pwMsg.text}
+                </div>
+              )}
+
+              <button
+                type="submit" disabled={pwSaving}
+                data-testid="security-save-password"
+                className="px-4 py-2.5 rounded-md text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: '#0055FF' }}
+              >
+                {pwSaving ? 'Updating…' : 'Update password'}
+              </button>
+            </form>
           </div>
         </div>
       )}
