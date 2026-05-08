@@ -41,6 +41,7 @@ from routes.campaigns import router as campaigns_router
 from routes.ai import router as ai_router
 from routes.analytics import router as analytics_router
 from routes.beta_feedback import router as beta_feedback_router
+from routes.pietential import router as pietential_router
 
 load_dotenv()
 
@@ -62,6 +63,7 @@ app.include_router(campaigns_router)
 app.include_router(ai_router)
 app.include_router(analytics_router)
 app.include_router(beta_feedback_router)
+app.include_router(pietential_router)
 
 # Resend Email
 resend.api_key = os.getenv("RESEND_API_KEY")

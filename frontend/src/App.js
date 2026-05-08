@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -34,6 +35,17 @@ import AriaBrain from './pages/AriaBrain';
 import WeeklyRecap from './pages/WeeklyRecap';
 import SalesEngagement from './pages/SalesEngagement';
 import AdminFeedback from './pages/AdminFeedback';
+
+// Pietential workspace
+import PtLayout from './pietential/PtLayout';
+import PtOverview from './pietential/pages/PtOverview';
+import PtLeadFeed from './pietential/pages/PtLeadFeed';
+import PtLeadDetail from './pietential/pages/PtLeadDetail';
+import PtAccounts from './pietential/pages/PtAccounts';
+import PtTasks from './pietential/pages/PtTasks';
+import PtReports from './pietential/pages/PtReports';
+import PtIntegrations from './pietential/pages/PtIntegrations';
+import PtSettings from './pietential/pages/PtSettings';
 import AriaHome from './public/pages/AriaHome';
 import DemoDashboard from './public/pages/DemoDashboard';
 import LeadFeedSEO from './public/pages/LeadFeedSEO';
@@ -82,6 +94,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <PlanProvider>
+          <WorkspaceProvider>
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
@@ -100,6 +113,27 @@ function App() {
               <Route path="/aria/compare/aria-vs-crm" element={<CompareAriaVsCrm />} />
               <Route path="/aria/compare/aria-vs-spreadsheets" element={<CompareAriaVsSpreadsheets />} />
               <Route path="/aria/compare/ai-sales-assistant-vs-crm" element={<CompareAiVsCrm />} />
+
+              {/* Pietential workspace — parallel protected app */}
+              <Route
+                path="/pt/*"
+                element={
+                  <ProtectedRoute>
+                    <PtLayout>
+                      <Routes>
+                        <Route path="/" element={<PtOverview />} />
+                        <Route path="/leads" element={<PtLeadFeed />} />
+                        <Route path="/leads/:id" element={<PtLeadDetail />} />
+                        <Route path="/accounts" element={<PtAccounts />} />
+                        <Route path="/tasks" element={<PtTasks />} />
+                        <Route path="/reports" element={<PtReports />} />
+                        <Route path="/integrations" element={<PtIntegrations />} />
+                        <Route path="/settings" element={<PtSettings />} />
+                      </Routes>
+                    </PtLayout>
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/onboarding"
                 element={
@@ -152,6 +186,7 @@ function App() {
               />
             </Routes>
           </Router>
+          </WorkspaceProvider>
         </PlanProvider>
       </AuthProvider>
     </QueryClientProvider>

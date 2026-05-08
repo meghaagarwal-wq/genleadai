@@ -15,6 +15,33 @@ import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
+import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
+
+const AriaWorkspaceSwitcher = () => {
+  const { active, setActive } = useWorkspace();
+  const navigate = useNavigate();
+  const switchTo = (slug) => {
+    const ws = WORKSPACES.find(w => w.slug === slug);
+    if (!ws) return;
+    setActive(ws);
+    navigate(ws.home);
+  };
+  return (
+    <div className="px-3 py-2 border-b border-[var(--sidebar-divider)]" data-testid="aria-workspace-switcher">
+      <div className="text-[8px] font-bold uppercase tracking-[0.22em] text-[var(--sidebar-text-muted)] mb-1">Workspace</div>
+      <select
+        value={active.slug}
+        onChange={(e) => switchTo(e.target.value)}
+        data-testid="aria-workspace-select"
+        className="w-full text-xs font-semibold text-white bg-white/5 border border-white/10 rounded-md px-2 py-1.5 outline-none focus:ring-1 focus:ring-white/20"
+      >
+        {WORKSPACES.map(w => (
+          <option key={w.slug} value={w.slug} className="bg-[#1A0A2E]">{w.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -177,6 +204,7 @@ const Layout = ({ children }) => {
           </div>
           <button onClick={toggleSidebar} className="p-1 text-[var(--sidebar-text-muted)] hover:text-white transition-colors" title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'} data-testid="sidebar-toggle-inner"><List size={16} /></button>
         </div>
+        {sidebarOpen && <AriaWorkspaceSwitcher />}
         {sidebarOpen ? <NavContent /> : (
           <nav className="flex-1 px-2 py-4">
             <div className="space-y-1">
