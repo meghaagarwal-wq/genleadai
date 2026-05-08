@@ -122,6 +122,21 @@ def classify_stage(score: int) -> str:
     return "cold"
 
 
+def _tf(current_user: dict) -> dict:
+    """Tenant filter — ensures every pt_* read/write is scoped to the caller's
+    active tenant. The migration tagged all legacy pt_* docs with
+    tenant_id='ten_pietential'. Admin@demo.com is a member of both tenants;
+    the X-Tenant-Id header (set by the frontend tenant switcher) picks which
+    one wins. Any tenant that is not 'ten_pietential' sees zero pt_* rows."""
+    return {"tenant_id": current_user.get("tenant_id")}
+
+
+def _stamp_tenant(doc: dict, current_user: dict) -> dict:
+    """Stamp tenant_id on a document being inserted/updated."""
+    doc["tenant_id"] = current_user.get("tenant_id")
+    return doc
+
+
 def recommendation_for(score: int) -> str:
     if score >= 110: return "Create opportunity and track session/pilot."
     if score >= 70:  return "Remove from automation. John owns this conversation."
@@ -246,11 +261,14 @@ class BulkLeadsPayload(BaseModel):
 
 
 # ─── Company resolution & cascade ───────────────────────────────────────────
-def _ensure_company(name: Optional[str], lead: dict) -> Optional[dict]:
+def _ensure_company(name: Optional[str], lead: dict, tenant_id: Optional[str] = None) -> Optional[dict]:
+    """Find or create a company doc. Tenant-scoped: company created/looked-up
+    only within the caller's tenant."""
     if not name:
         return None
     norm = name.strip().lower()
-    company = companies_col.find_one({"name_norm": norm})
+    tf = {"tenant_id": tenant_id} if tenant_id else {}
+    company = companies_col.find_one({**tf, "name_norm": norm})
     if not company:
         company = {
             "id": _new_id("ptc"),
@@ -270,11 +288,13 @@ def _ensure_company(name: Optional[str], lead: dict) -> Optional[dict]:
             "created_at": _now_iso(),
             "updated_at": _now_iso(),
         }
+        if tenant_id:
+            company["tenant_id"] = tenant_id
         companies_col.insert_one(company)
     else:
-        contacts = leads_col.count_documents({"company_id": company["id"]})
+        contacts = leads_col.count_documents({**tf, "company_id": company["id"]})
         companies_col.update_one(
-            {"id": company["id"]},
+            {"id": company["id"], **tf},
             {"$set": {"contacts_mapped": max(1, contacts), "updated_at": _now_iso()}}
         )
     return _strip_id(company)
@@ -493,7 +513,7 @@ def _ingest_event(event_type: str, lead_lookup: dict, metadata: dict, current_us
 @router.post("/leads")
 async def create_lead(payload: LeadCreate, current_user: dict = Depends(get_current_user)):
     _require_write(current_user)
-    if leads_col.find_one({"email": payload.email.lower().strip()}):
+    if leads_col.find_one({"email": payload.email.lower().strip(), **_tf(current_user)}):
         raise HTTPException(status_code=400, detail="Lead with this email already exists")
     doc = payload.dict()
     doc["email"] = doc["email"].lower().strip()
@@ -507,7 +527,8 @@ async def create_lead(payload: LeadCreate, current_user: dict = Depends(get_curr
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     })
-    company = _ensure_company(doc.get("company_name"), doc)
+    _stamp_tenant(doc, current_user)
+    company = _ensure_company(doc.get("company_name"), doc, tenant_id=current_user.get("tenant_id"))
     doc["company_id"] = (company or {}).get("id")
     leads_col.insert_one(doc)
     if doc["company_id"]:
@@ -529,7 +550,7 @@ async def list_leads(
     limit: int = 200,
     current_user: dict = Depends(get_current_user),
 ):
-    query = {}
+    query = {**_tf(current_user)}
     if stage: query["stage"] = stage
     if source: query["source"] = source
     if score_min is not None: query.setdefault("score", {})["$gte"] = score_min
@@ -551,12 +572,12 @@ async def list_leads(
 
 @router.get("/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
-    lead = leads_col.find_one({"id": lead_id}, {"_id": 0})
+    lead = leads_col.find_one({"id": lead_id, **_tf(current_user)}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    company = companies_col.find_one({"id": lead.get("company_id")}, {"_id": 0}) if lead.get("company_id") else None
-    events = list(events_col.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
-    notes = list(notes_col.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(100))
+    company = companies_col.find_one({"id": lead.get("company_id"), **_tf(current_user)}, {"_id": 0}) if lead.get("company_id") else None
+    events = list(events_col.find({"lead_id": lead_id, **_tf(current_user)}, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
+    notes = list(notes_col.find({"lead_id": lead_id, **_tf(current_user)}, {"_id": 0}).sort("created_at", DESCENDING).limit(100))
     # Score breakdown — group events by event_type
     breakdown = {}
     for e in events:
@@ -817,7 +838,7 @@ async def list_companies(
     q: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    query = {}
+    query = {**_tf(current_user)}
     if pause_required is not None: query["pause_required"] = pause_required
     if account_stage: query["account_stage"] = account_stage
     if industry: query["industry"] = industry
@@ -828,11 +849,11 @@ async def list_companies(
 
 @router.get("/companies/{company_id}")
 async def get_company(company_id: str, current_user: dict = Depends(get_current_user)):
-    company = companies_col.find_one({"id": company_id}, {"_id": 0})
+    company = companies_col.find_one({"id": company_id, **_tf(current_user)}, {"_id": 0})
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
-    leads = list(leads_col.find({"company_id": company_id}, {"_id": 0}).sort("score", DESCENDING))
-    events = list(events_col.find({"company_id": company_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
+    leads = list(leads_col.find({"company_id": company_id, **_tf(current_user)}, {"_id": 0}).sort("score", DESCENDING))
+    events = list(events_col.find({"company_id": company_id, **_tf(current_user)}, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
     return {"company": company, "leads": leads, "events": events}
 
 
@@ -844,7 +865,7 @@ async def patch_company(company_id: str, body: Dict[str, Any], current_user: dic
     if not update:
         raise HTTPException(status_code=400, detail="No allowed fields")
     update["updated_at"] = _now_iso()
-    res = companies_col.update_one({"id": company_id}, {"$set": update})
+    res = companies_col.update_one({"id": company_id, **_tf(current_user)}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Company not found")
     return {"company": companies_col.find_one({"id": company_id}, {"_id": 0})}
@@ -865,7 +886,7 @@ async def post_event(payload: EventCreate, current_user: dict = Depends(get_curr
 
 @router.get("/events")
 async def list_events(lead_id: Optional[str] = None, company_id: Optional[str] = None, limit: int = 100, current_user: dict = Depends(get_current_user)):
-    query = {}
+    query = {**_tf(current_user)}
     if lead_id: query["lead_id"] = lead_id
     if company_id: query["company_id"] = company_id
     rows = list(events_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(min(limit, 500)))
@@ -883,6 +904,7 @@ async def create_task(payload: TaskCreate, current_user: dict = Depends(get_curr
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
     })
+    _stamp_tenant(doc, current_user)
     tasks_col.insert_one(doc)
     return {"task": _strip_id(doc)}
 
@@ -893,7 +915,8 @@ async def list_tasks(
     lead_id: Optional[str] = None, company_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    query = {}
+    tf = _tf(current_user)
+    query = {**tf}
     if status: query["status"] = status
     if owner: query["owner"] = owner
     if priority: query["priority"] = priority
@@ -901,10 +924,10 @@ async def list_tasks(
     if company_id: query["company_id"] = company_id
     rows = list(tasks_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(500))
     counts = {
-        "total": tasks_col.count_documents({}),
-        "open": tasks_col.count_documents({"status": "open"}),
-        "in_progress": tasks_col.count_documents({"status": "in_progress"}),
-        "done": tasks_col.count_documents({"status": "done"}),
+        "total": tasks_col.count_documents(tf),
+        "open": tasks_col.count_documents({**tf, "status": "open"}),
+        "in_progress": tasks_col.count_documents({**tf, "status": "in_progress"}),
+        "done": tasks_col.count_documents({**tf, "status": "done"}),
     }
     return {"tasks": rows, "counts": counts}
 
@@ -916,7 +939,7 @@ async def patch_task(task_id: str, payload: TaskPatch, current_user: dict = Depe
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
     update["updated_at"] = _now_iso()
-    res = tasks_col.update_one({"id": task_id}, {"$set": update})
+    res = tasks_col.update_one({"id": task_id, **_tf(current_user)}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"task": tasks_col.find_one({"id": task_id}, {"_id": 0})}
@@ -925,7 +948,7 @@ async def patch_task(task_id: str, payload: TaskPatch, current_user: dict = Depe
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     _require_write(current_user)
-    res = tasks_col.delete_one({"id": task_id})
+    res = tasks_col.delete_one({"id": task_id, **_tf(current_user)})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "ok"}
@@ -942,13 +965,14 @@ async def create_note(payload: NoteCreate, current_user: dict = Depends(get_curr
         "created_by_name": current_user.get("full_name"),
         "created_at": _now_iso(),
     }
+    _stamp_tenant(doc, current_user)
     notes_col.insert_one(doc)
     return {"note": _strip_id(doc)}
 
 
 @router.get("/notes")
 async def list_notes(lead_id: Optional[str] = None, company_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    query = {}
+    query = {**_tf(current_user)}
     if lead_id: query["lead_id"] = lead_id
     if company_id: query["company_id"] = company_id
     rows = list(notes_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
@@ -958,28 +982,29 @@ async def list_notes(lead_id: Optional[str] = None, company_id: Optional[str] = 
 # ─── Overview metrics ───────────────────────────────────────────────────────
 @router.get("/overview")
 async def overview(current_user: dict = Depends(get_current_user)):
-    total = leads_col.count_documents({})
-    warm = leads_col.count_documents({"stage": "warm"})
-    hot = leads_col.count_documents({"stage": "hot"})
-    engaged = leads_col.count_documents({"stage": {"$in": ["engaged", "session_pilot"]}})
-    accounts_total = companies_col.count_documents({})
-    accounts_pause = companies_col.count_documents({"pause_required": True})
-    sessions = events_col.count_documents({"event_type": "calendly.session_booked"})
-    newsletter_subs = events_col.count_documents({"event_type": "newsletter.subscribed"})
-    magnet_claims = events_col.count_documents({"event_type": {"$in": ["lead_magnet.downloaded", "lead_magnet.company_claim", "jsa.claimed"]}})
-    positive_replies = events_col.count_documents({"event_type": {"$in": ["saleshandy.positive_reply", "lemlist.dm_positive_reply", "newsletter.positive_reply"]}})
+    tf = _tf(current_user)
+    total = leads_col.count_documents(tf)
+    warm = leads_col.count_documents({**tf, "stage": "warm"})
+    hot = leads_col.count_documents({**tf, "stage": "hot"})
+    engaged = leads_col.count_documents({**tf, "stage": {"$in": ["engaged", "session_pilot"]}})
+    accounts_total = companies_col.count_documents(tf)
+    accounts_pause = companies_col.count_documents({**tf, "pause_required": True})
+    sessions = events_col.count_documents({**tf, "event_type": "calendly.session_booked"})
+    newsletter_subs = events_col.count_documents({**tf, "event_type": "newsletter.subscribed"})
+    magnet_claims = events_col.count_documents({**tf, "event_type": {"$in": ["lead_magnet.downloaded", "lead_magnet.company_claim", "jsa.claimed"]}})
+    positive_replies = events_col.count_documents({**tf, "event_type": {"$in": ["saleshandy.positive_reply", "lemlist.dm_positive_reply", "newsletter.positive_reply"]}})
 
-    sh_int = integrations_col.find_one({"name": "saleshandy"}, {"_id": 0})
-    ll_int = integrations_col.find_one({"name": "lemlist"}, {"_id": 0})
+    sh_int = integrations_col.find_one({**tf, "name": "saleshandy"}, {"_id": 0})
+    ll_int = integrations_col.find_one({**tf, "name": "lemlist"}, {"_id": 0})
 
-    last_event = events_col.find_one({}, {"_id": 0, "created_at": 1}, sort=[("created_at", DESCENDING)])
+    last_event = events_col.find_one(tf, {"_id": 0, "created_at": 1}, sort=[("created_at", DESCENDING)])
 
     # Per-platform activity totals
-    sh_events = events_col.count_documents({"source": "saleshandy"})
-    ll_events = events_col.count_documents({"source": "lemlist"})
-    sh_leads = leads_col.count_documents({"source": "saleshandy"})
-    ll_leads = leads_col.count_documents({"source": "lemlist"})
-    john_owned = leads_col.count_documents({"owner": "John"})
+    sh_events = events_col.count_documents({**tf, "source": "saleshandy"})
+    ll_events = events_col.count_documents({**tf, "source": "lemlist"})
+    sh_leads = leads_col.count_documents({**tf, "source": "saleshandy"})
+    ll_leads = leads_col.count_documents({**tf, "source": "lemlist"})
+    john_owned = leads_col.count_documents({**tf, "owner": "John"})
 
     return {
         "metrics": {
@@ -987,7 +1012,7 @@ async def overview(current_user: dict = Depends(get_current_user)):
             "warm_leads": warm,
             "hot_leads": hot,
             "engaged_accounts": engaged,
-            "engaged_accounts_total": companies_col.count_documents({"account_stage": {"$in": ["warm", "hot", "engaged", "session_pilot"]}}),
+            "engaged_accounts_total": companies_col.count_documents({**tf, "account_stage": {"$in": ["warm", "hot", "engaged", "session_pilot"]}}),
             "accounts_total": accounts_total,
             "sessions_booked": sessions,
             "accounts_requiring_pause": accounts_pause,
@@ -999,11 +1024,11 @@ async def overview(current_user: dict = Depends(get_current_user)):
             "lemlist_leads": ll_leads,
             "saleshandy_events": sh_events,
             "lemlist_events": ll_events,
-            "email_opens": events_col.count_documents({"event_type": "saleshandy.email_opened"}),
-            "email_clicks": events_col.count_documents({"event_type": "saleshandy.email_clicked"}),
-            "saleshandy_positive_replies": events_col.count_documents({"event_type": "saleshandy.positive_reply"}),
-            "linkedin_connections": events_col.count_documents({"event_type": "lemlist.connection_accepted"}),
-            "lemlist_dm_replies": events_col.count_documents({"event_type": "lemlist.dm_positive_reply"}),
+            "email_opens": events_col.count_documents({**tf, "event_type": "saleshandy.email_opened"}),
+            "email_clicks": events_col.count_documents({**tf, "event_type": "saleshandy.email_clicked"}),
+            "saleshandy_positive_replies": events_col.count_documents({**tf, "event_type": "saleshandy.positive_reply"}),
+            "linkedin_connections": events_col.count_documents({**tf, "event_type": "lemlist.connection_accepted"}),
+            "lemlist_dm_replies": events_col.count_documents({**tf, "event_type": "lemlist.dm_positive_reply"}),
             "john_owned_conversations": john_owned,
         },
         "connections": {
@@ -1020,8 +1045,9 @@ async def overview(current_user: dict = Depends(get_current_user)):
 async def weekly_report(current_user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     week_ago = (now - timedelta(days=7)).isoformat()
+    tf = _tf(current_user)
     def _count(qfilter):
-        return events_col.count_documents({**qfilter, "created_at": {"$gte": week_ago}})
+        return events_col.count_documents({**tf, **qfilter, "created_at": {"$gte": week_ago}})
     return {
         "window": "last_7_days",
         "from": week_ago,
@@ -1034,10 +1060,10 @@ async def weekly_report(current_user: dict = Depends(get_current_user)):
             "lead_magnet_claims":          _count({"event_type": {"$in": ["lead_magnet.downloaded", "lead_magnet.company_claim"]}}),
             "jsa_claims":                  _count({"event_type": "jsa.claimed"}),
             "good_slice_subscribers":      _count({"event_type": "newsletter.subscribed"}),
-            "hot_leads_created":           leads_col.count_documents({"stage": "hot", "updated_at": {"$gte": week_ago}}),
-            "engaged_accounts":            companies_col.count_documents({"account_stage": {"$in": ["engaged", "session_pilot"]}, "updated_at": {"$gte": week_ago}}),
+            "hot_leads_created":           leads_col.count_documents({**tf, "stage": "hot", "updated_at": {"$gte": week_ago}}),
+            "engaged_accounts":            companies_col.count_documents({**tf, "account_stage": {"$in": ["engaged", "session_pilot"]}, "updated_at": {"$gte": week_ago}}),
             "sessions_booked":             _count({"event_type": "calendly.session_booked"}),
-            "accounts_paused":             companies_col.count_documents({"pause_required": True, "updated_at": {"$gte": week_ago}}),
+            "accounts_paused":             companies_col.count_documents({**tf, "pause_required": True, "updated_at": {"$gte": week_ago}}),
             "dnc_unsubscribed":            _count({"event_type": "manual.dnc"}),
         },
     }
@@ -1047,15 +1073,16 @@ async def weekly_report(current_user: dict = Depends(get_current_user)):
 async def monthly_report(current_user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     month_ago = (now - timedelta(days=30)).isoformat()
+    tf = _tf(current_user)
     # Channel-wise performance (events grouped by source within window)
     channel = list(events_col.aggregate([
-        {"$match": {"created_at": {"$gte": month_ago}}},
+        {"$match": {**tf, "created_at": {"$gte": month_ago}}},
         {"$group": {"_id": "$source", "events": {"$sum": 1}, "score_total": {"$sum": "$score_change"}}},
         {"$sort": {"score_total": -1}},
     ]))
     # Title-wise + Industry-wise (look up lead title/industry from events)
     title_pipeline = [
-        {"$match": {"created_at": {"$gte": month_ago}}},
+        {"$match": {**tf, "created_at": {"$gte": month_ago}}},
         {"$lookup": {"from": "pt_leads", "localField": "lead_id", "foreignField": "id", "as": "lead"}},
         {"$unwind": {"path": "$lead", "preserveNullAndEmptyArrays": True}},
         {"$group": {"_id": "$lead.title", "events": {"$sum": 1}}},

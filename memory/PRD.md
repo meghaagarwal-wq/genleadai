@@ -63,6 +63,25 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 34 — P0 tenant scoping across critical endpoints (Feb 2026)
+**Backend**:
+- Added `_tf(current_user)` tenant-filter helper + `_stamp_tenant(doc, user)` writer helper in `routes/pietential.py`.
+- Scoped `/api/pt/*` endpoints: leads list/get/create, companies list/get/patch, events list, tasks list/patch/delete/create, notes list/create, overview (all 25+ counters), reports weekly/monthly. All reads filter `tenant_id`; all writes stamp `tenant_id`.
+- Hardened `_ensure_company()` to be tenant-scoped (lookup + insert).
+- Scoped legacy server.py: `/api/aria/analytics`, `/api/aria/call-priority` (with `_compute_call_priority(tenant_id=...)` refactor).
+
+**Verified isolation matrix (all PASS)**:
+| View | /api/leads | /api/pt/overview | /api/pt/companies | /api/analytics/dashboard | /api/aria/analytics |
+|------|-----------|------------------|-------------------|-------------------------|---------------------|
+| Demo tenant | 88 | 0 | 0 | 88 | 30 |
+| Pietential tenant (X-Tenant-Id header) | 0 | 1 | 1 | — | — |
+| Fresh signup | 0 | 0 | 0 | 0 | — |
+
+**Known remaining gaps (lower priority — not in current UI's critical path)**:
+- `/api/pt/tasks POST` (stamped but verify write); /api/pt/training/signals, /api/pt/touchpoints, /api/pt/automation/logs, /api/pt/integrations, /api/pt/saleshandy/activity, /api/pt/lemlist/activity — all still global reads (used on less-trafficked Pietential pages).
+- `/api/aria-agent/*` reads in `aria_agent_routes.py` — partially scoped; several still global.
+- Legacy follow-ups + pipelines endpoints in server.py — still global.
+
 ## Iter 33 — Tokenized team invite flow (Feb 2026)
 **Backend** (`/app/backend/routes/tenants.py`):
 - New `invitations` collection.

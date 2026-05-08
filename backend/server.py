@@ -892,10 +892,11 @@ async def update_aria_settings_endpoint(settings_update: AriaSettingsUpdate, cur
 
 @app.get("/api/aria/analytics")
 async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
-    """Get ARIA performance analytics."""
+    """Get ARIA performance analytics — tenant-scoped."""
+    tid = current_user.get("tenant_id")
     # Total conversations
     leads_with_aria = list(leads_collection.find(
-        {"aria_state": {"$exists": True, "$ne": None}},
+        {"aria_state": {"$exists": True, "$ne": None}, "tenant_id": tid},
         {"_id": 0, "aria_state": 1, "icp_tier": 1, "status": 1}
     ))
     
@@ -908,14 +909,14 @@ async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
         state_counts[state] = state_counts.get(state, 0) + 1
     
     # Count messages
-    total_aria_messages = aria_conversations_collection.count_documents({"role": "aria"})
-    total_lead_replies = aria_conversations_collection.count_documents({"role": "lead"})
+    total_aria_messages = aria_conversations_collection.count_documents({"role": "aria", "tenant_id": tid})
+    total_lead_replies = aria_conversations_collection.count_documents({"role": "lead", "tenant_id": tid})
     
     # Reply rate
     reply_rate = round((total_lead_replies / max(total_conversations, 1)) * 100, 1)
     
     # Booking rate
-    booked = state_counts.get("MEETING_BOOKED", 0) + leads_collection.count_documents({"aria_booking_url": {"$exists": True, "$ne": None}})
+    booked = state_counts.get("MEETING_BOOKED", 0) + leads_collection.count_documents({"aria_booking_url": {"$exists": True, "$ne": None}, "tenant_id": tid})
     booking_rate = round((booked / max(total_conversations, 1)) * 100, 1)
     
     # Qualification rate
@@ -924,7 +925,7 @@ async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
     
     # Disqualification reasons
     dnc_count = state_counts.get("DO_NOT_CONTACT", 0)
-    disqualified_count = leads_collection.count_documents({"aria_state": "DO_NOT_CONTACT"})
+    disqualified_count = leads_collection.count_documents({"aria_state": "DO_NOT_CONTACT", "tenant_id": tid})
     
     return {
         "total_conversations": total_conversations,
@@ -3866,20 +3867,28 @@ async def best_time_to_call_for_lead(lead_id: str, current_user: dict = Depends(
 @app.get("/api/aria/call-priority")
 async def aria_call_priority(limit: int = 3, current_user: dict = Depends(get_current_user)):
     """Return the top N leads that are ripe to call RIGHT NOW — for Dashboard widget."""
-    return _compute_call_priority(limit)
+    return _compute_call_priority(limit, tenant_id=current_user.get("tenant_id"))
 
 
-def _compute_call_priority(limit: int = 3) -> dict:
-    """Internal: top-N call priority, callable without auth (used by daily call plan + endpoint)."""
+def _compute_call_priority(limit: int = 3, tenant_id: Optional[str] = None) -> dict:
+    """Internal: top-N call priority. Tenant-scoped when tenant_id provided."""
     limit = max(1, min(limit, 50))
 
+    # Base filter — never let a tenant see another tenant's lead.
+    tf = {"tenant_id": tenant_id} if tenant_id else {}
+
     candidate_ids = set()
-    recent_views = list(lead_magnet_views_collection.find({"kind": "view"}, {"_id": 0, "lead_id": 1, "created_at": 1}).sort("created_at", DESCENDING).limit(50))
+    recent_views = list(
+        lead_magnet_views_collection.find(
+            {"kind": "view", **tf},
+            {"_id": 0, "lead_id": 1, "created_at": 1},
+        ).sort("created_at", DESCENDING).limit(50)
+    )
     for v in recent_views:
         if v.get("lead_id"):
             candidate_ids.add(v["lead_id"])
     high_icp = list(leads_collection.find(
-        {"icp_score": {"$gte": 60}, "status": {"$nin": ["won", "lost", "unqualified"]}},
+        {"icp_score": {"$gte": 60}, "status": {"$nin": ["won", "lost", "unqualified"]}, **tf},
         {"_id": 1},
     ).limit(30))
     for l_doc in high_icp:
@@ -3889,7 +3898,7 @@ def _compute_call_priority(limit: int = 3) -> dict:
     for lid in candidate_ids:
         try:
             lead_doc = leads_collection.find_one(
-                {"_id": ObjectId(lid)},
+                {"_id": ObjectId(lid), **tf},
                 {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1, "status": 1, "email": 1},
             )
         except Exception:
