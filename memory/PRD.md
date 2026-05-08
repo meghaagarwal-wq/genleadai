@@ -63,6 +63,19 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 31 — Empty state for fresh tenants + dashboard isolation (Feb 2026)
+**Backend (tenant scoping)**:
+- `routes/analytics.py /api/analytics/dashboard` — every count filtered by `tenant_id`. Fresh signups now get all-zero analytics; admin@demo.com still sees 88 leads.
+- `server.py /api/leads/your-five-today`, `/api/leads/sleeping`, `/api/aria/feed` — all tenant-scoped.
+
+**Frontend**:
+- New `EmptyDashboard` component (`/app/frontend/src/components/EmptyDashboard.js`) — purple gradient hero with "Good {time}, {first_name}" + workspace name, 3 CTAs (Add lead / Import CSV / Watch 2-min demo), 3-step explainer cards, "What lights up" feature pills, "Browse demo" CTA, demo video modal (placeholder ready for Loom/YouTube embed).
+- `Dashboard.js` short-circuits: when `analytics.total_leads === 0` → renders `<EmptyDashboard>` instead of the live widgets. No more fake "Sasha/Finley/Quinn" or "63 updates waiting" for new signups.
+
+**Verified**:
+- Fresh signup E2E → empty dashboard renders correctly (screenshot confirmed).
+- admin@demo.com → real demo data still visible (no regression).
+
 ## Iter 30 — Multi-tenant SaaS Phase 2 (data isolation + tenant switcher) (Feb 2026)
 **Backend**:
 - `deps.get_current_user` now resolves active tenant from `X-Tenant-Id` header (fallback: user's primary membership) and attaches `tenant_id` + `tenant_role` to the user dict.

@@ -11,6 +11,7 @@ import WorkspaceHero from '../components/WorkspaceHero';
 import AriaStories from '../components/AriaStories';
 import LeadFeed from '../components/LeadFeed';
 import PipelineMoodCard from '../components/PipelineMoodCard';
+import EmptyDashboard from '../components/EmptyDashboard';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -33,13 +34,14 @@ const Dashboard = () => {
   const [ttv, setTtv] = useState(null);
   const [recentOpens, setRecentOpens] = useState([]);
   const [callPriority, setCallPriority] = useState([]);
+  const [tenantInfo, setTenantInfo] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAll(); }, []);
 
   const fetchAll = async () => {
     try {
-      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes, cpRes] = await Promise.all([
+      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes, cpRes, tInfo] = await Promise.all([
         api.get('/api/analytics/dashboard'),
         api.get('/api/leads?limit=5'),
         api.get('/api/aria/analytics').catch(() => ({ data: null })),
@@ -48,6 +50,7 @@ const Dashboard = () => {
         api.get('/api/ttv/milestones').catch(() => ({ data: null })),
         api.get('/api/lead-magnets/recent-opens?limit=5').catch(() => ({ data: { opens: [] } })),
         api.get('/api/aria/call-priority?limit=3').catch(() => ({ data: { priority: [] } })),
+        api.get('/api/tenants/active').catch(() => ({ data: null })),
       ]);
       setAnalytics(aRes.data);
       setRecentLeads(lRes.data.leads);
@@ -57,6 +60,7 @@ const Dashboard = () => {
       setTtv(ttvRes.data);
       setRecentOpens(opensRes.data?.opens || []);
       setCallPriority(cpRes.data?.priority || []);
+      setTenantInfo(tInfo.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -95,6 +99,17 @@ const Dashboard = () => {
     const s = { hot: 'bg-[#F4E6FD] text-[#7C35DC] border-[#C044E0]', warm: 'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/30', cold: 'bg-[#F1F5F9] text-[#64748B] border-[#94A3B8]/30' };
     return `px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${s[tier] || s.cold}`;
   };
+
+  // Fresh tenant with zero leads → show clean empty state instead of fake-data widgets
+  const totalLeads = analytics?.total_leads ?? 0;
+  if (!loading && totalLeads === 0) {
+    return (
+      <EmptyDashboard
+        workspaceName={tenantInfo?.tenant?.name}
+        founderName={user?.full_name}
+      />
+    );
+  }
 
   return (
     <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto">

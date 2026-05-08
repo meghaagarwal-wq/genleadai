@@ -943,9 +943,9 @@ async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
 
 @app.get("/api/aria/feed")
 async def get_aria_feed(current_user: dict = Depends(get_current_user)):
-    """Get live feed of active ARIA conversations."""
+    """Get live feed of active ARIA conversations — tenant-scoped."""
     active_leads = list(leads_collection.find(
-        {"aria_state": {"$exists": True, "$ne": None}},
+        {"aria_state": {"$exists": True, "$ne": None}, "tenant_id": current_user.get("tenant_id")},
     ).sort("aria_last_action_at", DESCENDING).limit(50))
     
     feed = []
@@ -1079,10 +1079,10 @@ async def delete_asset(asset_id: str, current_user: dict = Depends(get_current_u
 async def get_your_five_today(current_user: dict = Depends(get_current_user)):
     """AI-ranked top 5 leads the founder should personally touch today."""
     try:
-        # Get all active leads (not won, lost, do_not_contact)
+        # Get all active leads (not won, lost, do_not_contact) — tenant-scoped
         excluded = ["won", "lost", "do_not_contact"]
         candidates = list(leads_collection.find(
-            {"status": {"$nin": excluded}},
+            {"status": {"$nin": excluded}, "tenant_id": current_user.get("tenant_id")},
             {
                 "_id": 1, "first_name": 1, "last_name": 1, "email": 1, "phone": 1,
                 "company_name": 1, "status": 1, "icp_score": 1, "source_channel": 1,
@@ -1191,6 +1191,7 @@ async def get_sleeping_leads(
     """Get leads with no activity beyond threshold days."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
     query = {
+        "tenant_id": current_user.get("tenant_id"),
         "status": {"$nin": ["won", "lost", "do_not_contact"]},
         "$or": [
             {"last_contacted_at": {"$lt": cutoff}},

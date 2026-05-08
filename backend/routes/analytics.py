@@ -15,22 +15,25 @@ router = APIRouter(tags=["analytics-misc"])
 
 @router.get("/api/analytics/dashboard")
 async def get_dashboard_analytics(current_user: dict = Depends(get_current_user)):
-    total_leads = leads_collection.count_documents({})
+    # Tenant isolation — every count must be scoped to the caller's tenant
+    tid = current_user.get("tenant_id")
+    base = {"tenant_id": tid}
+    total_leads = leads_collection.count_documents(base)
 
     status_counts = {}
     for s in ["new", "contacted", "qualified", "proposal_sent", "negotiation", "won", "lost"]:
-        status_counts[s] = leads_collection.count_documents({"status": s})
+        status_counts[s] = leads_collection.count_documents({**base, "status": s})
 
     channel_counts = {}
     for ch in ["whatsapp", "email", "linkedin", "instagram", "facebook", "website_form", "cold_call", "referral"]:
-        channel_counts[ch] = leads_collection.count_documents({"source_channel": ch})
+        channel_counts[ch] = leads_collection.count_documents({**base, "source_channel": ch})
 
-    b2b_count = leads_collection.count_documents({"lead_type": "B2B"})
-    b2c_count = leads_collection.count_documents({"lead_type": "B2C"})
+    b2b_count = leads_collection.count_documents({**base, "lead_type": "B2B"})
+    b2c_count = leads_collection.count_documents({**base, "lead_type": "B2C"})
 
-    hot_count = leads_collection.count_documents({"icp_tier": "hot"})
-    warm_count = leads_collection.count_documents({"icp_tier": "warm"})
-    cold_count = leads_collection.count_documents({"icp_tier": "cold"})
+    hot_count = leads_collection.count_documents({**base, "icp_tier": "hot"})
+    warm_count = leads_collection.count_documents({**base, "icp_tier": "warm"})
+    cold_count = leads_collection.count_documents({**base, "icp_tier": "cold"})
 
     return {
         "total_leads": total_leads,
