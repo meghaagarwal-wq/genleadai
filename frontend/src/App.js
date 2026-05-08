@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Signup from './pages/Signup';
+import DemoSandbox from './pages/DemoSandbox';
 import Dashboard from './pages/Dashboard';
 import LeadInbox from './pages/LeadInbox';
 import LeadDetail from './pages/LeadDetail';
@@ -129,6 +130,7 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Navigate to="/signup" replace />} />
               <Route path="/signup" element={<Signup />} />
+              <Route path="/demo" element={<DemoSandbox />} />
 
               {/* Public ARIA content ecosystem (crawlable, no auth) */}
               <Route path="/aria" element={<AriaHome />} />

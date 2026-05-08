@@ -124,7 +124,7 @@ const EmptyDashboard = ({ workspaceName, founderName }) => {
           </p>
         </div>
         <a
-          href="/aria/demo-dashboard"
+          href="/demo"
           target="_blank"
           rel="noopener noreferrer"
           data-testid="empty-browse-demo-btn"

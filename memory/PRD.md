@@ -63,6 +63,16 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 32 — Public demo sandbox at /demo (Feb 2026)
+**Frontend** (`/app/frontend/src/pages/DemoSandbox.js`):
+- New public, read-only interactive dashboard sandbox at **`/demo`** that visually mirrors the real Dashboard.js layout (hero, KPI cards, ARIA Stories ring, Lead Feed with ARIA recommends boxes, Pipeline Mood card, Agent Activity feed, bottom CTA).
+- Hardcoded realistic sample data — 8 leads, 4 ranked signals, 5 agent activity entries, 4 KPIs.
+- Sticky "DEMO MODE — read-only sandbox" banner with "Start free" + close.
+- Bottom CTA: "Your dashboard will look like this in 7 days" + "Start free" / "I have an account".
+- No auth required, no API calls — bulletproof.
+- Updated `EmptyDashboard.js` "Browse demo" link → `/demo` (was `/aria/demo-dashboard`).
+- Existing `/aria/demo-dashboard` SEO marketing page kept untouched.
+
 ## Iter 31 — Empty state for fresh tenants + dashboard isolation (Feb 2026)
 **Backend (tenant scoping)**:
 - `routes/analytics.py /api/analytics/dashboard` — every count filtered by `tenant_id`. Fresh signups now get all-zero analytics; admin@demo.com still sees 88 leads.
