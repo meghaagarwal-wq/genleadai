@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
-  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree,
+  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
@@ -11,9 +11,11 @@ const NAV = [
   { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
   { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
   { to: '/pt/lemlist',          label: 'Lemlist',        icon: LinkedinLogo },
+  { to: '/pt/campaigns',        label: 'Campaigns',      icon: Megaphone },
   { to: '/pt/accounts',         label: 'Accounts',       icon: Buildings },
   { to: '/pt/touchpoints',      label: 'Touchpoint Map', icon: MapTrifold },
   { to: '/pt/tasks',            label: 'Tasks',          icon: ListChecks },
+  { to: '/pt/logs',             label: 'Automation Logs', icon: Pulse },
   { to: '/pt/reports',          label: 'Reports',        icon: ChartBar },
   { to: '/pt/integrations',     label: 'Integrations',   icon: Plugs },
   { to: '/pt/team',             label: 'Team',           icon: UsersThree },
@@ -64,10 +66,10 @@ const PtLayout = ({ children }) => {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-extrabold text-[#0F172A] leading-none tracking-tight" style={{ fontFamily: 'Space Grotesk, Inter' }}>Aria</span>
+              <span className="text-sm font-extrabold text-[#0F172A] leading-none tracking-tight" style={{ fontFamily: 'Space Grotesk, Inter' }}>GenLeadAI Aria</span>
               <span className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#B45309] border border-[#F59E0B]/50" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
             </div>
-            <div className="text-[10px] text-[#64748B] uppercase tracking-[0.16em] mt-0.5">for Pietential</div>
+            <div className="text-[10px] text-[#64748B] uppercase tracking-[0.16em] mt-0.5">Pietential Growth Intelligence</div>
           </div>
         </div>
 

@@ -35,6 +35,8 @@ tasks_col = db["pt_tasks"]
 notes_col = db["pt_notes"]
 integrations_col = db["pt_integrations"]
 training_col = db["pt_training_signals"]
+campaigns_col = db["pt_campaigns"]
+logs_col = db["pt_automation_logs"]
 
 # ─── Encryption (reuses workspace ENCRYPTION_KEY) ───────────────────────────
 _ENC_KEY = os.environ.get("ENCRYPTION_KEY")
@@ -60,6 +62,19 @@ def _mask_key(s: Optional[str]) -> Optional[str]:
     if not s:
         return None
     return f"••••{s[-4:]}" if len(s) >= 4 else "••••"
+
+
+# ─── Automation log helper ──────────────────────────────────────────────────
+def _log(kind: str, message: str, level: str = "info", **meta):
+    """Append to /pt/logs visible feed. Levels: info | warn | error."""
+    logs_col.insert_one({
+        "id": _new_id("ptlog"),
+        "kind": kind,         # webhook | sync | decay | csv_import | rule
+        "level": level,
+        "message": message,
+        "metadata": meta,
+        "created_at": _now_iso(),
+    })
 
 # ─── Scoring rules per Pietential touchpoint roadmap ────────────────────────
 SCORING_RULES = {
@@ -302,6 +317,11 @@ def _recompute_company(company_id: str):
         if role and role not in exec_status:
             exec_status[role] = f"{l.get('first_name','')} {l.get('last_name','')}".strip()
     owner = "John" if stage in ("hot", "engaged", "session_pilot") else (company.get("owner") if company else "Content Vista")
+    # Per-platform activity flags — set when leads/events from that platform exist
+    saleshandy_active = leads_col.count_documents({"company_id": company_id, "source": "saleshandy"}) > 0 \
+        or events_col.count_documents({"company_id": company_id, "source": "saleshandy"}) > 0
+    lemlist_active = leads_col.count_documents({"company_id": company_id, "source": "lemlist"}) > 0 \
+        or events_col.count_documents({"company_id": company_id, "source": "lemlist"}) > 0
     companies_col.update_one(
         {"id": company_id},
         {"$set": {
@@ -312,6 +332,8 @@ def _recompute_company(company_id: str):
             "exec_status": exec_status,
             "contacts_mapped": len(leads),
             "owner": owner,
+            "saleshandy_active": saleshandy_active,
+            "lemlist_active": lemlist_active,
             "updated_at": _now_iso(),
         }}
     )
@@ -992,13 +1014,17 @@ def _webhook_event(event_type: str, integration_name: str):
         _check_webhook_secret(integration_name, x_pt_webhook_secret)
         email = body.get("email") or (body.get("prospect") or {}).get("email") or (body.get("lead") or {}).get("email")
         if not email:
+            _log("webhook", f"{integration_name}: missing email in payload", "error", event_type=event_type)
             raise HTTPException(status_code=400, detail="Webhook payload missing 'email'")
-        return _ingest_event(
+        result = _ingest_event(
             event_type=event_type,
             lead_lookup={"email": email},
             metadata=body,
             current_user_email="webhook",
         )
+        _log("webhook", f"{event_type} ingested for {email}", "info",
+             event_type=event_type, email=email, score_after=result["lead"].get("score"), stage_after=result["lead"].get("stage"))
+        return result
     return _handler
 
 
@@ -1330,3 +1356,240 @@ def register_pietential_startup(app):
     async def _start_pt_decay_loop():
         asyncio.create_task(_decay_loop())
         print("[pt-decay] background loop started (hourly)")
+
+
+# ─── Saleshandy CSV import (their export format) ───────────────────────────
+def _truthy(s):
+    if not s: return False
+    return str(s).strip().lower() in ("yes", "true", "1", "y", "opened", "clicked", "replied", "sent", "accepted")
+
+
+def _campaign_upsert(platform: str, name: str, external_id: Optional[str] = None) -> Optional[str]:
+    if not name:
+        return None
+    norm = name.strip()
+    existing = campaigns_col.find_one({"platform": platform, "campaign_name": norm})
+    if existing:
+        return existing["id"]
+    cid = _new_id("ptcamp")
+    campaigns_col.insert_one({
+        "id": cid,
+        "platform": platform,
+        "campaign_name": norm,
+        "external_campaign_id": external_id,
+        "status": "active",
+        "total_leads": 0,
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    })
+    return cid
+
+
+def _bump_campaign(campaign_id: Optional[str]):
+    if not campaign_id:
+        return
+    campaigns_col.update_one(
+        {"id": campaign_id},
+        {"$inc": {"total_leads": 1}, "$set": {"updated_at": _now_iso()}},
+    )
+
+
+@router.post("/saleshandy/import-csv")
+async def import_saleshandy_csv(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Saleshandy export CSV → leads + events.
+    Recognised columns: First name, Last name, Email, Company, Title, Campaign,
+    Touch number, Opened, Clicked, Replied, Reply sentiment, Unsubscribed, Last activity.
+    """
+    _require_write(current_user)
+    text = (await file.read()).decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+    created, updated, events_added, errors = 0, 0, 0, []
+    for i, row in enumerate(reader):
+        norm = {k.strip().lower().replace(" ", "_"): (v or "").strip() for k, v in row.items()}
+        email = (norm.get("email") or "").lower()
+        if not email or "@" not in email:
+            errors.append({"row": i, "reason": "Invalid email"}); continue
+        campaign_id = _campaign_upsert("saleshandy", norm.get("campaign") or norm.get("campaign_name") or "")
+        # Upsert lead
+        existing = leads_col.find_one({"email": email}, {"_id": 0})
+        if not existing:
+            doc = {
+                "id": _new_id("ptl"),
+                "first_name": norm.get("first_name") or norm.get("firstname") or "",
+                "last_name": norm.get("last_name") or norm.get("lastname") or "",
+                "email": email,
+                "company_name": norm.get("company") or norm.get("company_name"),
+                "title": norm.get("title"),
+                "source": "saleshandy",
+                "saleshandy_contact_id": norm.get("contact_id") or norm.get("id") or None,
+                "score": 0,
+                "stage": "cold",
+                "automation_status": "active",
+                "owner": "Content Vista",
+                "last_activity_at": norm.get("last_activity") or _now_iso(),
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "saleshandy_campaign_id": campaign_id,
+            }
+            company = _ensure_company(doc.get("company_name"), doc)
+            doc["company_id"] = (company or {}).get("id")
+            leads_col.insert_one(doc)
+            created += 1
+            lead_id = doc["id"]
+        else:
+            leads_col.update_one({"email": email}, {"$set": {"saleshandy_campaign_id": campaign_id, "saleshandy_contact_id": norm.get("contact_id") or norm.get("id"), "updated_at": _now_iso()}})
+            updated += 1
+            lead_id = existing["id"]
+        _bump_campaign(campaign_id)
+        # Events
+        if _truthy(norm.get("opened")):
+            _ingest_event("saleshandy.email_opened", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+        if _truthy(norm.get("clicked")):
+            _ingest_event("saleshandy.email_clicked", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+        sentiment = (norm.get("reply_sentiment") or "").lower()
+        if _truthy(norm.get("replied")) and sentiment in ("positive", "interested", "yes"):
+            _ingest_event("saleshandy.positive_reply", {"lead_id": lead_id}, {"sequence_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
+        if _truthy(norm.get("unsubscribed")):
+            _ingest_event("manual.dnc", {"lead_id": lead_id}, {"reason": "saleshandy_unsubscribe", "csv_import": True}, current_user["email"]); events_added += 1
+    _log("csv_import", f"Saleshandy CSV: {created} new + {updated} updated leads, {events_added} events", "info", created=created, updated=updated, events=events_added)
+    return {"created": created, "updated": updated, "events_added": events_added, "errors": errors}
+
+
+@router.post("/lemlist/import-csv")
+async def import_lemlist_csv(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Lemlist export CSV → leads + events.
+    Recognised columns: First name, Last name, Email, Company, Title, LinkedIn URL,
+    Campaign, Connection sent, Connection accepted, DM sent, Replied, Reply sentiment, Last activity.
+    """
+    _require_write(current_user)
+    text = (await file.read()).decode("utf-8", errors="ignore")
+    reader = csv.DictReader(io.StringIO(text))
+    created, updated, events_added, errors = 0, 0, 0, []
+    for i, row in enumerate(reader):
+        norm = {k.strip().lower().replace(" ", "_"): (v or "").strip() for k, v in row.items()}
+        email = (norm.get("email") or "").lower()
+        if not email or "@" not in email:
+            errors.append({"row": i, "reason": "Invalid email"}); continue
+        campaign_id = _campaign_upsert("lemlist", norm.get("campaign") or norm.get("campaign_name") or "")
+        existing = leads_col.find_one({"email": email}, {"_id": 0})
+        if not existing:
+            doc = {
+                "id": _new_id("ptl"),
+                "first_name": norm.get("first_name") or norm.get("firstname") or "",
+                "last_name": norm.get("last_name") or norm.get("lastname") or "",
+                "email": email,
+                "company_name": norm.get("company") or norm.get("company_name"),
+                "title": norm.get("title"),
+                "linkedin_url": norm.get("linkedin_url") or norm.get("linkedin"),
+                "source": "lemlist",
+                "lemlist_contact_id": norm.get("contact_id") or norm.get("id") or None,
+                "score": 0,
+                "stage": "cold",
+                "automation_status": "active",
+                "owner": "Content Vista",
+                "last_activity_at": norm.get("last_activity") or _now_iso(),
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "lemlist_campaign_id": campaign_id,
+            }
+            company = _ensure_company(doc.get("company_name"), doc)
+            doc["company_id"] = (company or {}).get("id")
+            leads_col.insert_one(doc)
+            created += 1
+            lead_id = doc["id"]
+        else:
+            leads_col.update_one({"email": email}, {"$set": {"lemlist_campaign_id": campaign_id, "lemlist_contact_id": norm.get("contact_id") or norm.get("id"), "updated_at": _now_iso()}})
+            updated += 1
+            lead_id = existing["id"]
+        _bump_campaign(campaign_id)
+        if _truthy(norm.get("connection_accepted")):
+            _ingest_event("lemlist.connection_accepted", {"lead_id": lead_id}, {"campaign_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+        sentiment = (norm.get("reply_sentiment") or "").lower()
+        if _truthy(norm.get("replied")) and sentiment in ("positive", "interested", "yes"):
+            _ingest_event("lemlist.dm_positive_reply", {"lead_id": lead_id}, {"campaign_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
+    _log("csv_import", f"Lemlist CSV: {created} new + {updated} updated leads, {events_added} events", "info", created=created, updated=updated, events=events_added)
+    return {"created": created, "updated": updated, "events_added": events_added, "errors": errors}
+
+
+# ─── Campaigns ─────────────────────────────────────────────────────────────
+@router.get("/campaigns")
+async def list_campaigns(platform: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if platform:
+        query["platform"] = platform
+    rows = list(campaigns_col.find(query, {"_id": 0}).sort("updated_at", DESCENDING))
+    # Live counts
+    for r in rows:
+        plat = r["platform"]
+        cid = r["id"]
+        # Count events from leads in this campaign
+        field = "saleshandy_campaign_id" if plat == "saleshandy" else "lemlist_campaign_id"
+        lead_ids = [l["id"] for l in leads_col.find({field: cid}, {"_id": 0, "id": 1})]
+        r["lead_count"] = len(lead_ids)
+        if lead_ids:
+            r["opens"] = events_col.count_documents({"lead_id": {"$in": lead_ids}, "event_type": "saleshandy.email_opened"})
+            r["clicks"] = events_col.count_documents({"lead_id": {"$in": lead_ids}, "event_type": "saleshandy.email_clicked"})
+            r["replies_pos"] = events_col.count_documents({"lead_id": {"$in": lead_ids}, "event_type": {"$in": ["saleshandy.positive_reply", "lemlist.dm_positive_reply"]}})
+            r["connections"] = events_col.count_documents({"lead_id": {"$in": lead_ids}, "event_type": "lemlist.connection_accepted"})
+        else:
+            r["opens"] = r["clicks"] = r["replies_pos"] = r["connections"] = 0
+    return {"campaigns": rows}
+
+
+# ─── Automation Logs ───────────────────────────────────────────────────────
+@router.get("/logs")
+async def list_logs(kind: Optional[str] = None, level: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if kind: query["kind"] = kind
+    if level: query["level"] = level
+    rows = list(logs_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(min(limit, 500)))
+    counts = {
+        "total": logs_col.count_documents({}),
+        "by_kind": {k: logs_col.count_documents({"kind": k}) for k in ("webhook", "sync", "decay", "csv_import", "rule")},
+        "errors": logs_col.count_documents({"level": "error"}),
+    }
+    return {"logs": rows, "counts": counts}
+
+
+# ─── Manual sync (stub — returns log entry for now; per-platform live sync
+# will replace the inner block when API access is provisioned) ──────────────
+@router.post("/integrations/{name}/sync")
+async def sync_integration(name: str, current_user: dict = Depends(get_current_user)):
+    _require_write(current_user)
+    integ = integrations_col.find_one({"name": name})
+    if not integ:
+        raise HTTPException(status_code=404, detail="Integration not configured")
+    if not integ.get("api_key"):
+        _log("sync", f"{name}: manual sync attempted without API key", "warn")
+        raise HTTPException(status_code=400, detail="API key not set — paste it under the integration first")
+    # Per-platform implementation will go here when API access is provisioned.
+    integrations_col.update_one({"name": name}, {"$set": {"last_sync_at": _now_iso(), "status": "connected"}})
+    _log("sync", f"{name}: manual sync triggered (CSV-import-equivalent stub for demo)", "info")
+    return {
+        "ok": True,
+        "synced_at": _now_iso(),
+        "message": f"Sync queued for {name}. Live API polling will activate once {name} API access is fully wired — meanwhile use CSV import for guaranteed data.",
+    }
+
+
+# ─── Field mapping per integration ─────────────────────────────────────────
+class FieldMappingUpdate(BaseModel):
+    name: str
+    mapping: Dict[str, str]  # source field → internal lead field
+
+
+@router.get("/integrations/{name}/mapping")
+async def get_field_mapping(name: str, current_user: dict = Depends(get_current_user)):
+    integ = integrations_col.find_one({"name": name}, {"_id": 0, "field_mapping": 1})
+    return {"mapping": (integ or {}).get("field_mapping") or {}}
+
+
+@router.post("/integrations/mapping")
+async def update_field_mapping(payload: FieldMappingUpdate, current_user: dict = Depends(get_current_user)):
+    _require_write(current_user)
+    integrations_col.update_one(
+        {"name": payload.name},
+        {"$set": {"field_mapping": payload.mapping, "updated_at": _now_iso()}},
+        upsert=True,
+    )
+    return {"ok": True, "mapping": payload.mapping}

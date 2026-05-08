@@ -73,7 +73,7 @@ const PtAccounts = () => {
           <table className="w-full text-sm" data-testid="pt-accounts-table">
             <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
               <tr>
-                {['Company', 'Industry', 'Employees', 'Geography', 'ICP', 'Contacts', 'Highest score', 'Stage', 'Sequence', 'Owner', 'Updated'].map(h => (
+                {['Company', 'Industry', 'Employees', 'ICP', 'Contacts', 'Highest score', 'Stage', 'SH', 'LL', 'Sequence', 'Owner', 'Updated'].map(h => (
                   <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#64748B]">{h}</th>
                 ))}
               </tr>
@@ -97,11 +97,12 @@ const PtAccounts = () => {
                   </td>
                   <td className="px-3 py-2.5 text-[#475569]">{c.industry || '—'}</td>
                   <td className="px-3 py-2.5 text-[#475569]">{c.employee_count || '—'}</td>
-                  <td className="px-3 py-2.5 text-[#475569]">{c.geography || '—'}</td>
                   <td className="px-3 py-2.5 text-[#475569]">{c.icp_fit || '—'}</td>
                   <td className="px-3 py-2.5 text-[#475569]">{c.contacts_mapped || 0}</td>
                   <td className="px-3 py-2.5 font-bold text-[#0F172A]">{c.highest_score ?? 0}</td>
                   <td className="px-3 py-2.5"><StageBadge stage={c.account_stage} /></td>
+                  <td className="px-3 py-2.5 text-center">{c.saleshandy_active ? <span title="Saleshandy active" className="inline-block w-2 h-2 rounded-full bg-[#7C35DC]" /> : <span className="text-[#CBD5E1]">—</span>}</td>
+                  <td className="px-3 py-2.5 text-center">{c.lemlist_active ? <span title="Lemlist active" className="inline-block w-2 h-2 rounded-full bg-[#C044E0]" /> : <span className="text-[#CBD5E1]">—</span>}</td>
                   <td className="px-3 py-2.5"><SequenceBadge status={c.sequence_status} /></td>
                   <td className="px-3 py-2.5 text-[#475569]">{c.owner || '—'}</td>
                   <td className="px-3 py-2.5 text-xs text-[#64748B]">{fmtDate(c.updated_at)}</td>

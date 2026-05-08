@@ -110,9 +110,18 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }
             <div className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: sm.color }}>{sm.label}</div>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button onClick={() => onTest(integ.name)} data-testid={`pt-integ-test-${integ.name}`}
             className="text-xs font-semibold text-[#7C35DC] hover:underline inline-flex items-center gap-1"><ArrowClockwise size={11} /> Test</button>
+          {!compact && integ.api_key_masked && (
+            <button onClick={async () => {
+              try { const r = await ptApi.post(`/api/pt/integrations/${integ.name}/sync`); toast.success(r.data.message || 'Sync queued'); }
+              catch (err) { toast.error(err.response?.data?.detail || 'Sync failed'); }
+            }} data-testid={`pt-integ-sync-${integ.name}`}
+              className="text-xs font-semibold text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1" style={{ background: '#7C35DC' }}>
+              Sync now
+            </button>
+          )}
         </div>
       </div>
 

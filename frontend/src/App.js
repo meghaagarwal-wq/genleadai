@@ -49,6 +49,8 @@ import PtSettings from './pietential/pages/PtSettings';
 import { PtSaleshandy, PtLemlist } from './pietential/pages/PtPlatformActivity';
 import PtTouchpointMap from './pietential/pages/PtTouchpointMap';
 import PtTeam from './pietential/pages/PtTeam';
+import PtCampaigns from './pietential/pages/PtCampaigns';
+import PtAutomationLogs from './pietential/pages/PtAutomationLogs';
 import AriaHome from './public/pages/AriaHome';
 import DemoDashboard from './public/pages/DemoDashboard';
 import LeadFeedSEO from './public/pages/LeadFeedSEO';
@@ -129,9 +131,11 @@ function App() {
                         <Route path="/leads/:id" element={<PtLeadDetail />} />
                         <Route path="/saleshandy" element={<PtSaleshandy />} />
                         <Route path="/lemlist" element={<PtLemlist />} />
+                        <Route path="/campaigns" element={<PtCampaigns />} />
                         <Route path="/accounts" element={<PtAccounts />} />
                         <Route path="/touchpoints" element={<PtTouchpointMap />} />
                         <Route path="/tasks" element={<PtTasks />} />
+                        <Route path="/logs" element={<PtAutomationLogs />} />
                         <Route path="/reports" element={<PtReports />} />
                         <Route path="/integrations" element={<PtIntegrations />} />
                         <Route path="/team" element={<PtTeam />} />

@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowsClockwise, EnvelopeOpen, MouseSimple, ChatCircleDots } from '@phosphor-icons/react';
+import { ArrowsClockwise, EnvelopeOpen, MouseSimple, ChatCircleDots, Upload } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import { ptApi, PageHeader, EmptyState, StageBadge, fmtDate, fmtDateTime } from '../shared';
 
 const PlatformActivity = ({ platform, label, color, accent, icon: Icon, eventLabels }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const fileInput = useRef(null);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -16,6 +20,30 @@ const PlatformActivity = ({ platform, label, color, accent, icon: Icon, eventLab
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const onCSVChange = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const r = await ptApi.post(`/api/pt/${platform}/import-csv`, fd);
+      toast.success(`Imported ${r.data.created} new + ${r.data.updated} existing leads · ${r.data.events_added} events`);
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Import failed'); }
+    finally { setImporting(false); if (fileInput.current) fileInput.current.value = ''; }
+  };
+
+  const onSync = async () => {
+    setSyncing(true);
+    try {
+      const r = await ptApi.post(`/api/pt/integrations/${platform}/sync`);
+      toast.success(r.data.message || 'Sync triggered');
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Sync failed — set API key first'); }
+    finally { setSyncing(false); }
+  };
 
   if (loading) return <div className="text-sm text-[#64748B]">Loading…</div>;
   const rows = data?.rows || [];
@@ -30,7 +58,20 @@ const PlatformActivity = ({ platform, label, color, accent, icon: Icon, eventLab
   return (
     <div data-testid={`pt-${platform}-page`}>
       <PageHeader title={`${label} Activity`}
-        subtitle={data?.connected ? `Connected · last sync ${fmtDateTime(data.last_sync_at)}` : `Not connected — ${label} data appears here once you connect or upload via CSV`}
+        subtitle={data?.connected ? `Connected · last sync ${fmtDateTime(data.last_sync_at)}` : `Aria is monitoring ${label} signals — connect API or import the CSV export to begin`}
+        right={
+          <div className="flex items-center gap-2">
+            <input ref={fileInput} type="file" accept=".csv" className="hidden" onChange={onCSVChange} data-testid={`pt-${platform}-csv-input`} />
+            <button onClick={() => fileInput.current?.click()} disabled={importing} data-testid={`pt-${platform}-import-btn`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#FAF7FF] disabled:opacity-50">
+              <Upload size={14} weight="bold" /> {importing ? 'Importing…' : 'Import CSV'}
+            </button>
+            <button onClick={onSync} disabled={syncing} data-testid={`pt-${platform}-sync-btn`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#7C35DC' }}>
+              <ArrowsClockwise size={14} weight="bold" /> {syncing ? 'Syncing…' : 'Manual sync'}
+            </button>
+          </div>
+        }
       />
 
       {/* Top stats */}
