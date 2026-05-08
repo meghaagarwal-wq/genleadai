@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
-import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle } from '@phosphor-icons/react';
-import { toast } from 'sonner';
+import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle, WarningCircle } from '@phosphor-icons/react';
+import { Toaster, toast } from 'sonner';
 
 const STEPS = [
   { id: 'business', title: 'Business Profile', icon: Buildings },
@@ -37,6 +37,7 @@ const OnboardingWizard = () => {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [tenantName, setTenantName] = useState('');
+  const [submitError, setSubmitError] = useState(null);
 
   const [form, setForm] = useState({
     business: {
@@ -99,6 +100,7 @@ const OnboardingWizard = () => {
 
   const submit = async () => {
     setSaving(true);
+    setSubmitError(null);
     try {
       await api.post('/api/onboarding/complete', {
         business_profile: form.business,
@@ -120,7 +122,16 @@ const OnboardingWizard = () => {
       // and avoids any in-flight stale state from the gate's interceptor.
       window.location.replace('/');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Could not save onboarding');
+      const status = err.response?.status;
+      const detail = err.response?.data?.detail;
+      const msg = detail
+        ? (typeof detail === 'string' ? detail : JSON.stringify(detail))
+        : (err.message || 'Could not save onboarding');
+      const full = status ? `${msg} (HTTP ${status})` : msg;
+      setSubmitError(full);
+      toast.error(full);
+      // eslint-disable-next-line no-console
+      console.error('[Onboarding submit failed]', err);
     } finally {
       setSaving(false);
     }
@@ -130,6 +141,7 @@ const OnboardingWizard = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #FAFAFA 0%, #F4F0FF 100%)' }} data-testid="onboarding-wizard">
+      <Toaster position="top-center" richColors closeButton />
       <div className="w-full max-w-2xl">
         {/* Progress */}
         <div className="flex items-center gap-2 mb-6">
@@ -320,6 +332,17 @@ const OnboardingWizard = () => {
               </>
             )}
           </div>
+
+          {/* Inline error (visible without depending on toast portal) */}
+          {submitError && (
+            <div className="mt-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-[#B91C1C] text-sm" data-testid="onboarding-submit-error">
+              <WarningCircle size={16} weight="fill" className="mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="font-bold">Couldn't launch workspace</div>
+                <div className="text-xs opacity-90 mt-0.5">{submitError}</div>
+              </div>
+            </div>
+          )}
 
           {/* Nav */}
           <div className="flex justify-between items-center pt-6 mt-6 border-t border-[#F0ECF9]">
