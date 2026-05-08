@@ -12,6 +12,7 @@ added by cloning this router under a new prefix + collection set.
 """
 import asyncio
 import csv
+import hmac
 import io
 import os
 import uuid
@@ -982,7 +983,7 @@ def _check_webhook_secret(integration_name: str, provided: Optional[str]):
     (acceptable for client demo; required for prod)."""
     integ = integrations_col.find_one({"name": integration_name}, {"webhook_secret": 1})
     expected = (integ or {}).get("webhook_secret")
-    if expected and provided != expected:
+    if expected and not hmac.compare_digest(str(expected), str(provided or "")):
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
 
@@ -1132,9 +1133,17 @@ async def post_training_signal(payload: TrainSignal, current_user: dict = Depend
         "created_at": _now_iso(),
     }
     training_col.insert_one(doc)
-    # Side effect: positive_conversation acts like a manual positive-reply event
+    # Side effect: positive_conversation acts like a manual positive-reply event.
+    # Idempotent — only fires once per (lead, value=yes).
     if payload.signal_type == "positive_conversation" and payload.value == "yes":
-        _ingest_event("manual.hypothesis_reply", {"lead_id": payload.lead_id}, {"trained": True}, current_user["email"])
+        already = training_col.count_documents({
+            "lead_id": payload.lead_id,
+            "signal_type": "positive_conversation",
+            "value": "yes",
+            "id": {"$ne": doc["id"]},
+        })
+        if not already:
+            _ingest_event("manual.hypothesis_reply", {"lead_id": payload.lead_id}, {"trained": True}, current_user["email"])
     if payload.signal_type == "icp_fit":
         leads_col.update_one({"id": payload.lead_id}, {"$set": {"icp_fit": payload.value, "updated_at": _now_iso()}})
         if lead.get("company_id"):

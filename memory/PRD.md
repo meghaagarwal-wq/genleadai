@@ -221,6 +221,34 @@ Typography alignment:
 
 **Test status (iter 25)**: Backend 13/13 pytest, Frontend e2e 100%, zero blocking issues. Code review noted webhook authentication + plaintext API key storage as production hardening items (acceptable for client demo).
 
+## Iter 31 — Pietential Phase 2 (a + b + c + Train Aria) (Feb 2026)
+
+**Demo polish (a):**
+- "Replay demo flow" button on Pt Overview → creates demo-prospect@pietential-demo.com lead, applies 4 events (newsletter.subscribed → saleshandy.email_clicked → saleshandy.positive_reply → calendly.session_booked) showing cold→warm→hot→engaged→session_pilot cascade live.
+- Lead Detail: copy-email and copy-LinkedIn quick actions.
+- Overview redesigned with two sections — Primary platforms (5 SH/Lemlist tiles) + Pipeline health (10 tiles incl. john_owned).
+
+**Roles UI (b):**
+- New page `/pt/team` (admin only) showing role legend (4 roles) + member table with role dropdown.
+- New endpoints `/api/pt/team`, `/api/pt/team/role`, `/api/pt/me/permissions`.
+- Non-admin users see a clear notice; role guard enforced backend-side.
+
+**Production hardening (c):**
+- **Fernet encryption** for integration `api_key` (reuses `ENCRYPTION_KEY` env var). Lists return `api_key_masked` (••••XXXX); plaintext never returned.
+- **Webhook signature verification** via optional `X-Pt-Webhook-Secret` header; per-integration `webhook_secret` stored. Uses `hmac.compare_digest` for timing-safe equality. Falls open when no secret set (acceptable for client demo).
+- **Score decay cron** — hourly background loop on startup. −10 at 30d inactive, −20 + `automation_status='long_cycle_nurture'` at 60d inactive. Manual trigger at `/api/pt/score-decay/run` (admin only).
+
+**Train Aria:**
+- New collection `pt_training_signals` + endpoints `/api/pt/training/signal` + `/api/pt/training/signals`.
+- TrainAriaCard on Lead Detail with 3 controls: ICP fit override (match/partial/outside), reply classification (positive/neutral/negative), "Mark positive conversation" (idempotent — fires +40 score event only once per lead).
+
+**Pietential-specific:**
+- Saleshandy + Lemlist marked PRIMARY; other 11 integrations moved to Future/Optional section in Integrations page.
+- New `/pt/saleshandy` and `/pt/lemlist` activity pages with platform-specific stats (opens/clicks/replies vs connections/DM replies/post engagement).
+- New `/pt/touchpoints` Touchpoint Map page rendering all 10 prospect touchpoint flows from the Pietential roadmap with live event counts per touchpoint.
+
+**Test status (iter 26)**: Backend 25/25 pytest, Frontend e2e 100%, zero blocking issues. Two follow-up fixes applied post-test: hmac.compare_digest for timing-safe webhook secret check + idempotency on positive_conversation training signal.
+
 ## Backlog
 - P1: continue server.py extraction — remaining 4818 lines still hold aria/*, leads/*, lead-magnets/*, billing/*, assets/*, webhooks/*
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler
