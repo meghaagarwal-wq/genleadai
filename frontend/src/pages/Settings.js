@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus } from '@phosphor-icons/react';
+import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -33,6 +34,9 @@ const Settings = () => {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMsg, setPwMsg] = useState(null);
+
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
 
   const submitPasswordChange = async (e) => {
     e?.preventDefault?.();
@@ -283,28 +287,42 @@ const Settings = () => {
 
       {/* Team Tab */}
       {activeTab === 'team' && (
-        <div className="bg-[#141414] border border-[#262626] rounded-lg" data-testid="team-members-list">
-          <div className="p-6 border-b border-[#262626]">
-            <h3 className="text-lg font-semibold text-white">Team Members</h3>
-            <p className="text-sm text-[#A3A3A3] mt-1">{users.length} members</p>
-          </div>
-          <div className="divide-y divide-[#262626]">
-            {users.map((member, index) => (
-              <div key={index} className="p-6 flex items-center justify-between hover:bg-[#1E1E1E] transition-colors" data-testid={`team-member-${member.email}`}>
-                <div className="flex items-center gap-4">
-                  <img src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`} alt={member.full_name} className="w-10 h-10 rounded-full" />
-                  <div>
-                    <div className="text-sm font-medium text-white">{member.full_name}</div>
-                    <div className="text-xs text-[#737373] font-mono">{member.email}</div>
+        <div className="space-y-4">
+          <div className="bg-[#141414] border border-[#262626] rounded-lg" data-testid="team-members-list">
+            <div className="p-6 border-b border-[#262626] flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Team Members</h3>
+                <p className="text-sm text-[#A3A3A3] mt-1">{users.length} members</p>
+              </div>
+              <button
+                onClick={() => setInviteOpen(true)}
+                data-testid="open-invite-modal"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-white text-sm font-bold hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}
+              >
+                <UserPlus size={14} weight="fill" /> Invite teammate
+              </button>
+            </div>
+            <div className="divide-y divide-[#262626]">
+              {users.map((member, index) => (
+                <div key={index} className="p-6 flex items-center justify-between hover:bg-[#1E1E1E] transition-colors" data-testid={`team-member-${member.email}`}>
+                  <div className="flex items-center gap-4">
+                    <img src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`} alt={member.full_name} className="w-10 h-10 rounded-full" />
+                    <div>
+                      <div className="text-sm font-medium text-white">{member.full_name}</div>
+                      <div className="text-xs text-[#737373] font-mono">{member.email}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-[#A3A3A3]">{member.team}</span>
+                    <span className={roleBadge(member.role)}>{member.role.replace('_', ' ')}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-[#A3A3A3]">{member.team}</span>
-                  <span className={roleBadge(member.role)}>{member.role.replace('_', ' ')}</span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
+          <PendingInvitesList refreshKey={inviteRefreshKey} />
         </div>
       )}
 
@@ -905,6 +923,12 @@ const Settings = () => {
           </div>
         </div>
       )}
+
+      <InviteTeamModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onCreated={() => setInviteRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 };

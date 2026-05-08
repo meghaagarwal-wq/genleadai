@@ -9,7 +9,7 @@ The "active tenant" for a request is resolved from:
 """
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api", tags=["tenants"])
 tenants_col = db["tenants"]
 memberships_col = db["tenant_memberships"]
 onboarding_col = db["onboarding_config"]
+invitations_col = db["invitations"]
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -127,6 +128,19 @@ class OnboardingPayload(BaseModel):
     sales_process: dict = Field(default_factory=dict)
     whatsapp_config: dict = Field(default_factory=dict)
     completed: bool = False
+
+
+class InvitePayload(BaseModel):
+    email: Optional[EmailStr] = None  # optional — link can be sent to anyone
+    role: str = "member"               # member | admin | viewer
+    expires_in_days: int = 14
+
+
+class AcceptInvitePayload(BaseModel):
+    token: str
+    email: EmailStr
+    password: str = Field(min_length=8)
+    full_name: str
 
 
 # ─── Public signup (creates tenant + owner) ─────────────────────────────────
@@ -272,4 +286,173 @@ async def aria_config_for_prompt(tenant: dict = Depends(get_active_tenant)):
         "sales_cycle": sp.get("sales_cycle"),
         "qualification_criteria": sp.get("qualification_criteria") or [],
         "pipeline_stages": sp.get("pipeline_stages") or ["New Lead", "Contacted", "Qualified", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"],
+    }
+
+
+# ─── Invitations: tokenized link flow ───────────────────────────────────────
+def _new_token() -> str:
+    """Cryptographically-strong invite token."""
+    import secrets
+    return secrets.token_urlsafe(24)
+
+
+def _is_valid_role(role: str) -> bool:
+    return role in {"owner", "admin", "member", "viewer"}
+
+
+@router.post("/invitations")
+async def create_invitation(
+    payload: InvitePayload,
+    tenant: dict = Depends(get_active_tenant),
+    current_user: dict = Depends(get_current_user),
+):
+    """Owner/admin creates a tokenized invite link. No email sent — link is
+    returned to the caller for them to share via their preferred channel."""
+    if tenant.get("_member_role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    if not _is_valid_role(payload.role) or payload.role == "owner":
+        raise HTTPException(status_code=400, detail="role must be admin, member, or viewer")
+    token = _new_token()
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(days=max(1, min(payload.expires_in_days, 90)))
+    ).isoformat()
+    doc = {
+        "id": _new_id("inv"),
+        "tenant_id": tenant["id"],
+        "tenant_name": tenant.get("name"),
+        "token": token,
+        "email": (payload.email or "").lower().strip() or None,
+        "role": payload.role,
+        "invited_by": current_user["email"],
+        "invited_by_name": current_user.get("full_name") or current_user["email"],
+        "expires_at": expires_at,
+        "accepted": False,
+        "accepted_by": None,
+        "accepted_at": None,
+        "revoked": False,
+        "created_at": _now(),
+    }
+    invitations_col.insert_one(doc)
+    return {
+        "invitation": {k: v for k, v in doc.items() if k != "_id"},
+        "invite_url": f"/invite/{token}",
+    }
+
+
+@router.get("/invitations")
+async def list_invitations(tenant: dict = Depends(get_active_tenant)):
+    """List pending invites for the active tenant (owner/admin only)."""
+    if tenant.get("_member_role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    rows = list(
+        invitations_col.find(
+            {"tenant_id": tenant["id"]},
+            {"_id": 0},
+        ).sort("created_at", -1).limit(100)
+    )
+    return {"invitations": rows}
+
+
+@router.delete("/invitations/{invite_id}")
+async def revoke_invitation(invite_id: str, tenant: dict = Depends(get_active_tenant)):
+    """Revoke a pending invite (owner/admin only)."""
+    if tenant.get("_member_role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    res = invitations_col.update_one(
+        {"id": invite_id, "tenant_id": tenant["id"]},
+        {"$set": {"revoked": True, "revoked_at": _now()}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    return {"status": "ok"}
+
+
+# ─── Public invite endpoints (no auth) ──────────────────────────────────────
+@router.get("/public/invitations/{token}")
+async def get_invite_public(token: str):
+    """Public endpoint used by the signup page to render an invite-aware UI.
+    Returns minimal safe info — workspace name + role + inviter — never PII."""
+    inv = invitations_col.find_one({"token": token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if inv.get("revoked"):
+        raise HTTPException(status_code=410, detail="Invite has been revoked")
+    if inv.get("accepted"):
+        raise HTTPException(status_code=409, detail="Invite has already been accepted")
+    if inv.get("expires_at") and inv["expires_at"] < _now():
+        raise HTTPException(status_code=410, detail="Invite has expired")
+    return {
+        "tenant_name": inv.get("tenant_name"),
+        "role": inv.get("role"),
+        "invited_by_name": inv.get("invited_by_name"),
+        "expires_at": inv.get("expires_at"),
+        "email_hint": inv.get("email"),  # optional: pre-fill email if provided
+    }
+
+
+@router.post("/public/invitations/accept")
+async def accept_invite(payload: AcceptInvitePayload):
+    """Accept a tokenized invite. Two cases:
+    1. Email already registered → just adds membership to tenant (skip if already a member).
+    2. Email not registered → create user + add membership.
+    Either way, returns auth token + tenant info so the user can log straight in.
+    """
+    inv = invitations_col.find_one({"token": payload.token}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if inv.get("revoked"):
+        raise HTTPException(status_code=410, detail="Invite has been revoked")
+    if inv.get("accepted"):
+        raise HTTPException(status_code=409, detail="Invite has already been accepted")
+    if inv.get("expires_at") and inv["expires_at"] < _now():
+        raise HTTPException(status_code=410, detail="Invite has expired")
+
+    email = payload.email.lower().strip()
+    tenant = tenants_col.find_one({"id": inv["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no longer exists")
+
+    # Create user if missing
+    user = users_collection.find_one({"email": email})
+    if not user:
+        users_collection.insert_one({
+            "email": email,
+            "password_hash": get_password_hash(payload.password),
+            "full_name": payload.full_name,
+            "role": "member",
+            "avatar_url": f"https://ui-avatars.com/api/?name={payload.full_name.replace(' ', '+')}&background=7C35DC&color=fff",
+            "team": "Sales",
+            "is_active": True,
+            "created_at": _now(),
+        })
+
+    # Add membership only if user isn't already a member of this tenant
+    existing = memberships_col.find_one({"tenant_id": inv["tenant_id"], "user_email": email})
+    if not existing:
+        memberships_col.insert_one({
+            "id": _new_id("mem"),
+            "tenant_id": inv["tenant_id"],
+            "user_email": email,
+            "role": inv["role"],
+            "invited_by": inv.get("invited_by"),
+            "invitation_token": inv["token"],
+            "joined_at": _now(),
+        })
+
+    # Mark invite accepted
+    invitations_col.update_one(
+        {"token": payload.token},
+        {"$set": {"accepted": True, "accepted_by": email, "accepted_at": _now()}},
+    )
+
+    token = create_access_token({"sub": email})
+    return {
+        "token": token,
+        "user": {"email": email, "full_name": payload.full_name, "role": "member"},
+        "tenant": {
+            "id": tenant["id"],
+            "name": tenant.get("name"),
+            "plan": tenant.get("plan"),
+            "onboarding_completed": bool(tenant.get("onboarding_completed", True)),
+        },
     }

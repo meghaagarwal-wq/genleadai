@@ -63,6 +63,28 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 33 — Tokenized team invite flow (Feb 2026)
+**Backend** (`/app/backend/routes/tenants.py`):
+- New `invitations` collection.
+- `POST /api/invitations` — owner/admin creates tokenized invite. Returns `{invitation, invite_url: /invite/<token>}`. Configurable role (admin/member/viewer) + expiry (1-90 days). Optional email pre-fill hint.
+- `GET /api/invitations` — owner/admin lists pending/accepted/revoked invites for the active tenant.
+- `DELETE /api/invitations/{id}` — owner/admin revokes a pending invite.
+- `GET /api/public/invitations/{token}` — **unauthenticated** public endpoint returning safe invite info (tenant_name, role, inviter_name, expires_at, email_hint). Rejects expired/revoked/accepted.
+- `POST /api/public/invitations/accept` — **unauthenticated**. Creates user (if new) + adds membership to inviter's tenant + marks invite accepted. Returns JWT + tenant so user lands logged in.
+- Uses `secrets.token_urlsafe(24)` for tokens. Idempotent on re-accept (409 on already-accepted).
+
+**Frontend**:
+- New `InviteTeamModal` component (`/app/frontend/src/components/InviteTeamModal.js`) — role picker (Admin / Member / Viewer with descriptions), optional email, expiry dropdown. On create: shows copyable invite URL + one-click copy.
+- New `PendingInvitesList` component (co-located) — shows all invites with active/accepted/expired/revoked status badges, one-click re-copy, one-click revoke (with confirm).
+- Settings → Team tab: "Invite teammate" button (purple gradient) opens modal; `PendingInvitesList` below team members.
+- New `/invite/:token` public route (`/app/frontend/src/pages/InviteAccept.js`) — renders "Join {workspace} as {role}" card, pre-fills email if hinted, collects name + email + password, calls accept endpoint, hard-reloads to dashboard. Graceful error UI for expired/revoked/invalid tokens (falls back to "Create your own workspace" CTA to `/signup`).
+
+**Verified (curl, all PASS)**:
+- Admin creates invite → returns token + URL.
+- Public unauthenticated GET of invite returns safe metadata.
+- Accept creates user + membership, returns JWT + tenant info.
+- List shows invite as accepted after flow.
+
 ## Iter 32 — Public demo sandbox at /demo (Feb 2026)
 **Frontend** (`/app/frontend/src/pages/DemoSandbox.js`):
 - New public, read-only interactive dashboard sandbox at **`/demo`** that visually mirrors the real Dashboard.js layout (hero, KPI cards, ARIA Stories ring, Lead Feed with ARIA recommends boxes, Pipeline Mood card, Agent Activity feed, bottom CTA).
