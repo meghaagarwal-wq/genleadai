@@ -92,7 +92,7 @@ const PtLayout = ({ children }) => {
         {/* Footer */}
         <div className="border-t border-[#E2E8F0] p-3">
           <div className="flex items-center gap-2.5 mb-2">
-            <img src={user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.full_name || 'User')}&background=0F766E&color=fff`} alt="" className="w-8 h-8 rounded-full" />
+            <img src={user?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.full_name || 'User')}&background=7C35DC&color=fff`} alt="" className="w-8 h-8 rounded-full" />
             <div className="min-w-0">
               <div className="text-xs font-semibold text-[#0F172A] truncate">{user?.full_name}</div>
               <div className="text-[10px] text-[#64748B] truncate">{user?.role}</div>

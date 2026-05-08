@@ -42,13 +42,13 @@ const PtOverview = () => {
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <Tile testid="metric-engaged-leads"   icon={Users}            label="Engaged leads"     value={m.total_engaged_leads} />
-        <Tile testid="metric-warm-leads"      icon={ThermometerSimple} label="Warm"             value={m.warm_leads}              accent="#0891B2" />
+        <Tile testid="metric-warm-leads"      icon={ThermometerSimple} label="Warm"             value={m.warm_leads}              accent="#F59E0B" />
         <Tile testid="metric-hot-leads"       icon={Fire}             label="Hot"              value={m.hot_leads}               accent="#DC2626" />
         <Tile testid="metric-engaged-accts"   icon={Buildings}        label="Engaged accounts" value={m.engaged_accounts_total} />
         <Tile testid="metric-sessions"        icon={CalendarBlank}    label="Sessions booked"  value={m.sessions_booked}         accent="#7C3AED" />
         <Tile testid="metric-pause"           icon={Pause}            label="Pause required"   value={m.accounts_requiring_pause} accent="#DC2626" />
         <Tile testid="metric-good-slice"      icon={EnvelopeOpen}     label="Good Slice subs"  value={m.good_slice_subscribers}  accent="#F59E0B" />
-        <Tile testid="metric-magnet-claims"   icon={Download}         label="Magnet claims"    value={m.lead_magnet_claims}      accent="#0891B2" />
+        <Tile testid="metric-magnet-claims"   icon={Download}         label="Magnet claims"    value={m.lead_magnet_claims}      accent="#F59E0B" />
         <Tile testid="metric-pos-replies"     icon={ChatCircleDots}   label="Positive replies" value={m.positive_replies}        accent="#7C35DC" />
         <Tile testid="metric-accts-total"     icon={Buildings}        label="Accounts mapped"  value={m.accounts_total}          accent="#475569" />
       </div>

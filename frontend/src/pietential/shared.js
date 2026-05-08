@@ -5,9 +5,9 @@ export const ptApi = api;
 
 export const STAGE_META = {
   cold:           { label: 'Cold',          color: '#64748B', bg: 'rgba(100,116,139,0.08)' },
-  warm:           { label: 'Warm',          color: '#0891B2', bg: 'rgba(8,145,178,0.08)' },
+  warm:           { label: 'Warm',          color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
   hot:            { label: 'Hot',           color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
-  engaged:        { label: 'Engaged',       color: '#7C35DC', bg: 'rgba(15,118,110,0.08)' },
+  engaged:        { label: 'Engaged',       color: '#7C35DC', bg: 'rgba(124,53,220,0.08)' },
   session_pilot:  { label: 'Session/Pilot', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)' },
 };
 
@@ -24,7 +24,7 @@ export const SOURCE_LABELS = {
 
 export const SEQUENCE_STATUS_META = {
   not_started:           { label: 'Not started',           color: '#64748B' },
-  active_in_saleshandy:  { label: 'Active · Saleshandy',   color: '#0891B2' },
+  active_in_saleshandy:  { label: 'Active · Saleshandy',   color: '#F59E0B' },
   active_in_lemlist:     { label: 'Active · Lemlist',      color: '#7C35DC' },
   warm_nurture:          { label: 'Warm nurture',          color: '#F59E0B' },
   pause_required:        { label: 'Pause required',        color: '#DC2626' },
