@@ -52,15 +52,37 @@ def get_active_tenant(
 
     1. If X-Tenant-Id is provided and user is a member → use it.
     2. Else use user's primary (first) tenant.
-    3. Raise 403 if user has no tenants (e.g. legacy user pre-migration).
+    3. If user has no memberships at all (legacy account that pre-dates the
+       multi-tenant migration) → auto-provision a personal tenant + owner
+       membership so the request can continue. This is the safety net for
+       any production deploy where the migration hasn't fully run yet.
     """
     email = current_user["email"]
     memberships = _user_memberships(email)
     if not memberships:
-        raise HTTPException(
-            status_code=403,
-            detail="No tenant assigned. Run migration or sign up again.",
-        )
+        # Auto-provision a personal tenant for this legacy user
+        full_name = current_user.get("full_name") or email.split("@")[0]
+        tenant_id = _new_id("ten")
+        tenants_col.insert_one({
+            "id": tenant_id,
+            "name": f"{full_name}'s Workspace",
+            "owner_email": email,
+            "plan": "free",
+            "settings": {},
+            "onboarding_completed": False,
+            "created_at": _now(),
+            "auto_provisioned": True,
+        })
+        memberships_col.insert_one({
+            "id": _new_id("mem"),
+            "tenant_id": tenant_id,
+            "user_email": email,
+            "role": "owner",
+            "invited_by": None,
+            "joined_at": _now(),
+            "auto_provisioned": True,
+        })
+        memberships = _user_memberships(email)
 
     chosen_membership = None
     if x_tenant_id:

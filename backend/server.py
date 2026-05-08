@@ -68,6 +68,24 @@ app.include_router(pietential_router)
 app.include_router(tenants_router)
 register_pietential_startup(app)
 
+
+@app.on_event("startup")
+def _auto_migrate_multi_tenant():
+    """Idempotently ensure tenants/memberships/onboarding_config exist + backfill
+    tenant_id on legacy collections. Safe to run on every boot.
+
+    Critical for production deploys: without this, existing users (like the
+    admin demo account) would have no tenant membership and every request
+    would 403 with 'No tenant assigned'.
+    """
+    try:
+        # Local import to avoid circular imports at module load time
+        from scripts.migrate_to_multi_tenant import main as run_migration
+        run_migration()
+    except Exception as e:
+        # Never block app startup on a migration error — log and move on.
+        print(f"[Startup] Multi-tenant migration skipped due to error: {e}")
+
 # Resend Email
 resend.api_key = os.getenv("RESEND_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
