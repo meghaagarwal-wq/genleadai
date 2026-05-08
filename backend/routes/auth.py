@@ -33,25 +33,14 @@ class PasswordChange(BaseModel):
 
 @router.post("/register")
 async def register(user: UserRegister):
-    if users_collection.find_one({"email": user.email}):
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    user_doc = {
-        "email": user.email,
-        "password_hash": get_password_hash(user.password),
-        "full_name": user.full_name,
-        "role": user.role,
-        "avatar_url": f"https://ui-avatars.com/api/?name={user.full_name.replace(' ', '+')}&background=0055FF&color=fff",
-        "team": "Sales",
-        "is_active": True,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    users_collection.insert_one(user_doc)
-    token = create_access_token({"sub": user.email})
-    return {
-        "token": token,
-        "user": {"email": user.email, "full_name": user.full_name, "role": user.role},
-    }
+    """[DISABLED on multi-tenant] Use /api/auth/signup instead — that endpoint
+    creates user + tenant + owner membership atomically. Legacy register would
+    leave users without a tenant and trigger 403s on every authenticated route.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Use /api/auth/signup — legacy registration is disabled on this multi-tenant build.",
+    )
 
 
 @router.post("/login")

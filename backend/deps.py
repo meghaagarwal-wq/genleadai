@@ -5,7 +5,8 @@ modular routers under /app/backend/routes/ can import them without circular
 dependencies on server.py.
 """
 from datetime import datetime, timedelta, timezone
-from fastapi import Depends, HTTPException
+from typing import Optional
+from fastapi import Depends, HTTPException, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -52,7 +53,10 @@ def create_access_token(data: dict) -> str:
     return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
+):
     try:
         token = credentials.credentials
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -62,6 +66,30 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = users_collection.find_one({"email": email}, {"_id": 0})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+        # Attach the user's active tenant_id for cross-cutting isolation.
+        # Resolution order:
+        #   1. Honour X-Tenant-Id header IF user is a member of that tenant.
+        #   2. Else fall back to user's primary (oldest) membership.
+        try:
+            mem_col = db["tenant_memberships"]
+            chosen = None
+            if x_tenant_id:
+                chosen = mem_col.find_one(
+                    {"user_email": email, "tenant_id": x_tenant_id},
+                    {"_id": 0, "tenant_id": 1, "role": 1},
+                )
+            if not chosen:
+                chosen = mem_col.find_one(
+                    {"user_email": email},
+                    {"_id": 0, "tenant_id": 1, "role": 1},
+                    sort=[("joined_at", 1)],
+                )
+            if chosen:
+                user["tenant_id"] = chosen.get("tenant_id")
+                user["tenant_role"] = chosen.get("role")
+        except Exception:
+            # Never fail auth because of tenant lookup
+            pass
         return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")

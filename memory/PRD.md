@@ -63,6 +63,27 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 30 — Multi-tenant SaaS Phase 2 (data isolation + tenant switcher) (Feb 2026)
+**Backend**:
+- `deps.get_current_user` now resolves active tenant from `X-Tenant-Id` header (fallback: user's primary membership) and attaches `tenant_id` + `tenant_role` to the user dict.
+- Auto-migration on startup (`server.py`) — runs `scripts/migrate_to_multi_tenant.py` idempotently every boot. Production-deploy safe.
+- Defensive: `get_active_tenant` auto-provisions a personal tenant for any user lacking membership (legacy account safety net).
+- `/api/auth/register` (legacy single-tenant) returns **410 Gone** with pointer to `/api/auth/signup`. Signup is now the only funnel.
+- Tenant scoping applied to: `POST/GET/PATCH/DELETE /api/leads`, `POST /api/leads/bulk`, `GET /api/leads/{id}/activities`, `POST /api/activities`, `POST/GET /api/campaigns`, `GET /api/campaigns/{id}` — all reads filter `tenant_id`, all writes stamp `tenant_id`.
+- `aria_agent_routes.workspace/ask-reply/{lead_id}` Claude prompt now reads `onboarding_config.business_profile + aria_persona + sales_process` — Aria's drafts customise based on tenant onboarding answers (industry, business name, tone, language, product).
+
+**Frontend**:
+- New `TenantSwitcher` in Layout — fetches `/api/tenants/me`, renders dynamic dropdown for multi-tenant users (admin@demo.com sees "GenLeadAI Demo · Owner" and "Pietential · Owner"), static name for single-tenant users. Switching writes `active_tenant` to localStorage which is auto-forwarded by the axios interceptor.
+- `/register` route now redirects to `/signup`.
+
+**Verification (curl, all PASS)**:
+- admin@demo.com on default tenant → 88 leads (ten_demo).
+- admin@demo.com with `X-Tenant-Id: ten_pietential` → 0 leads (correct, isolated; pt_leads collection is separate).
+- Fresh signup → 0 leads (fully isolated from demo data).
+- POST /api/auth/register → 410.
+- /register → /signup redirect verified in browser.
+- Tenant switcher dropdown verified in dashboard screenshot.
+
 ## Iter 29 — Multi-tenant SaaS foundation Phase 1 (Feb 2026)
 **Backend**:
 - New `routes/tenants.py` with `tenants`, `tenant_memberships`, `onboarding_config` collections.

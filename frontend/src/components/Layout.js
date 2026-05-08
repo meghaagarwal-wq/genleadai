@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePlan } from '../context/PlanContext';
@@ -16,10 +16,83 @@ import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
+import api from '../config/api';
 
 const AriaWorkspaceSwitcher = () => {
   const { active, setActive } = useWorkspace();
   const navigate = useNavigate();
+  const [tenants, setTenants] = useState([]);
+  const [activeTenantId, setActiveTenantId] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('active_tenant') || 'null')?.id || ''; }
+    catch { return ''; }
+  });
+
+  // Fetch all tenants the current user belongs to
+  useEffect(() => {
+    let alive = true;
+    api.get('/api/tenants/me').then((r) => {
+      if (!alive) return;
+      const list = r.data?.tenants || [];
+      setTenants(list);
+      // If no active tenant stored yet, use the first one
+      if (!activeTenantId && list[0]?.id) {
+        setActiveTenantId(list[0].id);
+        localStorage.setItem('active_tenant', JSON.stringify(list[0]));
+      }
+    }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const switchTenant = (tenantId) => {
+    const t = tenants.find((x) => x.id === tenantId);
+    if (!t) return;
+    setActiveTenantId(tenantId);
+    localStorage.setItem('active_tenant', JSON.stringify(t));
+    // Special routing: Pietential tenant uses the legacy /pt UI, others use legacy ARIA
+    if (t.id === 'ten_pietential') {
+      setActive(WORKSPACES.find((w) => w.slug === 'pietential'));
+      window.location.replace('/pt');
+    } else {
+      setActive(WORKSPACES.find((w) => w.slug === 'aria_crm'));
+      window.location.replace('/');
+    }
+  };
+
+  // Multi-tenant users: show real tenant dropdown
+  if (tenants.length > 1) {
+    return (
+      <div className="px-3 py-2 border-b border-[var(--sidebar-divider)]" data-testid="tenant-switcher">
+        <div className="text-[8px] font-bold uppercase tracking-[0.22em] text-[var(--sidebar-text-muted)] mb-1">Workspace</div>
+        <select
+          value={activeTenantId}
+          onChange={(e) => switchTenant(e.target.value)}
+          data-testid="tenant-select"
+          className="w-full text-xs font-semibold text-white bg-white/5 border border-white/10 rounded-md px-2 py-1.5 outline-none focus:ring-1 focus:ring-white/20"
+        >
+          {tenants.map((t) => (
+            <option key={t.id} value={t.id} className="bg-[#1A0A2E]">
+              {t.name}{t.role === 'owner' ? ' · Owner' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  // Single-tenant users: show static workspace name (no switcher needed)
+  if (tenants.length === 1) {
+    return (
+      <div className="px-3 py-2 border-b border-[var(--sidebar-divider)]" data-testid="tenant-single">
+        <div className="text-[8px] font-bold uppercase tracking-[0.22em] text-[var(--sidebar-text-muted)] mb-1">Workspace</div>
+        <div className="text-xs font-semibold text-white truncate" title={tenants[0].name}>
+          {tenants[0].name}
+        </div>
+      </div>
+    );
+  }
+
+  // Loading or legacy fallback — keep the original static switcher
   const switchTo = (slug) => {
     const ws = WORKSPACES.find(w => w.slug === slug);
     if (!ws) return;

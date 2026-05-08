@@ -1,4 +1,4 @@
-"""Campaigns CRUD routes."""
+"""Campaigns CRUD routes — tenant-scoped."""
 from datetime import datetime, timezone
 from typing import Optional
 from bson import ObjectId
@@ -39,14 +39,16 @@ async def create_campaign(campaign: CampaignCreate, current_user: dict = Depends
     campaign_doc = campaign.dict()
     campaign_doc["created_at"] = datetime.now(timezone.utc).isoformat()
     campaign_doc["created_by"] = current_user["email"]
+    campaign_doc["tenant_id"] = current_user.get("tenant_id")
     campaigns_collection.insert_one(campaign_doc)
     return serialize_doc(campaign_doc)
 
 
 @router.get("")
 async def get_campaigns(current_user: dict = Depends(get_current_user)):
+    tenant_id = current_user.get("tenant_id")
     campaigns = list(campaigns_collection.find(
-        {},
+        {"tenant_id": tenant_id},
         {"_id": 1, "name": 1, "description": 1, "status": 1, "channel": 1, "campaign_type": 1,
          "created_at": 1, "updated_at": 1, "created_by": 1, "tags": 1, "metadata": 1}
     ).sort("created_at", DESCENDING).limit(100))
@@ -57,7 +59,7 @@ async def get_campaigns(current_user: dict = Depends(get_current_user)):
     campaign_ids = [str(c["_id"]) for c in campaigns]
     qualified_statuses = ["qualified", "proposal_sent", "negotiation", "won"]
     pipeline = [
-        {"$match": {"campaign_id": {"$in": campaign_ids}}},
+        {"$match": {"campaign_id": {"$in": campaign_ids}, "tenant_id": tenant_id}},
         {"$group": {
             "_id": "$campaign_id",
             "total_leads": {"$sum": 1},
@@ -78,11 +80,14 @@ async def get_campaigns(current_user: dict = Depends(get_current_user)):
 @router.get("/{campaign_id}")
 async def get_campaign(campaign_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        campaign = campaigns_collection.find_one({"_id": ObjectId(campaign_id)})
+        campaign = campaigns_collection.find_one({"_id": ObjectId(campaign_id), "tenant_id": current_user.get("tenant_id")})
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
         campaign_id_str = str(campaign["_id"])
-        campaign["leads"] = leads_collection.count_documents({"campaign_id": campaign_id_str})
+        campaign["leads"] = leads_collection.count_documents({
+            "campaign_id": campaign_id_str,
+            "tenant_id": current_user.get("tenant_id"),
+        })
         return serialize_doc(campaign)
     except HTTPException:
         raise

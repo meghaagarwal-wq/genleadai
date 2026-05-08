@@ -127,7 +127,7 @@ function App() {
           <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+              <Route path="/register" element={<Navigate to="/signup" replace />} />
               <Route path="/signup" element={<Signup />} />
 
               {/* Public ARIA content ecosystem (crawlable, no auth) */}

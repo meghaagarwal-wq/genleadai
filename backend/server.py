@@ -171,6 +171,7 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
     lead_doc["created_at"] = datetime.now(timezone.utc).isoformat()
     lead_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     lead_doc["created_by"] = current_user["email"]
+    lead_doc["tenant_id"] = current_user.get("tenant_id")
     lead_doc["icp_score"] = 0
     lead_doc["icp_tier"] = "cold"
     lead_doc["assigned_to"] = None
@@ -208,6 +209,7 @@ async def bulk_create_leads(payload: BulkLeadsPayload, current_user: dict = Depe
             doc["created_at"] = now_iso
             doc["updated_at"] = now_iso
             doc["created_by"] = current_user["email"]
+            doc["tenant_id"] = current_user.get("tenant_id")
             doc["icp_score"] = 0
             doc["icp_tier"] = "cold"
             doc["assigned_to"] = None
@@ -255,7 +257,8 @@ async def get_leads(
     search: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    query = {}
+    # Tenant isolation — never return another tenant's leads
+    query = {"tenant_id": current_user.get("tenant_id")}
     if lead_type:
         query["lead_type"] = lead_type
     if status:
@@ -375,11 +378,14 @@ async def get_sleeping_leads_route(threshold_days: int = 14, current_user: dict 
 @app.get("/api/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+        # Tenant isolation: lookup must include tenant_id
+        lead = leads_collection.find_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")})
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         return serialize_doc(lead)
-    except:
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid lead ID")
 
 @app.patch("/api/leads/{lead_id}")
@@ -392,8 +398,9 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
         
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         
+        # Tenant isolation: update only matches if lead belongs to caller's tenant
         result = leads_collection.update_one(
-            {"_id": ObjectId(lead_id)},
+            {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
             {"$set": update_data}
         )
         
@@ -434,11 +441,13 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
 @app.delete("/api/leads/{lead_id}")
 async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     try:
-        result = leads_collection.delete_one({"_id": ObjectId(lead_id)})
+        result = leads_collection.delete_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Lead not found")
         return {"message": "Lead deleted successfully"}
-    except:
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid lead ID")
 
 # Activity Endpoints
@@ -446,17 +455,18 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
 async def create_activity(activity: ActivityCreate, current_user: dict = Depends(get_current_user)):
     activity_doc = activity.dict()
     activity_doc["user_id"] = current_user["email"]
+    activity_doc["tenant_id"] = current_user.get("tenant_id")
     activity_doc["created_at"] = datetime.now(timezone.utc).isoformat()
     
     result = activities_collection.insert_one(activity_doc)
     
-    # Update lead's last_contacted_at
+    # Update lead's last_contacted_at (only if lead is in same tenant)
     try:
         leads_collection.update_one(
-            {"_id": ObjectId(activity.lead_id)},
+            {"_id": ObjectId(activity.lead_id), "tenant_id": current_user.get("tenant_id")},
             {"$set": {"last_contacted_at": datetime.now(timezone.utc).isoformat()}}
         )
-    except:
+    except Exception:
         pass
     
     activity_doc = serialize_doc(activity_doc)
@@ -464,7 +474,7 @@ async def create_activity(activity: ActivityCreate, current_user: dict = Depends
 
 @app.get("/api/leads/{lead_id}/activities")
 async def get_lead_activities(lead_id: str, current_user: dict = Depends(get_current_user)):
-    activities = list(activities_collection.find({"lead_id": lead_id}).sort("created_at", DESCENDING))
+    activities = list(activities_collection.find({"lead_id": lead_id, "tenant_id": current_user.get("tenant_id")}).sort("created_at", DESCENDING))
     activities = [serialize_doc(activity) for activity in activities]
     return {"activities": activities}
 

@@ -790,13 +790,29 @@ Make every word earn its place."""
         recent = list(activities_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).limit(6))
         training = training_collection_ref.find_one({"scope": "workspace"}, {"_id": 0}) or {}
 
+        # Multi-tenant: pull onboarding config to enrich prompt with tenant-specific persona
+        onboarding_cfg = {}
+        try:
+            tenant_id = current_user.get("tenant_id")
+            if tenant_id:
+                onboarding_cfg = db["onboarding_config"].find_one({"tenant_id": tenant_id}, {"_id": 0}) or {}
+        except Exception:
+            onboarding_cfg = {}
+        bp = onboarding_cfg.get("business_profile") or {}
+        persona_cfg = onboarding_cfg.get("aria_persona") or {}
+        sp = onboarding_cfg.get("sales_process") or {}
+
         training_snippet = ""
-        if training:
+        if training or onboarding_cfg:
             training_snippet = f"""
 WORKSPACE CONTEXT:
-- We sell: {training.get('what_you_sell') or 'AI sales agent'}
-- Audience: {training.get('who_you_sell_to') or '—'}
+- Business: {bp.get('business_name') or training.get('business_name') or 'GenLeadAI'}
+- Industry: {bp.get('industry') or '—'}
+- We sell: {sp.get('product_description') or training.get('what_you_sell') or 'AI sales agent'}
+- Audience: {bp.get('primary_market') or training.get('who_you_sell_to') or '—'}
 - Differentiator: {training.get('differentiator') or '—'}
+- Aria's preferred tone: {persona_cfg.get('tone') or 'founder_led'}
+- Primary language: {persona_cfg.get('language') or 'English'}
 """
         activity_lines = []
         for a in recent:
