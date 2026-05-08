@@ -219,6 +219,25 @@ async def get_active(tenant: dict = Depends(get_active_tenant)):
     }
 
 
+@router.patch("/tenants/active/settings")
+async def patch_tenant_settings(body: dict, tenant: dict = Depends(get_active_tenant)):
+    """Owner/admin patches tenant-level settings (e.g. demo_video_url).
+    Only whitelisted keys are accepted to avoid rogue writes."""
+    if tenant.get("_member_role") not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    allowed = {"demo_video_url", "brand_accent_color"}
+    current_settings = tenant.get("settings") or {}
+    merged = {**current_settings}
+    for k, v in (body or {}).items():
+        if k in allowed:
+            merged[k] = (v or "").strip() if isinstance(v, str) else v
+    tenants_col.update_one(
+        {"id": tenant["id"]},
+        {"$set": {"settings": merged, "updated_at": _now()}},
+    )
+    return {"status": "ok", "settings": merged}
+
+
 # ─── Onboarding endpoints ───────────────────────────────────────────────────
 @router.get("/onboarding/status")
 async def onboarding_status(tenant: dict = Depends(get_active_tenant)):

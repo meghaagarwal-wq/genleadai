@@ -840,6 +840,8 @@ const Settings = () => {
             </div>
           </div>
 
+          <DemoVideoSection />
+
           <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="api-keys-section">
             <h3 className="text-lg font-semibold text-white mb-4">API Configuration</h3>
             <div className="space-y-3">
@@ -929,6 +931,97 @@ const Settings = () => {
         onClose={() => setInviteOpen(false)}
         onCreated={() => setInviteRefreshKey((k) => k + 1)}
       />
+    </div>
+  );
+};
+
+const DemoVideoSection = () => {
+  const [url, setUrl] = useState('');
+  const [initial, setInitial] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.get('/api/tenants/active').then((r) => {
+      if (!alive) return;
+      const cur = r.data?.tenant?.settings?.demo_video_url || '';
+      setUrl(cur);
+      setInitial(cur);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await api.patch('/api/tenants/active/settings', { demo_video_url: url });
+      setInitial(url);
+      setMsg({ type: 'ok', text: 'Saved. It now embeds in the empty-state dashboard for new teammates.' });
+    } catch (err) {
+      setMsg({ type: 'err', text: err.response?.data?.detail || 'Could not save' });
+    } finally { setSaving(false); }
+  };
+
+  const dirty = url !== initial;
+  const preview = (() => {
+    if (!url) return null;
+    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
+    if (yt) return `https://www.youtube.com/embed/${yt[1]}?rel=0`;
+    const loom = url.match(/loom\.com\/share\/([\w-]+)/);
+    if (loom) return `https://www.loom.com/embed/${loom[1]}`;
+    const vimeo = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+    return null;
+  })();
+
+  return (
+    <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="demo-video-section">
+      <h3 className="text-lg font-semibold text-white mb-1">Demo video</h3>
+      <p className="text-xs text-[#A3A3A3] mb-4">
+        Pasted here, your Loom / YouTube / Vimeo video auto-embeds inside the <span className="text-[#7C35DC] font-semibold">Watch 2-min demo</span> modal on the empty-state dashboard — the first thing every new teammate sees.
+      </p>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Video URL</label>
+          <input
+            type="url" value={url} onChange={(e) => setUrl(e.target.value)}
+            data-testid="demo-video-url-input"
+            placeholder="https://www.loom.com/share/… or https://youtu.be/…"
+            className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+          />
+          <div className="text-[10px] text-[#737373] mt-1">Supports YouTube, Loom, Vimeo. Anything else must already be an embed URL.</div>
+        </div>
+        {preview && (
+          <div className="aspect-video rounded-md overflow-hidden border border-[#262626] bg-black" data-testid="demo-video-preview">
+            <iframe src={preview} title="Preview" className="w-full h-full" frameBorder="0" allowFullScreen />
+          </div>
+        )}
+        {msg && (
+          <div className={`text-sm px-3 py-2 rounded-md border ${msg.type === 'ok' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`} data-testid="demo-video-msg">
+            {msg.text}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={save} disabled={!dirty || saving}
+            data-testid="demo-video-save-btn"
+            className="px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
+            style={{ background: '#7C35DC' }}
+          >
+            {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+          </button>
+          {url && (
+            <button
+              onClick={() => setUrl('')}
+              data-testid="demo-video-clear-btn"
+              className="px-4 py-2 rounded-md text-sm font-semibold text-[#A3A3A3] bg-[#0A0A0A] border border-[#262626] hover:text-white"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

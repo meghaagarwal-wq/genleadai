@@ -63,6 +63,23 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 35 — Demo video URL in Settings → embedded into EmptyDashboard (Feb 2026)
+**Backend**:
+- `PATCH /api/tenants/active/settings` — owner/admin patches whitelisted tenant-level settings (`demo_video_url`, `brand_accent_color`). Rogue keys silently dropped.
+- Settings persist in `tenants.settings` JSON sub-document.
+
+**Frontend**:
+- New `DemoVideoSection` in Settings → Workspace tab — URL input + live preview iframe + auto-detect + save/clear buttons + inline success/error msg.
+- `EmptyDashboard` now fetches `/api/tenants/active` on mount; if `settings.demo_video_url` is set, the "Watch 2-min demo" modal auto-embeds a `<iframe>` with autoplay. Converts share URLs → embed URLs for YouTube (`youtu.be/ID`, `youtube.com/watch?v=ID`), Loom (`loom.com/share/ID`), and Vimeo (`vimeo.com/ID`). Any other URL is passed through unchanged.
+- Without a URL, falls back to the existing graceful placeholder ("Demo video not yet configured…").
+
+**Verified (all PASS)**:
+- Save → persists ✓
+- Read back → matches ✓
+- Rogue keys rejected ✓
+- Clear → removes ✓
+- Live preview iframe renders (Rick Astley test) ✓
+
 ## Iter 34 — P0 tenant scoping across critical endpoints (Feb 2026)
 **Backend**:
 - Added `_tf(current_user)` tenant-filter helper + `_stamp_tenant(doc, user)` writer helper in `routes/pietential.py`.

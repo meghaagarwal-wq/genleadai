@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../config/api';
 import {
   Plus, FileArrowUp, PlayCircle, Sparkle, Lightning, Target,
   ChartLineUp, Users, ChatTeardropDots, Robot, ArrowRight,
@@ -15,6 +16,36 @@ import {
 const EmptyDashboard = ({ workspaceName, founderName }) => {
   const navigate = useNavigate();
   const [showDemoVideo, setShowDemoVideo] = useState(false);
+  const [demoVideoUrl, setDemoVideoUrl] = useState('');
+
+  // Fetch tenant settings for optional demo_video_url
+  useEffect(() => {
+    let alive = true;
+    api.get('/api/tenants/active').then((r) => {
+      if (!alive) return;
+      const url = r.data?.tenant?.settings?.demo_video_url || '';
+      setDemoVideoUrl(url);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Convert YouTube / Loom / Vimeo share URLs → embed URLs
+  const toEmbedUrl = (url) => {
+    if (!url) return '';
+    try {
+      // YouTube: https://www.youtube.com/watch?v=ID or https://youtu.be/ID
+      const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
+      if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&rel=0`;
+      // Loom: https://www.loom.com/share/ID → https://www.loom.com/embed/ID
+      const loomMatch = url.match(/loom\.com\/share\/([\w-]+)/);
+      if (loomMatch) return `https://www.loom.com/embed/${loomMatch[1]}?autoplay=1`;
+      // Vimeo: https://vimeo.com/ID
+      const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+      if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1`;
+      // Assume already embeddable
+      return url;
+    } catch (e) { return url; }
+  };
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -153,24 +184,38 @@ const EmptyDashboard = ({ workspaceName, founderName }) => {
             >
               Close
             </button>
-            {/* Placeholder — when you upload a real Loom/YouTube embed, swap the iframe src */}
-            <div className="aspect-video bg-[#2D1B4E] flex flex-col items-center justify-center gap-3 text-center px-6">
-              <PlayCircle size={48} weight="fill" className="text-[#C9B6FF]" />
-              <div className="text-white text-lg font-bold" style={{ fontFamily: 'Space Grotesk, Inter' }}>
-                Demo video coming soon
+            {/* If owner/admin set a demo_video_url in Settings → Workspace, embed it.
+                Otherwise show the graceful placeholder. */}
+            {demoVideoUrl ? (
+              <div className="aspect-video bg-black" data-testid="empty-demo-video-iframe-wrap">
+                <iframe
+                  src={toEmbedUrl(demoVideoUrl)}
+                  title="Workspace demo"
+                  className="w-full h-full"
+                  frameBorder="0"
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                />
               </div>
-              <p className="text-sm text-[#C9B6FF] max-w-md">
-                Drop us a Loom or YouTube link in <span className="font-mono">/admin → Settings → Demo Video URL</span> and we'll embed it here automatically.
-              </p>
-              <a
-                href="https://genleadai.com/aria"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-[#4C1D95] font-bold text-sm"
-              >
-                Visit genleadai.com/aria <ArrowRight size={14} weight="bold" />
-              </a>
-            </div>
+            ) : (
+              <div className="aspect-video bg-[#2D1B4E] flex flex-col items-center justify-center gap-3 text-center px-6">
+                <PlayCircle size={48} weight="fill" className="text-[#C9B6FF]" />
+                <div className="text-white text-lg font-bold" style={{ fontFamily: 'Space Grotesk, Inter' }}>
+                  Demo video not yet configured
+                </div>
+                <p className="text-sm text-[#C9B6FF] max-w-md">
+                  Paste a Loom / YouTube / Vimeo link in <span className="font-mono">Settings → Workspace → Demo Video URL</span> and it'll embed here automatically for every new teammate.
+                </p>
+                <a
+                  href="https://genleadai.com/aria"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-[#4C1D95] font-bold text-sm"
+                >
+                  Visit genleadai.com/aria <ArrowRight size={14} weight="bold" />
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
