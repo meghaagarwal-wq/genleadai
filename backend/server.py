@@ -43,6 +43,7 @@ from routes.analytics import router as analytics_router
 from routes.beta_feedback import router as beta_feedback_router
 from routes.pietential import router as pietential_router, register_pietential_startup
 from routes.tenants import router as tenants_router
+from routes.billing import router as billing_router, webhook_router as stripe_webhook_router
 
 load_dotenv()
 
@@ -66,6 +67,8 @@ app.include_router(analytics_router)
 app.include_router(beta_feedback_router)
 app.include_router(pietential_router)
 app.include_router(tenants_router)
+app.include_router(billing_router)
+app.include_router(stripe_webhook_router)
 register_pietential_startup(app)
 
 

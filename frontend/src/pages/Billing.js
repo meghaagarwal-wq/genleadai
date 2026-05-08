@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, X as XIcon, Sparkle, Crown, Rocket, Buildings, ArrowRight } from '@phosphor-icons/react';
 import { usePlan } from '../context/PlanContext';
 import api from '../config/api';
@@ -95,6 +95,51 @@ const PLAN_ICONS = { starter: Sparkle, growth: Rocket, pro: Crown, custom: Build
 const Billing = () => {
   const { planId, allPlans, refreshPlan } = usePlan();
   const [checkingOut, setCheckingOut] = useState(null);
+  const [pollStatus, setPollStatus] = useState(null);  // {session_id, message, type}
+
+  // Poll the backend up to N attempts to confirm payment on return from Stripe.
+  const pollPayment = useCallback(async (sessionId, attempts = 0) => {
+    const maxAttempts = 10;
+    const delay = 2000;
+    if (attempts >= maxAttempts) {
+      setPollStatus({ type: 'warn', message: 'Payment is still processing — refresh in a minute. If your plan did not upgrade, contact support.' });
+      return;
+    }
+    try {
+      const res = await api.get(`/api/billing/status/${sessionId}`);
+      const data = res.data || {};
+      if (data.payment_status === 'paid') {
+        setPollStatus({ type: 'ok', message: `Payment successful — you're now on the ${data.plan} plan!` });
+        toast.success('Plan upgraded');
+        try { await refreshPlan?.(); } catch (e) { /* best-effort */ }
+        // Clean the session_id from URL so a refresh doesn't re-poll
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+      if (data.status === 'expired') {
+        setPollStatus({ type: 'err', message: 'This checkout session expired. Please try again.' });
+        return;
+      }
+      setPollStatus({ type: 'pending', message: 'Confirming your payment with Stripe…' });
+      setTimeout(() => pollPayment(sessionId, attempts + 1), delay);
+    } catch (err) {
+      setPollStatus({ type: 'err', message: err?.response?.data?.detail || 'Could not verify payment — please refresh.' });
+    }
+  }, [refreshPlan]);
+
+  // On mount: check if we returned from Stripe with ?session_id=
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get('session_id');
+    const cancelled = params.get('cancelled');
+    if (sid) {
+      setPollStatus({ type: 'pending', message: 'Confirming your payment with Stripe…' });
+      pollPayment(sid);
+    } else if (cancelled) {
+      toast.error('Checkout cancelled — no charge was made.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [pollPayment]);
 
   const handleCheckout = async (targetPlanId) => {
     if (targetPlanId === planId) return;
@@ -111,9 +156,15 @@ const Billing = () => {
       } finally { setCheckingOut(null); }
       return;
     }
+    // Only starter + pro are real Stripe packages for now. Growth/Custom fall through.
+    const packageId = ['starter', 'pro'].includes(targetPlanId) ? targetPlanId : null;
+    if (!packageId) {
+      toast.error('This plan is not available for self-service checkout yet. Contact sales.');
+      return;
+    }
     setCheckingOut(targetPlanId);
     try {
-      const res = await api.post('/api/billing/checkout', { plan_id: targetPlanId, origin_url: window.location.origin });
+      const res = await api.post('/api/billing/checkout', { package_id: packageId, origin_url: window.location.origin });
       if (res.data?.url) window.location.href = res.data.url;
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Checkout failed');
@@ -134,6 +185,20 @@ const Billing = () => {
           </div>
         }
       />
+
+      {pollStatus && (
+        <div
+          data-testid="billing-poll-banner"
+          className={`px-4 py-3 rounded-lg border flex items-start gap-2 text-sm ${
+            pollStatus.type === 'ok' ? 'bg-[#10B981]/10 border-[#10B981]/30 text-[#047857]' :
+            pollStatus.type === 'err' ? 'bg-red-50 border-red-200 text-[#B91C1C]' :
+            pollStatus.type === 'warn' ? 'bg-[#FEF3C7] border-[#D97706]/30 text-[#92400E]' :
+            'bg-[#F4F0FF] border-[#7C35DC]/30 text-[#4C1D95]'
+          }`}
+        >
+          <span className="font-semibold">{pollStatus.message}</span>
+        </div>
+      )}
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
