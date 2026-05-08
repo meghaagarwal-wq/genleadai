@@ -23,7 +23,7 @@ const PtReports = () => {
       <div className="flex items-center gap-2 mb-4 border-b border-[#E2E8F0]">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} data-testid={`pt-reports-tab-${t.id}`}
-            className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === t.id ? 'border-[#0F766E] text-[#0F766E]' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'}`}>
+            className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === t.id ? 'border-[#7C35DC] text-[#7C35DC]' : 'border-transparent text-[#64748B] hover:text-[#0F172A]'}`}>
             {t.label}
           </button>
         ))}

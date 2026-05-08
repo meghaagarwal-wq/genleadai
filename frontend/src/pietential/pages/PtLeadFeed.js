@@ -31,11 +31,11 @@ const PtLeadFeed = () => {
         right={
           <div className="flex items-center gap-2">
             <button onClick={() => setShowCsv(true)} data-testid="pt-leadfeed-upload-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#0F766E] border border-[#0F766E]/30 hover:bg-[#0F766E]/5">
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
               <Upload size={14} weight="bold" /> Upload CSV
             </button>
             <button onClick={() => setShowAdd(true)} data-testid="pt-leadfeed-add-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#0F766E' }}>
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }}>
               <Plus size={14} weight="bold" /> Add lead
             </button>
           </div>
@@ -48,7 +48,7 @@ const PtLeadFeed = () => {
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name, email, company"
             data-testid="pt-leadfeed-search"
-            className="w-full pl-7 pr-3 py-1.5 text-sm border border-[#E2E8F0] rounded-md outline-none focus:ring-2 focus:ring-[#14B8A6]/20" />
+            className="w-full pl-7 pr-3 py-1.5 text-sm border border-[#E2E8F0] rounded-md outline-none focus:ring-2 focus:ring-[#C044E0]/20" />
         </div>
         <select value={filters.stage} onChange={(e) => setFilters({ ...filters, stage: e.target.value })}
           data-testid="pt-leadfeed-filter-stage"
@@ -77,8 +77,8 @@ const PtLeadFeed = () => {
           message="Upload a CSV of real prospects, or wait for engagement events to flow in from Saleshandy / Lemlist / newsletter."
           cta={
             <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setShowCsv(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#0F766E' }} data-testid="empty-cta-upload">Upload CSV</button>
-              <Link to="/pt/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#0F766E] border border-[#0F766E]/30">Configure integrations</Link>
+              <button onClick={() => setShowCsv(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }} data-testid="empty-cta-upload">Upload CSV</button>
+              <Link to="/pt/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30">Configure integrations</Link>
             </div>
           }
         />
@@ -165,7 +165,7 @@ const AddLeadModal = ({ onClose, onSaved }) => {
         <div className="px-5 py-3 border-t border-[#E2E8F0] flex justify-end gap-2 bg-[#F8FAFC]">
           <button onClick={onClose} className="px-3 py-1.5 text-sm font-semibold text-[#475569]">Cancel</button>
           <button onClick={submit} disabled={busy} data-testid="pt-add-lead-save"
-            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#0F766E' }}>
+            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>
             {busy ? 'Saving…' : 'Save lead'}
           </button>
         </div>
@@ -178,7 +178,7 @@ const Input = ({ label, value, onChange, testid, full }) => (
   <div className={full ? 'col-span-2' : ''}>
     <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">{label}</label>
     <input value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}
-      className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[#14B8A6]/20" />
+      className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[#C044E0]/20" />
   </div>
 );
 
@@ -247,7 +247,7 @@ const CsvModal = ({ onClose, onDone }) => {
         <div className="px-5 py-3 border-t border-[#E2E8F0] flex justify-end gap-2 bg-[#F8FAFC]">
           <button onClick={onClose} className="px-3 py-1.5 text-sm font-semibold text-[#475569]">Cancel</button>
           <button onClick={submit} disabled={!preview || busy} data-testid="pt-csv-import-btn"
-            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#0F766E' }}>
+            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>
             {busy ? 'Importing…' : `Import ${preview?.length || 0} rows`}
           </button>
         </div>

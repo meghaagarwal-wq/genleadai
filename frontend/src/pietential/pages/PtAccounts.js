@@ -85,7 +85,7 @@ const PtAccounts = () => {
                   className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] cursor-pointer">
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2 font-semibold text-[#0F172A]">
-                      <Buildings size={14} weight="duotone" className="text-[#0F766E]" />
+                      <Buildings size={14} weight="duotone" className="text-[#7C35DC]" />
                       {c.name}
                       {c.pause_required && <span className="text-[9px] font-bold uppercase tracking-[0.15em] px-1.5 py-0.5 rounded bg-[#DC2626] text-white">Pause</span>}
                     </div>

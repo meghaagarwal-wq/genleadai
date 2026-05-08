@@ -22,7 +22,7 @@ const PRETTY = {
 const STATUS_META = {
   not_connected: { label: 'Not connected', color: '#94A3B8' },
   needs_setup:   { label: 'Needs setup',    color: '#F59E0B' },
-  connected:     { label: 'Connected',      color: '#0F766E' },
+  connected:     { label: 'Connected',      color: '#7C35DC' },
 };
 
 // Source-specific webhook routes that Make.com / n8n should hit
@@ -100,7 +100,7 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => onTest(integ.name)} data-testid={`pt-integ-test-${integ.name}`}
-            className="text-xs font-semibold text-[#0F766E] hover:underline inline-flex items-center gap-1"><ArrowClockwise size={11} /> Test</button>
+            className="text-xs font-semibold text-[#7C35DC] hover:underline inline-flex items-center gap-1"><ArrowClockwise size={11} /> Test</button>
         </div>
       </div>
 
@@ -113,7 +113,7 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
               className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
             <button onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })} disabled={!apiKey}
               data-testid={`pt-integ-save-${integ.name}`}
-              className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50" style={{ background: '#0F766E' }}>Save</button>
+              className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>Save</button>
           </div>
         </div>
 
@@ -131,7 +131,7 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
               {hints.map(h => (
                 <div key={h} className="flex items-center justify-between gap-2 bg-[#F8FAFC] rounded px-2 py-1 text-xs text-[#475569] font-mono">
                   <span className="truncate">{base}{h}</span>
-                  <button onClick={() => onCopy(`${base}${h}`)} className="text-[#0F766E]"><Copy size={11} weight="bold" /></button>
+                  <button onClick={() => onCopy(`${base}${h}`)} className="text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
                 </div>
               ))}
             </div>

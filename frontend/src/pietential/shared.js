@@ -7,7 +7,7 @@ export const STAGE_META = {
   cold:           { label: 'Cold',          color: '#64748B', bg: 'rgba(100,116,139,0.08)' },
   warm:           { label: 'Warm',          color: '#0891B2', bg: 'rgba(8,145,178,0.08)' },
   hot:            { label: 'Hot',           color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
-  engaged:        { label: 'Engaged',       color: '#0F766E', bg: 'rgba(15,118,110,0.08)' },
+  engaged:        { label: 'Engaged',       color: '#7C35DC', bg: 'rgba(15,118,110,0.08)' },
   session_pilot:  { label: 'Session/Pilot', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)' },
 };
 
@@ -29,7 +29,7 @@ export const SEQUENCE_STATUS_META = {
   warm_nurture:          { label: 'Warm nurture',          color: '#F59E0B' },
   pause_required:        { label: 'Pause required',        color: '#DC2626' },
   paused:                { label: 'Paused',                color: '#475569' },
-  john_owns:             { label: 'John owns',             color: '#0F766E' },
+  john_owns:             { label: 'John owns',             color: '#7C35DC' },
   dnc:                   { label: 'DNC / unsubscribed',    color: '#DC2626' },
 };
 

@@ -82,7 +82,7 @@ const PtLeadDetail = () => {
           {/* Identity */}
           <Card title="Identity">
             <KV label="Email" value={lead.email} />
-            <KV label="LinkedIn" value={lead.linkedin_url ? <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#0F766E] hover:underline">profile <LinkSimple size={11} /></a> : '—'} />
+            <KV label="LinkedIn" value={lead.linkedin_url ? <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#7C35DC] hover:underline">profile <LinkSimple size={11} /></a> : '—'} />
             <KV label="Industry" value={lead.industry || '—'} />
             <KV label="Employees" value={lead.employee_count || '—'} />
             <KV label="Geography" value={lead.geography || '—'} />
@@ -101,8 +101,8 @@ const PtLeadDetail = () => {
             <KV label="Latest signal" value={lead.latest_signal || '—'} />
             <KV label="Last activity" value={fmtDateTime(lead.last_activity_at)} />
             {recommendation && (
-              <div className="mt-3 p-2.5 rounded-md border border-[#0F766E]/30" style={{ background: '#F0FDFA' }} data-testid="pt-detail-recommendation">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0F766E] mb-0.5">Aria recommendation</div>
+              <div className="mt-3 p-2.5 rounded-md border border-[#7C35DC]/30" style={{ background: '#FAF7FF' }} data-testid="pt-detail-recommendation">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7C35DC] mb-0.5">Aria recommendation</div>
                 <div className="text-sm text-[#0F172A]">{recommendation}</div>
               </div>
             )}
@@ -115,7 +115,7 @@ const PtLeadDetail = () => {
                 {score_breakdown.map((b, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
                     <span className="text-[#475569]">{b.label || b.event_type} {b.count > 1 && <span className="text-[10px] text-[#94A3B8]">×{b.count}</span>}</span>
-                    <span className={`font-bold ${b.total >= 0 ? 'text-[#0F766E]' : 'text-[#DC2626]'}`}>{b.total >= 0 ? '+' : ''}{b.total}</span>
+                    <span className={`font-bold ${b.total >= 0 ? 'text-[#7C35DC]' : 'text-[#DC2626]'}`}>{b.total >= 0 ? '+' : ''}{b.total}</span>
                   </div>
                 ))}
               </div>
@@ -132,7 +132,7 @@ const PtLeadDetail = () => {
                 {rules.map(r => <option key={r.event_type} value={r.event_type}>{r.label} ({r.score >= 0 ? '+' : ''}{r.score})</option>)}
               </select>
               <button onClick={simulate} data-testid="pt-detail-sim-btn"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-white" style={{ background: '#0F766E' }}>
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-white" style={{ background: '#7C35DC' }}>
                 <Lightning size={12} weight="bold" /> Apply
               </button>
             </div>
@@ -143,12 +143,12 @@ const PtLeadDetail = () => {
               <div className="space-y-2.5">
                 {events.map(e => (
                   <div key={e.id} className="flex items-start gap-3 pb-2.5 border-b border-[#F1F5F9] last:border-0" data-testid={`pt-event-${e.id}`}>
-                    <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: e.score_change >= 0 ? '#0F766E' : '#DC2626' }} />
+                    <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: e.score_change >= 0 ? '#7C35DC' : '#DC2626' }} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-[#0F172A]">{e.label || e.event_type}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-md text-[#0F766E] border border-[#0F766E]/30">{SOURCE_LABELS[e.source] || e.source}</span>
-                        <span className={`text-xs font-bold ${e.score_change >= 0 ? 'text-[#0F766E]' : 'text-[#DC2626]'}`}>{e.score_change >= 0 ? '+' : ''}{e.score_change}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] px-1.5 py-0.5 rounded-md text-[#7C35DC] border border-[#7C35DC]/30">{SOURCE_LABELS[e.source] || e.source}</span>
+                        <span className={`text-xs font-bold ${e.score_change >= 0 ? 'text-[#7C35DC]' : 'text-[#DC2626]'}`}>{e.score_change >= 0 ? '+' : ''}{e.score_change}</span>
                       </div>
                       <div className="text-xs text-[#64748B] mt-0.5">{fmtDateTime(e.created_at)} · score after: {e.score_after} · stage: {e.stage_after}</div>
                     </div>
@@ -165,7 +165,7 @@ const PtLeadDetail = () => {
                 data-testid="pt-detail-note-input"
                 className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2.5 py-1.5 outline-none" />
               <button onClick={addNote} data-testid="pt-detail-note-add"
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white" style={{ background: '#0F766E' }}>
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }}>
                 <Plus size={12} weight="bold" /> Add
               </button>
             </div>
@@ -185,7 +185,7 @@ const PtLeadDetail = () => {
 
           {company && (
             <Card title="Account">
-              <KV label="Company" value={<Link to="/pt/accounts" className="text-[#0F766E] hover:underline">{company.name}</Link>} />
+              <KV label="Company" value={<Link to="/pt/accounts" className="text-[#7C35DC] hover:underline">{company.name}</Link>} />
               <KV label="Stage" value={<StageBadge stage={company.account_stage} />} />
               <KV label="Sequence" value={company.sequence_status} />
               <KV label="Pause required" value={company.pause_required ? 'Yes' : 'No'} />

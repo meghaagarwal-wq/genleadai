@@ -6,7 +6,7 @@ import { ptApi, PageHeader, EmptyState, Pill, fmtDate } from '../shared';
 const STATUS_META = {
   open:        { label: 'Open',        color: '#475569' },
   in_progress: { label: 'In progress', color: '#F59E0B' },
-  done:        { label: 'Done',        color: '#0F766E' },
+  done:        { label: 'Done',        color: '#7C35DC' },
   blocked:     { label: 'Blocked',     color: '#DC2626' },
 };
 
@@ -52,7 +52,7 @@ const PtTasks = () => {
       <PageHeader title="Tasks" subtitle={`${data.counts?.open || 0} open · ${data.counts?.in_progress || 0} in progress · ${data.counts?.done || 0} done`}
         right={
           <button onClick={() => setShowAdd(true)} data-testid="pt-task-add-btn"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#0F766E' }}>
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }}>
             <Plus size={14} /> New task
           </button>
         }
@@ -83,7 +83,7 @@ const PtTasks = () => {
               <div key={t.id} className="flex items-center gap-3 px-4 py-3 border-b border-[#F1F5F9] last:border-0 hover:bg-[#F8FAFC]" data-testid={`pt-task-${t.id}`}>
                 <button onClick={() => updateStatus(t.id, t.status === 'done' ? 'open' : 'done')}
                   data-testid={`pt-task-toggle-${t.id}`}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${t.status === 'done' ? 'bg-[#0F766E] border-[#0F766E]' : 'border-[#CBD5E1]'}`}>
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${t.status === 'done' ? 'bg-[#7C35DC] border-[#7C35DC]' : 'border-[#CBD5E1]'}`}>
                   {t.status === 'done' && <Check size={12} weight="bold" className="text-white" />}
                 </button>
                 <div className="flex-1 min-w-0">
@@ -166,7 +166,7 @@ const AddTaskModal = ({ onClose, onSaved }) => {
         <div className="px-5 py-3 border-t border-[#E2E8F0] flex justify-end gap-2 bg-[#F8FAFC]">
           <button onClick={onClose} className="px-3 py-1.5 text-sm font-semibold text-[#475569]">Cancel</button>
           <button onClick={submit} disabled={busy} data-testid="pt-task-save-btn"
-            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#0F766E' }}>
+            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>
             {busy ? 'Saving…' : 'Save task'}
           </button>
         </div>

@@ -19,8 +19,8 @@ export const WORKSPACES = [
     slug: 'pietential',
     label: 'Aria for Pietential',
     sub: 'Wellbeing Engagement Intelligence',
-    color: '#0F766E',
-    accent: '#14B8A6',
+    color: '#7C35DC',
+    accent: '#C044E0',
     home: '/pt',
   },
 ];

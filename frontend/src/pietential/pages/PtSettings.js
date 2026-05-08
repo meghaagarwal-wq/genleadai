@@ -51,7 +51,7 @@ const PtSettings = () => {
               <tr key={r.event_type} className="border-b border-[#F1F5F9] last:border-0">
                 <td className="px-3 py-2 text-[#475569]">{r.source}</td>
                 <td className="px-3 py-2 text-[#0F172A]"><span className="font-medium">{r.label}</span> <span className="text-[10px] text-[#94A3B8] font-mono ml-1">{r.event_type}</span></td>
-                <td className={`px-3 py-2 font-bold ${r.score >= 0 ? 'text-[#0F766E]' : 'text-[#DC2626]'}`}>{r.score >= 0 ? '+' : ''}{r.score}</td>
+                <td className={`px-3 py-2 font-bold ${r.score >= 0 ? 'text-[#7C35DC]' : 'text-[#DC2626]'}`}>{r.score >= 0 ? '+' : ''}{r.score}</td>
                 <td className="px-3 py-2 text-[#475569]">{r.trigger_pause ? 'Yes' : '—'}</td>
               </tr>
             ))}
@@ -68,7 +68,7 @@ const PtSettings = () => {
           {data.decay.map((d, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <span className="text-[#475569]">{d.trigger.replace(/_/g, ' ')}</span>
-              <span className={`font-bold ${d.score_change >= 0 ? 'text-[#0F766E]' : 'text-[#DC2626]'}`}>{d.score_change}{d.side_effect && <span className="text-xs text-[#94A3B8] ml-2">+ {d.side_effect.replace(/_/g, ' ')}</span>}</span>
+              <span className={`font-bold ${d.score_change >= 0 ? 'text-[#7C35DC]' : 'text-[#DC2626]'}`}>{d.score_change}{d.side_effect && <span className="text-xs text-[#94A3B8] ml-2">+ {d.side_effect.replace(/_/g, ' ')}</span>}</span>
             </div>
           ))}
         </div>

@@ -32,7 +32,7 @@ const WorkspaceSwitcher = () => {
           value={active.slug}
           onChange={(e) => switchTo(e.target.value)}
           data-testid="pt-workspace-select"
-          className="flex-1 text-sm font-semibold text-[#0F172A] bg-white border border-[#CBD5E1] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[#14B8A6]/20"
+          className="flex-1 text-sm font-semibold text-[#0F172A] bg-white border border-[#CBD5E1] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[#C044E0]/20"
         >
           {WORKSPACES.map(w => (
             <option key={w.slug} value={w.slug}>{w.label}</option>
@@ -54,7 +54,7 @@ const PtLayout = ({ children }) => {
       <aside className="hidden md:flex w-60 flex-col bg-white border-r border-[#E2E8F0] shrink-0" data-testid="pt-sidebar">
         {/* Brand */}
         <div className="h-16 flex items-center gap-2.5 px-4 border-b border-[#E2E8F0]">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0F766E 0%, #14B8A6 100%)' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #7C35DC 0%, #C044E0 100%)' }}>
             <span className="text-white font-extrabold text-base" style={{ fontFamily: 'Space Grotesk, Inter' }}>A</span>
           </div>
           <div className="min-w-0">
@@ -77,7 +77,7 @@ const PtLayout = ({ children }) => {
                 className={({ isActive }) =>
                   `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-[#0F766E]/8 text-[#0F766E] border-l-2 border-[#0F766E]'
+                      ? 'bg-[#7C35DC]/8 text-[#7C35DC] border-l-2 border-[#7C35DC]'
                       : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9] border-l-2 border-transparent'
                   }`
                 }
