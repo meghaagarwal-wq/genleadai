@@ -42,6 +42,7 @@ from routes.ai import router as ai_router
 from routes.analytics import router as analytics_router
 from routes.beta_feedback import router as beta_feedback_router
 from routes.pietential import router as pietential_router, register_pietential_startup
+from routes.tenants import router as tenants_router
 
 load_dotenv()
 
@@ -64,6 +65,7 @@ app.include_router(ai_router)
 app.include_router(analytics_router)
 app.include_router(beta_feedback_router)
 app.include_router(pietential_router)
+app.include_router(tenants_router)
 register_pietential_startup(app)
 
 # Resend Email
@@ -2914,13 +2916,14 @@ class OnboardingData(BaseModel):
     icp_description: Optional[str] = None
     completed: bool = False
 
-@app.get("/api/onboarding/status")
+@app.get("/api/onboarding/status_legacy")
 async def get_onboarding_status(current_user: dict = Depends(get_current_user)):
-    """Check if onboarding is completed."""
+    """[DEPRECATED] Per-user onboarding. Replaced by tenant-aware /api/onboarding/status in routes/tenants.py.
+    Kept under a renamed path for backward-compat callers; do not use."""
     status = onboarding_collection.find_one({"user_email": current_user["email"]}, {"_id": 0})
     return {"onboarding": status, "completed": status.get("completed", False) if status else False}
 
-@app.post("/api/onboarding/complete")
+@app.post("/api/onboarding/complete_legacy")
 async def complete_onboarding(data: OnboardingData, current_user: dict = Depends(get_current_user)):
     """Save onboarding data and mark as complete."""
     doc = data.dict()

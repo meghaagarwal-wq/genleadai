@@ -39,14 +39,29 @@ export const AuthProvider = ({ children }) => {
     return user;
   };
 
+  // Multi-tenant self-service signup: creates user + tenant + owner membership.
+  // Returns { user, tenant }. Tenant is fresh → onboarding required.
+  const signup = async (email, password, full_name, workspace_name) => {
+    const response = await api.post('/api/auth/signup', { email, password, full_name, workspace_name });
+    const { token, user, tenant } = response.data;
+
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    if (tenant) localStorage.setItem('active_tenant', JSON.stringify(tenant));
+    setUser(user);
+
+    return { user, tenant };
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('active_tenant');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -63,6 +63,29 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 29 — Multi-tenant SaaS foundation Phase 1 (Feb 2026)
+**Backend**:
+- New `routes/tenants.py` with `tenants`, `tenant_memberships`, `onboarding_config` collections.
+- `POST /api/auth/signup` — public self-service signup, creates user + tenant + owner membership.
+- `GET /api/tenants/me` — list user's tenants. `GET /api/tenants/active` — current tenant + role + onboarding state.
+- `GET /api/onboarding/status`, `POST /api/onboarding/complete`, `GET /api/onboarding/aria-config` — per-tenant onboarding (replaces legacy per-user). Legacy `/api/onboarding/{status,complete}_legacy` retained for back-compat.
+- `get_active_tenant` dependency resolves tenant via `X-Tenant-Id` header (or user's primary tenant if absent). Used by all multi-tenant routes.
+- `require_tenant_role([...])` factory for role guards.
+- Migration script `scripts/migrate_to_multi_tenant.py` — idempotent, backfilled 308 docs into `ten_demo` (legacy ARIA collections) and `ten_pietential` (pt_* collections); admin@demo.com made owner of both; sarah/james members of demo only; marked both tenants `onboarding_completed=true` with sane defaults.
+- `POST /api/auth/change-password` (Iter 28 Security tab) carried forward.
+
+**Frontend**:
+- `Signup.js` page (`/signup`) — workspace name + full name + email + password → calls `/api/auth/signup` → routes to onboarding.
+- `OnboardingWizard.js` rebuilt — 5 steps: Business Profile, Aria Persona, Sales Process, WhatsApp, Team. Editable pipeline stages, multi-select qualification, tone & fallback pickers. Submit hard-reloads to `/` to bypass any stale gate state.
+- `ProtectedRoute` enhanced — fetches `/api/onboarding/status` per route mount, redirects to `/onboarding` if tenant not onboarded. `/onboarding` route uses `requireOnboarded={false}` to avoid loop.
+- `AuthContext.signup()` — stores `active_tenant` in localStorage post-signup.
+- `config/api.js` interceptor — auto-sends `X-Tenant-Id` header from `active_tenant`.
+
+**Test status**:
+- Backend: 7/7 endpoints curl-verified (signup → list tenants → switch via header → onboarding status/complete → aria-config). Migration: 308 docs tagged.
+- Frontend: end-to-end E2E PASS — signup → 5-step wizard → submit → Dashboard renders for new user "e2e_*" with their workspace name.
+- Known gap (Phase 2): legacy `/api/leads`, `/api/conversations`, `/api/campaigns`, `/api/aria-agent/*` endpoints not yet tenant-scoped on read — new tenants currently see the demo data. Pietential `/api/pt/*` not yet scoped either. Phase 2 will add `tenant=Depends(get_active_tenant)` + `{tenant_id: tenant["id"]}` filter to every read/write.
+
 ## Iter 28 — Pietential "Ask Aria to Reply" Claude integration + CSV patch verification (Feb 2026)
 **Backend** (`/app/backend/routes/pietential.py`):
 - New endpoint `POST /api/pt/leads/{id}/ask-aria` — Claude 4 Sonnet via Emergent LLM Key.

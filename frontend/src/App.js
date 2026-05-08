@@ -6,6 +6,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import LeadInbox from './pages/LeadInbox';
 import LeadDetail from './pages/LeadDetail';
@@ -65,6 +66,7 @@ import CompareAriaVsSpreadsheets from './public/pages/compare/AriaVsSpreadsheets
 import CompareAiVsCrm from './public/pages/compare/AISalesAssistantVsCrm';
 import Layout from './components/Layout';
 import UpgradeModal from './components/UpgradeModal';
+import api from './config/api';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -76,10 +78,30 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, requireOnboarded = true }) {
   const { user, loading } = useAuth();
+  const [gateState, setGateState] = React.useState({ checked: false, completed: true, tenantId: null });
 
-  if (loading) {
+  React.useEffect(() => {
+    if (!user) { setGateState({ checked: true, completed: true, tenantId: null }); return; }
+    let alive = true;
+    api.get('/api/onboarding/status')
+      .then((r) => {
+        if (!alive) return;
+        const t = r.data?.tenant;
+        // Keep active_tenant in localStorage current
+        try {
+          const stored = JSON.parse(localStorage.getItem('active_tenant') || 'null');
+          const merged = { ...(stored || {}), id: t?.id, name: t?.name, onboarding_completed: !!r.data?.completed };
+          if (merged.id) localStorage.setItem('active_tenant', JSON.stringify(merged));
+        } catch (e) { /* ignore */ }
+        setGateState({ checked: true, completed: !!r.data?.completed, tenantId: t?.id || null });
+      })
+      .catch(() => setGateState({ checked: true, completed: true, tenantId: null }));
+    return () => { alive = false; };
+  }, [user]);
+
+  if (loading || (user && !gateState.checked)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
         <div className="text-[#A3A3A3]">Loading...</div>
@@ -87,8 +109,10 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (requireOnboarded && !gateState.completed) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return children;
@@ -104,6 +128,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/signup" element={<Signup />} />
 
               {/* Public ARIA content ecosystem (crawlable, no auth) */}
               <Route path="/aria" element={<AriaHome />} />
@@ -148,7 +173,7 @@ function App() {
               <Route
                 path="/onboarding"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requireOnboarded={false}>
                     <OnboardingWizard />
                   </ProtectedRoute>
                 }

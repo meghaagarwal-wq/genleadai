@@ -16,6 +16,14 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Multi-tenant: forward active tenant id so backend can scope data.
+    try {
+      const activeTenant = localStorage.getItem('active_tenant');
+      if (activeTenant) {
+        const parsed = JSON.parse(activeTenant);
+        if (parsed?.id) config.headers['X-Tenant-Id'] = parsed.id;
+      }
+    } catch (e) { /* ignore parse errors */ }
     return config;
   },
   (error) => {
