@@ -200,6 +200,27 @@ Typography alignment:
 
 **Test status (iter 24)**: Backend 15/15 pytest, Frontend e2e 100%, zero issues.
 
+## Iter 30 — Aria for Pietential workspace (multi-tenant ready) (Feb 2026)
+
+**Architecture: workspace switcher pattern.** New top-level `WorkspaceProvider` (`/app/frontend/src/context/WorkspaceContext.js`) with localStorage persistence. Two workspaces today: `aria_crm` (existing) and `pietential`. Adding new tenants = adding a row to `WORKSPACES` array. Switcher dropdowns in both sidebars.
+
+**Backend** new modular router `/app/backend/routes/pietential.py` (single file, ~600 lines, fully self-contained):
+- 6 isolated MongoDB collections: `pt_leads`, `pt_companies`, `pt_events`, `pt_tasks`, `pt_notes`, `pt_integrations`.
+- 19 scoring rules (`SCORING_RULES`) covering Saleshandy/Lemlist/Newsletter/Lead Magnet/JSA/Website/Calendly/Manual.
+- Stage classifier (cold/warm/hot/engaged/session_pilot) + recommendation generator.
+- Account cascade: when any contact crosses Hot or fires a `trigger_pause` event, the whole company gets `pause_required=true` and `sequence_status=pause_required`. Engaged+ flips owner to John.
+- Auto-task generator: pause Saleshandy + pause Lemlist + route to John + send John personal email + create opportunity (for Calendly).
+- 25+ endpoints: leads CRUD + bulk + CSV, companies CRUD, events ingest, tasks CRUD, notes, overview metrics, weekly+monthly reports, scoring-rules introspection, integrations upsert+test.
+- 13 webhook endpoints (Saleshandy/Lemlist/Newsletter/Lead Magnet/JSA/Calendly/GA4) routed through one `_ingest_event` dispatcher.
+
+**Frontend** new `/app/frontend/src/pietential/` workspace:
+- `PtLayout` — light enterprise theme, teal accent (#0F766E), sidebar with workspace switcher + 7 nav items.
+- 8 pages: Overview (10 metric tiles + zero-state), Lead Feed (table + 5 filters + add modal + CSV upload), Lead Detail (Identity + Status + Score breakdown + Timeline + Notes + simulate-event), Accounts (with pause banner), Tasks (CRUD with auto-task creation banner), Reports (weekly+monthly tabs), Integrations (13 cards with API-key save + webhook hint URLs + copy button), Settings (scoring rules + stages + decay).
+
+**Branding**: "Aria" wordmark + Beta pill + "for Pietential" subtitle. Multi-tenant: each tenant can have its own brand label.
+
+**Test status (iter 25)**: Backend 13/13 pytest, Frontend e2e 100%, zero blocking issues. Code review noted webhook authentication + plaintext API key storage as production hardening items (acceptable for client demo).
+
 ## Backlog
 - P1: continue server.py extraction — remaining 4818 lines still hold aria/*, leads/*, lead-magnets/*, billing/*, assets/*, webhooks/*
 - P1: `@app.on_event("startup")` → FastAPI lifespan handler

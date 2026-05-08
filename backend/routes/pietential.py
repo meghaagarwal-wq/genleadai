@@ -220,8 +220,6 @@ def _ensure_company(name: Optional[str], lead: dict) -> Optional[dict]:
         }
         companies_col.insert_one(company)
     else:
-        contacts = (companies_col.count_documents({"company_id": company["id"]}) or 0)
-        # use leads count rather than denormalized field
         contacts = leads_col.count_documents({"company_id": company["id"]})
         companies_col.update_one(
             {"id": company["id"]},
