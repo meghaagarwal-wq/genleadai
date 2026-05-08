@@ -1,18 +1,23 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
+  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 
 const NAV = [
-  { to: '/pt',                label: 'Overview',     icon: Gauge },
-  { to: '/pt/leads',          label: 'Lead Feed',    icon: Users },
-  { to: '/pt/accounts',       label: 'Accounts',     icon: Buildings },
-  { to: '/pt/tasks',          label: 'Tasks',        icon: ListChecks },
-  { to: '/pt/reports',        label: 'Reports',      icon: ChartBar },
-  { to: '/pt/integrations',   label: 'Integrations', icon: Plugs },
-  { to: '/pt/settings',       label: 'Settings',     icon: GearSix },
+  { to: '/pt',                  label: 'Overview',       icon: Gauge },
+  { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
+  { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
+  { to: '/pt/lemlist',          label: 'Lemlist',        icon: LinkedinLogo },
+  { to: '/pt/accounts',         label: 'Accounts',       icon: Buildings },
+  { to: '/pt/touchpoints',      label: 'Touchpoint Map', icon: MapTrifold },
+  { to: '/pt/tasks',            label: 'Tasks',          icon: ListChecks },
+  { to: '/pt/reports',          label: 'Reports',        icon: ChartBar },
+  { to: '/pt/integrations',     label: 'Integrations',   icon: Plugs },
+  { to: '/pt/team',             label: 'Team',           icon: UsersThree },
+  { to: '/pt/settings',         label: 'Settings',       icon: GearSix },
 ];
 
 const WorkspaceSwitcher = () => {

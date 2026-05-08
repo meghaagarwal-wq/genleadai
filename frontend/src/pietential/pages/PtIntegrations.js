@@ -36,13 +36,18 @@ const WEBHOOK_HINTS = {
 };
 
 const PtIntegrations = () => {
-  const [rows, setRows] = useState([]);
+  const [primary, setPrimary] = useState([]);
+  const [future, setFuture] = useState([]);
   const [loading, setLoading] = useState(true);
   const base = process.env.REACT_APP_BACKEND_URL;
 
   const load = async () => {
     setLoading(true);
-    try { const r = await ptApi.get('/api/pt/integrations'); setRows(r.data.integrations || []); }
+    try {
+      const r = await ptApi.get('/api/pt/integrations');
+      setPrimary(r.data.primary || []);
+      setFuture(r.data.future || []);
+    }
     finally { setLoading(false); }
   };
 
@@ -62,28 +67,35 @@ const PtIntegrations = () => {
 
   return (
     <div data-testid="pt-integrations-page">
-      <PageHeader title="Integrations" subtitle="Connect Saleshandy, Lemlist, newsletter, lead magnet forms, Calendly, GA4 and more." />
+      <PageHeader title="Integrations" subtitle="Saleshandy and Lemlist are the two primary platforms for the Pietential demo. Everything else is future / optional." />
 
       {loading ? (
         <div className="text-sm text-[#64748B]">Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {rows.map(r => (
-            <IntegrationCard
-              key={r.name} integ={r} base={base}
-              hints={WEBHOOK_HINTS[r.name] || []}
-              onSave={save} onTest={test} onCopy={copy}
-            />
-          ))}
-        </div>
+        <>
+          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2" data-testid="pt-integ-primary-heading">Primary platforms</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+            {primary.map(r => (
+              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} />
+            ))}
+          </div>
+
+          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#94A3B8] mb-2" data-testid="pt-integ-future-heading">Future / optional integrations</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {future.map(r => (
+              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} compact />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 };
 
-const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
+const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }) => {
   const sm = STATUS_META[integ.status] || STATUS_META.not_connected;
   const [apiKey, setApiKey] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [webhookUrl, setWebhookUrl] = useState(integ.webhook_url || '');
 
   return (
@@ -106,9 +118,9 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
 
       <div className="space-y-2.5">
         <div>
-          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">API key</label>
+          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">API key {integ.api_key_masked && <span className="text-[#94A3B8] normal-case ml-1">· current: {integ.api_key_masked}</span>}</label>
           <div className="flex items-center gap-1.5">
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={integ.status === 'connected' ? '•••• already saved ••••' : 'Paste API key'}
+            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
               data-testid={`pt-integ-key-${integ.name}`}
               className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
             <button onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })} disabled={!apiKey}
@@ -117,25 +129,43 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy }) => {
           </div>
         </div>
 
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Outgoing webhook URL (optional)</label>
-          <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://hooks.zapier.com/…"
-            onBlur={() => webhookUrl !== integ.webhook_url && onSave(integ.name, { webhook_url: webhookUrl })}
-            className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
-        </div>
-
-        {hints.length > 0 && (
-          <div className="pt-2 border-t border-[#F1F5F9]">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Inbound webhook endpoints</div>
-            <div className="space-y-1">
-              {hints.map(h => (
-                <div key={h} className="flex items-center justify-between gap-2 bg-[#F8FAFC] rounded px-2 py-1 text-xs text-[#475569] font-mono">
-                  <span className="truncate">{base}{h}</span>
-                  <button onClick={() => onCopy(`${base}${h}`)} className="text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
-                </div>
-              ))}
+        {!compact && (
+          <>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">
+                Webhook secret {integ.webhook_secret_set && <span className="text-[#16A34A] normal-case ml-1">· set</span>}
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)}
+                  placeholder={integ.webhook_secret_set ? 'Replace secret…' : 'Optional — verify X-Pt-Webhook-Secret header'}
+                  data-testid={`pt-integ-secret-${integ.name}`}
+                  className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
+                <button onClick={() => webhookSecret && onSave(integ.name, { webhook_secret: webhookSecret })} disabled={!webhookSecret}
+                  className="text-xs font-semibold text-[#7C35DC] border border-[#7C35DC]/30 px-3 py-1.5 rounded-md disabled:opacity-50">Save</button>
+              </div>
             </div>
-          </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Outgoing webhook URL (optional)</label>
+              <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://hooks.zapier.com/…"
+                onBlur={() => webhookUrl !== integ.webhook_url && onSave(integ.name, { webhook_url: webhookUrl })}
+                className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
+            </div>
+
+            {hints.length > 0 && (
+              <div className="pt-2 border-t border-[#F1F5F9]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Inbound webhook endpoints</div>
+                <div className="space-y-1">
+                  {hints.map(h => (
+                    <div key={h} className="flex items-center justify-between gap-2 bg-[#F8FAFC] rounded px-2 py-1 text-xs text-[#475569] font-mono">
+                      <span className="truncate">{base}{h}</span>
+                      <button onClick={() => onCopy(`${base}${h}`)} className="text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {integ.last_sync_at && (

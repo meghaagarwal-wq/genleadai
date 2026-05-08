@@ -10,16 +10,19 @@ Designed multi-tenant ready: all data lives in `pt_*` collections,
 isolated from the legacy ARIA CRM workspace. New workspaces can be
 added by cloning this router under a new prefix + collection set.
 """
+import asyncio
 import csv
 import io
+import os
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from cryptography.fernet import Fernet, InvalidToken
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Header
 from pydantic import BaseModel, Field, EmailStr
 from pymongo import DESCENDING
 
-from deps import db, get_current_user
+from deps import db, get_current_user, users_collection
 
 router = APIRouter(prefix="/api/pt", tags=["pietential"])
 
@@ -30,6 +33,32 @@ events_col = db["pt_events"]
 tasks_col = db["pt_tasks"]
 notes_col = db["pt_notes"]
 integrations_col = db["pt_integrations"]
+training_col = db["pt_training_signals"]
+
+# ─── Encryption (reuses workspace ENCRYPTION_KEY) ───────────────────────────
+_ENC_KEY = os.environ.get("ENCRYPTION_KEY")
+_cipher = Fernet(_ENC_KEY.encode()) if _ENC_KEY else None
+
+
+def _enc(s: str) -> str:
+    if not s or not _cipher:
+        return ""
+    return _cipher.encrypt(s.encode()).decode()
+
+
+def _dec(s: str) -> str:
+    if not s or not _cipher:
+        return ""
+    try:
+        return _cipher.decrypt(s.encode()).decode()
+    except InvalidToken:
+        return ""
+
+
+def _mask_key(s: Optional[str]) -> Optional[str]:
+    if not s:
+        return None
+    return f"••••{s[-4:]}" if len(s) >= 4 else "••••"
 
 # ─── Scoring rules per Pietential touchpoint roadmap ────────────────────────
 SCORING_RULES = {
@@ -186,6 +215,7 @@ class IntegrationUpsert(BaseModel):
     name: str
     api_key: Optional[str] = None
     webhook_url: Optional[str] = None
+    webhook_secret: Optional[str] = None
     status: Optional[str] = None  # not_connected | connected | needs_setup
 
 
@@ -761,6 +791,13 @@ async def overview(current_user: dict = Depends(get_current_user)):
 
     last_event = events_col.find_one({}, {"_id": 0, "created_at": 1}, sort=[("created_at", DESCENDING)])
 
+    # Per-platform activity totals
+    sh_events = events_col.count_documents({"source": "saleshandy"})
+    ll_events = events_col.count_documents({"source": "lemlist"})
+    sh_leads = leads_col.count_documents({"source": "saleshandy"})
+    ll_leads = leads_col.count_documents({"source": "lemlist"})
+    john_owned = leads_col.count_documents({"owner": "John"})
+
     return {
         "metrics": {
             "total_engaged_leads": total,
@@ -774,6 +811,17 @@ async def overview(current_user: dict = Depends(get_current_user)):
             "good_slice_subscribers": newsletter_subs,
             "lead_magnet_claims": magnet_claims,
             "positive_replies": positive_replies,
+            # Saleshandy + Lemlist focus (primary platforms)
+            "saleshandy_leads": sh_leads,
+            "lemlist_leads": ll_leads,
+            "saleshandy_events": sh_events,
+            "lemlist_events": ll_events,
+            "email_opens": events_col.count_documents({"event_type": "saleshandy.email_opened"}),
+            "email_clicks": events_col.count_documents({"event_type": "saleshandy.email_clicked"}),
+            "saleshandy_positive_replies": events_col.count_documents({"event_type": "saleshandy.positive_reply"}),
+            "linkedin_connections": events_col.count_documents({"event_type": "lemlist.connection_accepted"}),
+            "lemlist_dm_replies": events_col.count_documents({"event_type": "lemlist.dm_positive_reply"}),
+            "john_owned_conversations": john_owned,
         },
         "connections": {
             "saleshandy_connected": bool(sh_int and sh_int.get("status") == "connected"),
@@ -861,32 +909,59 @@ async def monthly_report(current_user: dict = Depends(get_current_user)):
 
 
 # ─── Integrations endpoints ─────────────────────────────────────────────────
-DEFAULT_INTEGRATIONS = [
-    "saleshandy", "lemlist", "apollo", "apify", "the_boomernag",
-    "make_com", "n8n", "calendly", "ga4", "linkedin_pixel",
-    "newsletter_platform", "lead_magnet_form", "pietential_website_forms",
+PRIMARY_INTEGRATIONS = ["saleshandy", "lemlist"]
+FUTURE_INTEGRATIONS = [
+    "calendly", "newsletter_platform", "lead_magnet_form",
+    "pietential_website_forms", "ga4", "linkedin_pixel",
+    "make_com", "n8n", "apollo", "apify", "the_boomernag",
 ]
+DEFAULT_INTEGRATIONS = PRIMARY_INTEGRATIONS + FUTURE_INTEGRATIONS
 
 
 @router.get("/integrations")
 async def list_integrations(current_user: dict = Depends(get_current_user)):
-    rows = list(integrations_col.find({}, {"_id": 0, "api_key": 0}))
+    rows = list(integrations_col.find({}, {"_id": 0}))
     by_name = {r["name"]: r for r in rows}
-    out = []
+    primary, future = [], []
     for name in DEFAULT_INTEGRATIONS:
-        out.append(by_name.get(name) or {"name": name, "status": "not_connected", "webhook_url": None, "last_sync_at": None, "error_log": None})
-    return {"integrations": out}
+        existing = by_name.get(name) or {}
+        item = {
+            "name": name,
+            "status": existing.get("status", "not_connected"),
+            "webhook_url": existing.get("webhook_url"),
+            "webhook_secret_set": bool(existing.get("webhook_secret")),
+            "api_key_masked": _mask_key(_dec(existing["api_key"])) if existing.get("api_key") else None,
+            "last_sync_at": existing.get("last_sync_at"),
+            "error_log": existing.get("error_log"),
+            "tier": "primary" if name in PRIMARY_INTEGRATIONS else "future",
+        }
+        (primary if name in PRIMARY_INTEGRATIONS else future).append(item)
+    return {"primary": primary, "future": future}
 
 
 @router.post("/integrations")
 async def upsert_integration(payload: IntegrationUpsert, current_user: dict = Depends(get_current_user)):
     _require_write(current_user)
     update = {"name": payload.name, "updated_at": _now_iso()}
-    if payload.api_key is not None: update["api_key"] = payload.api_key  # NOTE: encrypt before prod
-    if payload.webhook_url is not None: update["webhook_url"] = payload.webhook_url
-    if payload.status is not None: update["status"] = payload.status
+    if payload.api_key is not None:
+        # Encrypt at rest
+        update["api_key"] = _enc(payload.api_key) if payload.api_key else ""
+    if payload.webhook_url is not None:
+        update["webhook_url"] = payload.webhook_url
+    if payload.webhook_secret is not None:
+        update["webhook_secret"] = payload.webhook_secret if payload.webhook_secret else None
+    if payload.status is not None:
+        update["status"] = payload.status
     integrations_col.update_one({"name": payload.name}, {"$set": update}, upsert=True)
-    return {"integration": integrations_col.find_one({"name": payload.name}, {"_id": 0, "api_key": 0})}
+    integ = integrations_col.find_one({"name": payload.name}, {"_id": 0})
+    return {"integration": {
+        "name": integ["name"],
+        "status": integ.get("status", "not_connected"),
+        "webhook_url": integ.get("webhook_url"),
+        "webhook_secret_set": bool(integ.get("webhook_secret")),
+        "api_key_masked": _mask_key(_dec(integ["api_key"])) if integ.get("api_key") else None,
+        "last_sync_at": integ.get("last_sync_at"),
+    }}
 
 
 @router.post("/integrations/{name}/test")
@@ -900,9 +975,20 @@ async def test_integration(name: str, current_user: dict = Depends(get_current_u
     return {"ok": True, "tested_at": _now_iso(), "message": "Marked as connected. Per-platform live handshake will be added in webhook integration phase."}
 
 
-# ─── Webhook endpoints — single dispatcher ─────────────────────────────────
-def _webhook_event(event_type: str):
-    async def _handler(body: Dict[str, Any]):
+# ─── Webhook endpoints — single dispatcher with optional signature check ───
+def _check_webhook_secret(integration_name: str, provided: Optional[str]):
+    """If a webhook_secret is set on the integration, the inbound POST must
+    include it via X-Pt-Webhook-Secret header. If not configured, accept all
+    (acceptable for client demo; required for prod)."""
+    integ = integrations_col.find_one({"name": integration_name}, {"webhook_secret": 1})
+    expected = (integ or {}).get("webhook_secret")
+    if expected and provided != expected:
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+
+def _webhook_event(event_type: str, integration_name: str):
+    async def _handler(body: Dict[str, Any], x_pt_webhook_secret: Optional[str] = Header(default=None)):
+        _check_webhook_secret(integration_name, x_pt_webhook_secret)
         email = body.get("email") or (body.get("prospect") or {}).get("email") or (body.get("lead") or {}).get("email")
         if not email:
             raise HTTPException(status_code=400, detail="Webhook payload missing 'email'")
@@ -917,23 +1003,23 @@ def _webhook_event(event_type: str):
 
 # Register all 13 webhook routes
 WEBHOOK_MAP = {
-    "/webhooks/saleshandy/open":              "saleshandy.email_opened",
-    "/webhooks/saleshandy/click":             "saleshandy.email_clicked",
-    "/webhooks/saleshandy/reply":             "saleshandy.positive_reply",
-    "/webhooks/lemlist/connection-accepted":  "lemlist.connection_accepted",
-    "/webhooks/lemlist/dm-reply":             "lemlist.dm_positive_reply",
-    "/webhooks/newsletter/subscribe":         "newsletter.subscribed",
-    "/webhooks/newsletter/open":              "newsletter.opened",
-    "/webhooks/newsletter/click":             "newsletter.clicked",
-    "/webhooks/lead-magnet/claim":            "lead_magnet.downloaded",
-    "/webhooks/job-satisfaction-analysis/claim":    "jsa.claimed",
-    "/webhooks/job-satisfaction-analysis/complete": "jsa.completed",
-    "/webhooks/calendly/booked":              "calendly.session_booked",
-    "/webhooks/ga4/high-intent-page-visit":   "website.pricing_visit",
+    "/webhooks/saleshandy/open":              ("saleshandy.email_opened",        "saleshandy"),
+    "/webhooks/saleshandy/click":             ("saleshandy.email_clicked",       "saleshandy"),
+    "/webhooks/saleshandy/reply":             ("saleshandy.positive_reply",      "saleshandy"),
+    "/webhooks/lemlist/connection-accepted":  ("lemlist.connection_accepted",    "lemlist"),
+    "/webhooks/lemlist/dm-reply":             ("lemlist.dm_positive_reply",      "lemlist"),
+    "/webhooks/newsletter/subscribe":         ("newsletter.subscribed",          "newsletter_platform"),
+    "/webhooks/newsletter/open":              ("newsletter.opened",              "newsletter_platform"),
+    "/webhooks/newsletter/click":             ("newsletter.clicked",             "newsletter_platform"),
+    "/webhooks/lead-magnet/claim":            ("lead_magnet.downloaded",         "lead_magnet_form"),
+    "/webhooks/job-satisfaction-analysis/claim":    ("jsa.claimed",              "lead_magnet_form"),
+    "/webhooks/job-satisfaction-analysis/complete": ("jsa.completed",            "lead_magnet_form"),
+    "/webhooks/calendly/booked":              ("calendly.session_booked",        "calendly"),
+    "/webhooks/ga4/high-intent-page-visit":   ("website.pricing_visit",          "ga4"),
 }
 
-for path, evt in WEBHOOK_MAP.items():
-    router.add_api_route(path, _webhook_event(evt), methods=["POST"], name=f"webhook_{evt}")
+for path, (evt, integ_name) in WEBHOOK_MAP.items():
+    router.add_api_route(path, _webhook_event(evt, integ_name), methods=["POST"], name=f"webhook_{evt}")
 
 
 # ─── Scoring rules introspection ────────────────────────────────────────────
@@ -963,3 +1049,275 @@ async def import_csv(file: UploadFile = File(...), current_user: dict = Depends(
     reader = csv.DictReader(io.StringIO(contents.decode("utf-8")))
     rows = [r for r in reader]
     return await bulk_leads(BulkLeadsPayload(leads=rows), current_user)
+
+
+# ─── Per-platform activity (Saleshandy + Lemlist focus) ────────────────────
+def _platform_activity(source: str, current_user: dict):
+    """Build a per-lead summary of activity from a given source."""
+    leads = list(leads_col.find({"source": source}, {"_id": 0}))
+    # Also include any leads that have at least one event from this source
+    extra_lead_ids = set()
+    extra_cursor = events_col.aggregate([
+        {"$match": {"source": source}},
+        {"$group": {"_id": "$lead_id"}},
+    ])
+    for row in extra_cursor:
+        if row["_id"]:
+            extra_lead_ids.add(row["_id"])
+    seen = {l["id"] for l in leads}
+    extra_ids = [lid for lid in extra_lead_ids if lid not in seen]
+    if extra_ids:
+        leads.extend(list(leads_col.find({"id": {"$in": extra_ids}}, {"_id": 0})))
+
+    rows = []
+    for l in leads:
+        evs = list(events_col.find({"lead_id": l["id"], "source": source}, {"_id": 0}).sort("created_at", DESCENDING))
+        opens = sum(1 for e in evs if e["event_type"] in ("saleshandy.email_opened", "newsletter.opened"))
+        clicks = sum(1 for e in evs if e["event_type"] in ("saleshandy.email_clicked", "newsletter.clicked", "lemlist.post_engagement"))
+        replies = sum(1 for e in evs if "positive_reply" in e["event_type"] or "dm_positive_reply" in e["event_type"])
+        connections = sum(1 for e in evs if e["event_type"] == "lemlist.connection_accepted")
+        rows.append({
+            **l,
+            "events_count": len(evs),
+            "opens": opens,
+            "clicks": clicks,
+            "replies": replies,
+            "linkedin_connections": connections,
+            "last_event_at": evs[0]["created_at"] if evs else None,
+            "last_event_label": evs[0]["label"] if evs else None,
+        })
+    rows.sort(key=lambda r: r.get("score") or 0, reverse=True)
+    return rows
+
+
+@router.get("/saleshandy/activity")
+async def saleshandy_activity(current_user: dict = Depends(get_current_user)):
+    integ = integrations_col.find_one({"name": "saleshandy"}, {"_id": 0, "api_key": 0})
+    return {
+        "connected": bool(integ and integ.get("status") == "connected"),
+        "last_sync_at": (integ or {}).get("last_sync_at"),
+        "rows": _platform_activity("saleshandy", current_user),
+    }
+
+
+@router.get("/lemlist/activity")
+async def lemlist_activity(current_user: dict = Depends(get_current_user)):
+    integ = integrations_col.find_one({"name": "lemlist"}, {"_id": 0, "api_key": 0})
+    return {
+        "connected": bool(integ and integ.get("status") == "connected"),
+        "last_sync_at": (integ or {}).get("last_sync_at"),
+        "rows": _platform_activity("lemlist", current_user),
+    }
+
+
+# ─── Train Aria — reply classification + ICP feedback ──────────────────────
+class TrainSignal(BaseModel):
+    lead_id: str
+    signal_type: str = Field(..., pattern="^(reply_class|icp_fit|positive_conversation)$")
+    value: str  # "positive" | "neutral" | "negative" | "match" | "partial" | "outside" | "yes" | "no"
+    note: Optional[str] = None
+
+
+@router.post("/training/signal")
+async def post_training_signal(payload: TrainSignal, current_user: dict = Depends(get_current_user)):
+    _require_write(current_user)
+    lead = leads_col.find_one({"id": payload.lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    doc = {
+        "id": _new_id("pttr"),
+        **payload.dict(),
+        "company_id": lead.get("company_id"),
+        "created_by": current_user["email"],
+        "created_at": _now_iso(),
+    }
+    training_col.insert_one(doc)
+    # Side effect: positive_conversation acts like a manual positive-reply event
+    if payload.signal_type == "positive_conversation" and payload.value == "yes":
+        _ingest_event("manual.hypothesis_reply", {"lead_id": payload.lead_id}, {"trained": True}, current_user["email"])
+    if payload.signal_type == "icp_fit":
+        leads_col.update_one({"id": payload.lead_id}, {"$set": {"icp_fit": payload.value, "updated_at": _now_iso()}})
+        if lead.get("company_id"):
+            companies_col.update_one({"id": lead["company_id"]}, {"$set": {"icp_fit": payload.value, "updated_at": _now_iso()}})
+    return {"signal": _strip_id(doc), "lead": leads_col.find_one({"id": payload.lead_id}, {"_id": 0})}
+
+
+@router.get("/training/signals")
+async def list_training_signals(lead_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    query = {}
+    if lead_id:
+        query["lead_id"] = lead_id
+    rows = list(training_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
+    return {"signals": rows}
+
+
+# ─── Team / roles ───────────────────────────────────────────────────────────
+PT_ROLES = ["admin", "content_vista", "pietential_owner", "viewer"]
+
+
+@router.get("/team")
+async def list_team(current_user: dict = Depends(get_current_user)):
+    rows = list(users_collection.find({"is_active": True}, {"_id": 0, "password_hash": 0}).limit(200))
+    return {"members": rows, "available_roles": PT_ROLES}
+
+
+class RoleUpdate(BaseModel):
+    email: EmailStr
+    role: str
+
+
+@router.patch("/team/role")
+async def update_member_role(payload: RoleUpdate, current_user: dict = Depends(get_current_user)):
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin only")
+    if payload.role not in PT_ROLES + ["sales_rep"]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    res = users_collection.update_one({"email": payload.email}, {"$set": {"role": payload.role}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"status": "ok"}
+
+
+@router.get("/me/permissions")
+async def my_permissions(current_user: dict = Depends(get_current_user)):
+    """Frontend uses this to hide write buttons for viewer role."""
+    return {
+        "role": _role_of(current_user),
+        "can_write": _can_write(current_user),
+        "can_admin": _is_admin(current_user),
+    }
+
+
+# ─── Score decay job ────────────────────────────────────────────────────────
+def _run_score_decay():
+    """Apply −10 after 30 days of inactivity, −20 + nurture flag after 60 days."""
+    now = datetime.now(timezone.utc)
+    cutoff_30 = (now - timedelta(days=30)).isoformat()
+    cutoff_60 = (now - timedelta(days=60)).isoformat()
+    decayed_30, decayed_60 = 0, 0
+    # 60-day decay — applied first so 30-day doesn't double-count it
+    for l in leads_col.find({"last_activity_at": {"$lt": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
+        new_score = max(-100, (l["score"] or 0) - 20)
+        leads_col.update_one({"id": l["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "automation_status": "long_cycle_nurture", "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
+        events_col.insert_one({"id": _new_id("pte"), "lead_id": l["id"], "company_id": l.get("company_id"), "event_type": "decay.60_days", "label": "60-day inactivity decay", "source": "system", "score_change": -20, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        if l.get("company_id"):
+            _recompute_company(l["company_id"])
+        decayed_60 += 1
+    # 30-day decay
+    for l in leads_col.find({"last_activity_at": {"$lt": cutoff_30, "$gte": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
+        new_score = max(-100, (l["score"] or 0) - 10)
+        leads_col.update_one({"id": l["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
+        events_col.insert_one({"id": _new_id("pte"), "lead_id": l["id"], "company_id": l.get("company_id"), "event_type": "decay.30_days", "label": "30-day inactivity decay", "source": "system", "score_change": -10, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        if l.get("company_id"):
+            _recompute_company(l["company_id"])
+        decayed_30 += 1
+    return {"decayed_30_days": decayed_30, "decayed_60_days": decayed_60, "ran_at": now.isoformat()}
+
+
+@router.post("/score-decay/run")
+async def run_score_decay(current_user: dict = Depends(get_current_user)):
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admin only")
+    return _run_score_decay()
+
+
+# ─── Replay demo flow (theatrical demo button) ─────────────────────────────
+@router.post("/demo/replay")
+async def replay_demo_flow(current_user: dict = Depends(get_current_user)):
+    """Fires 4 webhook-equivalent events on a single demo lead with timing,
+    so a client demo can see cold→warm→hot→engaged cascade play out live."""
+    _require_write(current_user)
+    demo_email = "demo-prospect@pietential-demo.com"
+    # Create or reset the demo lead
+    leads_col.delete_one({"email": demo_email})
+    events_col.delete_many({"metadata.demo_replay": True})
+    notes_col.delete_many({"lead_id": {"$exists": False}})
+    seed = {
+        "id": _new_id("ptl"),
+        "first_name": "Alex",
+        "last_name": "Patel",
+        "email": demo_email,
+        "company_name": "Wellbeing Demo Corp",
+        "title": "VP People Analytics",
+        "source": "saleshandy",
+        "industry": "SaaS",
+        "employee_count": 4200,
+        "geography": "United States",
+        "icp_fit": "match",
+        "score": 0,
+        "stage": "cold",
+        "latest_signal": "Just added",
+        "automation_status": "active",
+        "owner": "Content Vista",
+        "linkedin_url": "https://linkedin.com/in/demo",
+        "last_activity_at": _now_iso(),
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    company = _ensure_company(seed["company_name"], seed)
+    seed["company_id"] = (company or {}).get("id")
+    leads_col.insert_one(seed)
+
+    # Apply 4 events — caller should poll /leads/{id} to see scores tick up
+    sequence = [
+        "newsletter.subscribed",        # +25 → warm
+        "saleshandy.email_clicked",     # +10
+        "saleshandy.positive_reply",    # +30 → hot, pause
+        "calendly.session_booked",      # +80 → engaged
+    ]
+    for evt in sequence:
+        _ingest_event(evt, {"lead_id": seed["id"]}, {"demo_replay": True}, current_user["email"])
+
+    final = leads_col.find_one({"id": seed["id"]}, {"_id": 0})
+    company = companies_col.find_one({"id": seed["company_id"]}, {"_id": 0}) if seed.get("company_id") else None
+    return {
+        "lead_id": seed["id"],
+        "lead": final,
+        "company": company,
+        "events_applied": sequence,
+        "tasks_created": tasks_col.count_documents({"lead_id": seed["id"], "status": "open"}),
+    }
+
+
+# ─── Touchpoint map (static metadata for Touchpoint Map page) ──────────────
+TOUCHPOINT_MAP = [
+    {"id": "linkedin_post_comment", "title": "Comments on John's LinkedIn post", "touches": "3 DMs", "timeline": "14 days", "fallback": "Good Slice invite", "platform": "Lemlist / manual", "aria_role": "Track comment, ICP fit, Lemlist flow, score, next action", "events": ["lemlist.connection_accepted", "lemlist.dm_positive_reply"]},
+    {"id": "cold_email", "title": "Cold email", "touches": "3 emails", "timeline": "12 days", "fallback": "Good Slice invite", "platform": "Saleshandy", "aria_role": "Track opens/clicks/replies, score, pause alerts, John routing", "events": ["saleshandy.email_opened", "saleshandy.email_clicked", "saleshandy.positive_reply"]},
+    {"id": "cold_linkedin_dm", "title": "Cold LinkedIn DM", "touches": "3–4 DMs", "timeline": "14 days", "fallback": "Good Slice invite", "platform": "Lemlist", "aria_role": "Track connection, DMs, replies, score, pause alerts", "events": ["lemlist.connection_accepted", "lemlist.dm_positive_reply", "lemlist.post_engagement"]},
+    {"id": "good_slice_subscriber", "title": "Good Slice subscriber", "touches": "Biweekly issues", "timeline": "Ongoing", "fallback": "Session CTA every 3rd issue", "platform": "Newsletter / manual", "aria_role": "Track subscribe/open/click/reply, score, session intent", "events": ["newsletter.subscribed", "newsletter.opened", "newsletter.clicked", "newsletter.positive_reply"]},
+    {"id": "company_page_magnet", "title": "Company page magnet claim", "touches": "3 follow-ups", "timeline": "10 days", "fallback": "Good Slice subscriber", "platform": "Manual / LinkedIn", "aria_role": "Track claim, PDF sent, ICP check, John task", "events": ["lead_magnet.company_claim"]},
+    {"id": "magnet_landing_page", "title": "Magnet download landing page", "touches": "3 emails", "timeline": "10 days", "fallback": "Good Slice subscriber", "platform": "Form / manual", "aria_role": "Track download, ICP check, nurture, score", "events": ["lead_magnet.downloaded"]},
+    {"id": "job_satisfaction_analysis", "title": "Job Satisfaction Analysis", "touches": "Claim, complete, results, follow-up", "timeline": "Immediate to 10 days", "fallback": "Good Slice subscriber", "platform": "Form / manual", "aria_role": "Track claim/completion/result/follow-up", "events": ["jsa.claimed", "jsa.completed"]},
+    {"id": "existing_clickers", "title": "Existing clickers re-engagement", "touches": "Good Slice + value-first DM", "timeline": "Immediate to 14 days", "fallback": "Good Slice nurture", "platform": "CSV + Lemlist", "aria_role": "Track old engagement, reactivation, score", "events": ["lemlist.connection_accepted", "saleshandy.email_clicked"]},
+    {"id": "website_high_intent", "title": "Website high-intent visit", "touches": "Personal follow-up if high score", "timeline": "Immediate", "fallback": "Continue nurture", "platform": "GA4 / future", "aria_role": "Track high intent, score, alert", "events": ["website.pricing_visit", "website.long_dwell"]},
+    {"id": "hypothesis_email", "title": "Hypothesis email from John", "touches": "1–2 manual emails", "timeline": "Manual", "fallback": "Close or nurture", "platform": "John / manual", "aria_role": "Track John-owned account and final outcome", "events": ["manual.hypothesis_reply"]},
+]
+
+
+@router.get("/touchpoints")
+async def get_touchpoint_map(current_user: dict = Depends(get_current_user)):
+    # Live counts per touchpoint
+    out = []
+    for tp in TOUCHPOINT_MAP:
+        live = events_col.count_documents({"event_type": {"$in": tp["events"]}})
+        out.append({**tp, "live_event_count": live})
+    return {"touchpoints": out}
+
+
+# ─── Startup hook for hourly score-decay ───────────────────────────────────
+async def _decay_loop():
+    """Run score decay once an hour. Cheap query (indexed last_activity_at)."""
+    while True:
+        try:
+            _run_score_decay()
+        except Exception as e:
+            print(f"[pt-decay] error: {e}")
+        await asyncio.sleep(60 * 60)
+
+
+def register_pietential_startup(app):
+    """Called from server.py to wire the decay loop without import cycles."""
+    @app.on_event("startup")
+    async def _start_pt_decay_loop():
+        asyncio.create_task(_decay_loop())
+        print("[pt-decay] background loop started (hourly)")

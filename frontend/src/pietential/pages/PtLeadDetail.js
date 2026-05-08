@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus } from '@phosphor-icons/react';
+import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus, Brain, Copy } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, StageBadge, SOURCE_LABELS, fmtDateTime } from '../shared';
 
@@ -81,8 +81,18 @@ const PtLeadDetail = () => {
         <div className="space-y-4">
           {/* Identity */}
           <Card title="Identity">
-            <KV label="Email" value={lead.email} />
-            <KV label="LinkedIn" value={lead.linkedin_url ? <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#7C35DC] hover:underline">profile <LinkSimple size={11} /></a> : '—'} />
+            <KV label="Email" value={
+              <div className="flex items-center gap-1">
+                <span>{lead.email}</span>
+                <button onClick={() => { navigator.clipboard.writeText(lead.email); toast.success('Email copied'); }} data-testid="pt-detail-copy-email" className="text-[#94A3B8] hover:text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
+              </div>
+            } />
+            <KV label="LinkedIn" value={lead.linkedin_url ? (
+              <div className="flex items-center gap-1">
+                <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#7C35DC] hover:underline">profile <LinkSimple size={11} /></a>
+                <button onClick={() => { navigator.clipboard.writeText(lead.linkedin_url); toast.success('LinkedIn URL copied'); }} data-testid="pt-detail-copy-linkedin" className="text-[#94A3B8] hover:text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
+              </div>
+            ) : '—'} />
             <KV label="Industry" value={lead.industry || '—'} />
             <KV label="Employees" value={lead.employee_count || '—'} />
             <KV label="Geography" value={lead.geography || '—'} />
@@ -121,6 +131,9 @@ const PtLeadDetail = () => {
               </div>
             </Card>
           )}
+
+          {/* Train Aria */}
+          <TrainAriaCard leadId={id} currentICP={lead.icp_fit} onChanged={load} />
         </div>
 
         {/* Middle col — Timeline */}
@@ -217,5 +230,86 @@ const KV = ({ label, value }) => (
     <span className="text-sm text-[#0F172A] font-medium">{value || '—'}</span>
   </div>
 );
+
+const TrainAriaCard = ({ leadId, currentICP, onChanged }) => {
+  const [busy, setBusy] = useState(false);
+  const [recentSignals, setRecentSignals] = useState([]);
+
+  useEffect(() => {
+    ptApi.get(`/api/pt/training/signals?lead_id=${leadId}`)
+      .then(r => setRecentSignals(r.data.signals || [])).catch(() => {});
+  }, [leadId]);
+
+  const send = async (signal_type, value) => {
+    setBusy(true);
+    try {
+      await ptApi.post('/api/pt/training/signal', { lead_id: leadId, signal_type, value });
+      toast.success('Aria learned this');
+      onChanged();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Could not save'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="bg-white border border-[#7C35DC]/20 rounded-lg overflow-hidden" data-testid="pt-train-aria-card" style={{ background: 'linear-gradient(135deg, #FAF7FF 0%, #FFFFFF 100%)' }}>
+      <div className="px-4 py-2.5 border-b border-[#F0ECF9] flex items-center gap-2">
+        <Brain size={14} weight="duotone" className="text-[#7C35DC]" />
+        <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-[#7C35DC]">Train Aria</h3>
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1.5">ICP fit (current: {currentICP || '—'})</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {['match', 'partial', 'outside'].map(v => (
+              <button key={v} onClick={() => send('icp_fit', v)} disabled={busy}
+                data-testid={`train-icp-${v}`}
+                className={`text-xs font-semibold py-1.5 rounded-md border ${currentICP === v ? 'bg-[#7C35DC] text-white border-[#7C35DC]' : 'border-[#E2E8F0] text-[#475569] hover:bg-[#F8FAFC]'}`}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1.5">Latest reply was</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { v: 'positive', color: '#7C35DC' },
+              { v: 'neutral',  color: '#94A3B8' },
+              { v: 'negative', color: '#DC2626' },
+            ].map(o => (
+              <button key={o.v} onClick={() => send('reply_class', o.v)} disabled={busy}
+                data-testid={`train-reply-${o.v}`}
+                className="text-xs font-semibold py-1.5 rounded-md border hover:bg-[#F8FAFC]"
+                style={{ borderColor: `${o.color}33`, color: o.color }}>
+                {o.v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pt-2 border-t border-[#F0ECF9]">
+          <button onClick={() => send('positive_conversation', 'yes')} disabled={busy}
+            data-testid="train-positive-conversation"
+            className="w-full text-xs font-bold uppercase tracking-[0.14em] py-2 rounded-md text-white"
+            style={{ background: 'linear-gradient(135deg, #7C35DC 0%, #C044E0 100%)' }}>
+            Mark "Positive conversation" → +40 score
+          </button>
+          <div className="text-[10px] text-[#94A3B8] mt-1.5">Use when John has had a real conversation that wasn't captured by automation.</div>
+        </div>
+        {recentSignals.length > 0 && (
+          <div className="pt-2 border-t border-[#F0ECF9]">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Recent training</div>
+            <div className="space-y-0.5">
+              {recentSignals.slice(0, 3).map(s => (
+                <div key={s.id} className="text-[10px] text-[#475569]">
+                  <span className="font-mono">{s.signal_type}</span> = <span className="font-bold">{s.value}</span> · {fmtDateTime(s.created_at)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default PtLeadDetail;
