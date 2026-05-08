@@ -196,6 +196,12 @@ class LeadPatch(BaseModel):
     stage: Optional[str] = None  # admin override
 
 
+class AskAriaPayload(BaseModel):
+    channel: str = "linkedin"           # whatsapp | email | linkedin | call_script
+    tone: str = "founder_led"           # founder_led | friendly | direct | premium | consultative | sharp_closer | soft_nurture
+    user_note: Optional[str] = ""
+
+
 class EventCreate(BaseModel):
     lead_id: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -595,6 +601,160 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
     if lead.get("company_id"):
         _recompute_company(lead["company_id"])
     return {"status": "ok"}
+
+
+@router.post("/leads/{lead_id}/ask-aria")
+async def ask_aria_pt(lead_id: str, payload: AskAriaPayload, current_user: dict = Depends(get_current_user)):
+    """Generate a Claude-powered reply draft using rich Pietential context:
+    - Lead identity + ICP fit + stage + score
+    - Last 10 engagement events (with timestamps + score deltas + source)
+    - Account cascade context (sequence_status, pause_required, highest_score)
+    - Aria recommendation tier
+    - Latest note (founder context)
+    - Optional ad-hoc user note from the founder
+
+    Falls back to a heuristic message if Claude is unavailable.
+    """
+    lead = leads_col.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    company = companies_col.find_one({"id": lead.get("company_id")}, {"_id": 0}) if lead.get("company_id") else None
+    events = list(events_col.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(10))
+    last_note = notes_col.find_one({"lead_id": lead_id}, {"_id": 0}, sort=[("created_at", DESCENDING)])
+
+    first_name = (lead.get("first_name") or "there").strip()
+    last_name = (lead.get("last_name") or "").strip()
+    company_name = lead.get("company_name") or "—"
+    title = lead.get("title") or "—"
+    score = lead.get("score") or 0
+    stage = lead.get("stage") or "cold"
+    icp_fit = lead.get("icp_fit") or "—"
+    latest_signal = lead.get("latest_signal") or "—"
+
+    # Event lines with score delta + source
+    ev_lines = []
+    for e in events:
+        when = (e.get("created_at") or "")[:16].replace("T", " ")
+        ev_lines.append(
+            f"- {when} · {e.get('label') or e.get('event_type')} (source: {e.get('source') or '—'}, score Δ {e.get('score_change', 0):+d})"
+        )
+    events_text = "\n".join(ev_lines) or "(no engagement events yet)"
+
+    # Account cascade context
+    account_text = "(no linked account)"
+    if company:
+        account_text = (
+            f"- Account: {company.get('name')}\n"
+            f"- Account stage: {company.get('account_stage') or '—'}\n"
+            f"- Sequence status: {company.get('sequence_status') or '—'}\n"
+            f"- Pause required: {bool(company.get('pause_required'))}\n"
+            f"- Highest contact score in account: {company.get('highest_score') or 0}"
+        )
+
+    note_text = (last_note or {}).get("note") or "(none)"
+
+    tone_map = {
+        "founder_led": "Warm, direct, personal. Short sentences. First-person. Founder-to-founder voice.",
+        "friendly": "Warm and helpful. Casual. Light tone, no formal salutation.",
+        "direct": "Sharp. 1-2 sentences. No fluff. Question-forward.",
+        "premium": "Polished, consultative, no slang, executive tone.",
+        "consultative": "Strategic, insight-led, thoughtful. Asks one smart question.",
+        "sharp_closer": "Urgent, CTA-led, specific time slot offers. Drive a decision now.",
+        "soft_nurture": "Helpful, educational, low-pressure, trust-building. No CTA.",
+    }
+    tone_instruction = tone_map.get(payload.tone, tone_map["founder_led"])
+
+    channel_limits = {
+        "whatsapp": "Max 2-3 short lines. No formal salutation. No 'hope you're well'.",
+        "email": "Subject line on first line prefixed 'Subject:'. Then 3-4 short sentences. Clear ask. No corporate filler.",
+        "linkedin": "Max 2-3 short lines. Conversational. No formal tone. Reference their actual signal.",
+        "call_script": "Write a 3-sentence opener the founder can say on a call. Specific and personal — name a real signal from the timeline.",
+    }
+    channel_hint = channel_limits.get(payload.channel, channel_limits["linkedin"])
+
+    recommendation = recommendation_for(int(score))
+
+    system = (
+        "You are ARIA, the AI sales agent for Pietential — a wellbeing platform. "
+        "You draft outbound replies for the Pietential founder team. "
+        "You write like a seasoned operator: specific, confident, no AI-speak, no emoji spam, "
+        "no 'I hope this finds you well'. "
+        "If the engagement timeline contains signals, reference at least one concrete signal. "
+        "If the timeline is empty, write a tight cold-touch grounded in the lead's title, company, "
+        "ICP fit, or industry — never refuse and never ask the user for more context. "
+        "Always return only the message itself, no commentary."
+    )
+
+    pause_warning = ""
+    if company and company.get("pause_required"):
+        pause_warning = (
+            "\n⚠️ ACCOUNT IS PAUSED: another contact in this account already engaged positively. "
+            "Treat this as a 1:1 founder reply — NOT a sequence step. Do not pitch hard.\n"
+        )
+
+    prompt = f"""LEAD:
+- Name: {first_name} {last_name}
+- Title: {title}
+- Company: {company_name}
+- ICP fit: {icp_fit}
+- Score: {score} · Stage: {stage}
+- Latest signal: {latest_signal}
+
+ACCOUNT CONTEXT:
+{account_text}
+{pause_warning}
+RECENT ENGAGEMENT TIMELINE (most recent first):
+{events_text}
+
+ARIA'S CURRENT RECOMMENDATION: {recommendation}
+
+LATEST INTERNAL NOTE: {note_text}
+
+USER NOTE (from founder, optional steer): {payload.user_note or "(none)"}
+
+Write ONE reply message.
+Channel: {payload.channel.upper()}
+Tone: {tone_instruction}
+Format: {channel_hint}
+
+Reference at least one specific timeline signal if any exists (don't invent — only use what's listed above). If the timeline is empty, ground the message in the lead's title, company, or ICP fit — never refuse, never ask the user for more info.
+Return ONLY the message text — no JSON, no explanation, no preamble."""
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        fallback = (
+            f"Hi {first_name} — saw your recent activity around {latest_signal or 'our content'}. "
+            f"Worth a 15-min chat this week? Tuesday 4 PM or Wednesday 11 AM works on my side."
+        )
+        return {
+            "lead_id": lead_id, "channel": payload.channel, "tone": payload.tone,
+            "message": fallback, "ai_powered": False, "ai_error": "EMERGENT_LLM_KEY not set",
+        }
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"pt_ask_aria_{lead_id}_{payload.channel}_{payload.tone}",
+            system_message=system,
+        )
+        chat.with_model("anthropic", "claude-4-sonnet-20250514")
+        resp = await chat.send_message(UserMessage(text=prompt))
+        message = (resp or "").strip().strip('"').strip("'")
+        return {
+            "lead_id": lead_id, "channel": payload.channel, "tone": payload.tone,
+            "message": message, "ai_powered": True,
+        }
+    except Exception as e:
+        fallback = (
+            f"Hi {first_name} — saw your recent activity around {latest_signal or 'our content'}. "
+            f"Worth a 15-min chat this week? Tuesday 4 PM or Wednesday 11 AM works on my side."
+        )
+        return {
+            "lead_id": lead_id, "channel": payload.channel, "tone": payload.tone,
+            "message": fallback, "ai_powered": False, "ai_error": str(e),
+        }
 
 
 @router.post("/leads/bulk")

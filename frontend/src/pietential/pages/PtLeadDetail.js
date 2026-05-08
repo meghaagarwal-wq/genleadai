@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus, Brain, Copy } from '@phosphor-icons/react';
+import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus, Brain, Copy, Sparkle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, StageBadge, SOURCE_LABELS, fmtDateTime } from '../shared';
+import PtAskAriaModal from '../components/PtAskAriaModal';
 
 const PtLeadDetail = () => {
   const { id } = useParams();
@@ -11,6 +12,7 @@ const PtLeadDetail = () => {
   const [newNote, setNewNote] = useState('');
   const [simEvent, setSimEvent] = useState('saleshandy.email_clicked');
   const [rules, setRules] = useState([]);
+  const [askOpen, setAskOpen] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -69,10 +71,17 @@ const PtLeadDetail = () => {
         title={`${lead.first_name} ${lead.last_name}`.trim()}
         subtitle={`${lead.title || '—'} · ${lead.company_name || 'No company'}`}
         right={
-          <button onClick={remove} data-testid="pt-detail-delete"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-[#DC2626] border border-[#DC2626]/30 hover:bg-[#FEF2F2]">
-            <Trash size={14} /> Delete
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setAskOpen(true)} data-testid="pt-detail-ask-aria"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-white"
+              style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
+              <Sparkle size={13} weight="fill" /> Ask Aria to Reply
+            </button>
+            <button onClick={remove} data-testid="pt-detail-delete"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-[#DC2626] border border-[#DC2626]/30 hover:bg-[#FEF2F2]">
+              <Trash size={14} /> Delete
+            </button>
+          </div>
         }
       />
 
@@ -207,6 +216,15 @@ const PtLeadDetail = () => {
           )}
         </div>
       </div>
+
+      {askOpen && (
+        <PtAskAriaModal
+          leadId={id}
+          leadName={`${lead.first_name} ${lead.last_name}`.trim() || lead.email}
+          paused={!!company?.pause_required}
+          onClose={() => setAskOpen(false)}
+        />
+      )}
     </div>
   );
 };

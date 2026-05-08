@@ -63,6 +63,23 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 28 — Pietential "Ask Aria to Reply" Claude integration + CSV patch verification (Feb 2026)
+**Backend** (`/app/backend/routes/pietential.py`):
+- New endpoint `POST /api/pt/leads/{id}/ask-aria` — Claude 4 Sonnet via Emergent LLM Key.
+- Builds rich prompt context: lead identity + ICP fit + score + stage, last 10 engagement events with timestamps + score deltas + source, **account cascade context** (sequence_status, pause_required, highest_score, pause warning), Aria's recommendation tier, last internal note, optional founder steer.
+- Tone matrix: founder_led / consultative / direct / soft_nurture / sharp_closer (+ friendly / premium).
+- Channel matrix: linkedin / email (with Subject:) / whatsapp / call_script.
+- Graceful heuristic fallback if Emergent LLM key missing or Claude errors.
+
+**Frontend**:
+- New `PtAskAriaModal` component (`/app/frontend/src/pietential/components/PtAskAriaModal.js`) — channel + tone pickers, AI-POWERED badge, ACCOUNT PAUSED badge when company.pause_required, regenerate, copy & open CTA.
+- Mounted on `PtLeadDetail` via "Ask Aria to Reply" button in header (purple gradient).
+
+**Verification**:
+- CSV `_recompute_company` patch (Iter 27 leftover) verified end-to-end via curl: 0-event CSV row creates lead AND flips `saleshandy_active=True` on `pt_companies`.
+- `/api/pt/leads/{id}/ask-aria` curl-verified with both empty timeline (cold-touch grounded in title/company/ICP) and rich timeline (consultative reply referencing actual click-through).
+- Screenshot-verified frontend modal renders on top of PtLeadDetail with correct purple gradient, channel + tone selectors functional, regenerate spinner active.
+
 ## Iter 21 — Secondary workspace pages + typography (Feb 2026)
 Backend additions in `/app/backend/aria_agent_routes.py`:
 - **Sales Assets**: GET `/assets/catalog`, GET `/assets`, POST `/assets`, PATCH `/assets/{id}`, DELETE `/assets/{id}`, POST `/assets/{id}/use` (7 types) stored in `aria_sales_assets` collection.
