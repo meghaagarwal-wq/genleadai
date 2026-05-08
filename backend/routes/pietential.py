@@ -1451,6 +1451,11 @@ async def import_saleshandy_csv(file: UploadFile = File(...), current_user: dict
             _ingest_event("saleshandy.positive_reply", {"lead_id": lead_id}, {"sequence_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
         if _truthy(norm.get("unsubscribed")):
             _ingest_event("manual.dnc", {"lead_id": lead_id}, {"reason": "saleshandy_unsubscribe", "csv_import": True}, current_user["email"]); events_added += 1
+        # Always recompute company so saleshandy_active flag reflects "lead exists"
+        # even when no engagement events fired this row.
+        company_id = leads_col.find_one({"id": lead_id}, {"_id": 0, "company_id": 1}).get("company_id")
+        if company_id:
+            _recompute_company(company_id)
     _log("csv_import", f"Saleshandy CSV: {created} new + {updated} updated leads, {events_added} events", "info", created=created, updated=updated, events=events_added)
     return {"created": created, "updated": updated, "events_added": events_added, "errors": errors}
 
@@ -1507,6 +1512,10 @@ async def import_lemlist_csv(file: UploadFile = File(...), current_user: dict = 
         sentiment = (norm.get("reply_sentiment") or "").lower()
         if _truthy(norm.get("replied")) and sentiment in ("positive", "interested", "yes"):
             _ingest_event("lemlist.dm_positive_reply", {"lead_id": lead_id}, {"campaign_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
+        # Always recompute company so lemlist_active flag reflects "lead exists"
+        company_id = leads_col.find_one({"id": lead_id}, {"_id": 0, "company_id": 1}).get("company_id")
+        if company_id:
+            _recompute_company(company_id)
     _log("csv_import", f"Lemlist CSV: {created} new + {updated} updated leads, {events_added} events", "info", created=created, updated=updated, events=events_added)
     return {"created": created, "updated": updated, "events_added": events_added, "errors": errors}
 
