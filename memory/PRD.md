@@ -63,6 +63,23 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 36 — Tenant-aware ICP definition feeds Aria's Claude scoring (Feb 2026)
+**Backend**:
+- Added `icp_definition` to whitelisted tenant settings (`PATCH /api/tenants/active/settings`).
+- `routes/ai.py /api/ai/score` now:
+  - Tenant-scopes the lead lookup + update + activity insert (`tenant_id` filter).
+  - Pulls `tenant.settings.icp_definition` + onboarding_config (business_name, industry, product_description, primary_market) and injects them into the Claude prompt.
+  - System prompt personalises: "You are an expert B2B/B2C sales qualification assistant scoring leads for {business_name}."
+  - User prompt explicitly shows "THIS BUSINESS'S ICP: {icp_definition}" so Claude's reasoning cites the tenant's own criteria.
+
+**Frontend**:
+- Replaced hardcoded `defaultValue` Workspace inputs with new `WorkspaceSettingsSection` component — read-only workspace name (pulled from `/api/tenants/active`), controlled ICP definition textarea with Save button + dirty-state detection + success/error toast.
+- Removed old non-persisted "ICP Definition" field.
+
+**Verified E2E (curl)**:
+- Saved tenant-specific ICP ("Series A+ SaaS startups in India…") → AI score returned cold tier with reasoning *"Missing critical ICP qualification data… to assess fit against Series A+ SaaS startup criteria"* — proving tenant-specific injection works and Claude now genuinely uses each tenant's ICP, not a hardcoded one.
+- Whitelist still rejects rogue keys (inherits from Iter 35 whitelist logic).
+
 ## Iter 35 — Demo video URL in Settings → embedded into EmptyDashboard (Feb 2026)
 **Backend**:
 - `PATCH /api/tenants/active/settings` — owner/admin patches whitelisted tenant-level settings (`demo_video_url`, `brand_accent_color`). Rogue keys silently dropped.

@@ -826,20 +826,7 @@ const Settings = () => {
       {/* Workspace Tab */}
       {activeTab === 'workspace' && (
         <div className="space-y-4">
-          <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="workspace-info">
-            <h3 className="text-lg font-semibold text-white mb-4">Workspace Settings</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Workspace Name</label>
-                <input type="text" defaultValue="GenLeadAI" className="w-full max-w-md bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm" data-testid="workspace-name-input" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">ICP Definition</label>
-                <textarea rows={4} defaultValue="Target: SaaS companies with $1M-$10M ARR, B2B focused, with 50-500 employees, looking to scale their growth systems." className="w-full max-w-lg bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm resize-none" data-testid="icp-definition-input" />
-              </div>
-            </div>
-          </div>
-
+          <WorkspaceSettingsSection />
           <DemoVideoSection />
 
           <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="api-keys-section">
@@ -931,6 +918,84 @@ const Settings = () => {
         onClose={() => setInviteOpen(false)}
         onCreated={() => setInviteRefreshKey((k) => k + 1)}
       />
+    </div>
+  );
+};
+
+const WorkspaceSettingsSection = () => {
+  const [name, setName] = useState('');
+  const [icp, setIcp] = useState('');
+  const [initialIcp, setInitialIcp] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.get('/api/tenants/active').then((r) => {
+      if (!alive) return;
+      setName(r.data?.tenant?.name || '');
+      const curIcp = r.data?.tenant?.settings?.icp_definition || '';
+      setIcp(curIcp);
+      setInitialIcp(curIcp);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await api.patch('/api/tenants/active/settings', { icp_definition: icp });
+      setInitialIcp(icp);
+      setMsg({ type: 'ok', text: "Saved. Aria will now score every new lead against this ICP." });
+    } catch (err) {
+      setMsg({ type: 'err', text: err.response?.data?.detail || 'Could not save' });
+    } finally { setSaving(false); }
+  };
+
+  const dirty = icp !== initialIcp;
+
+  return (
+    <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="workspace-info">
+      <h3 className="text-lg font-semibold text-white mb-1">Workspace Settings</h3>
+      <p className="text-xs text-[#A3A3A3] mb-4">
+        What Aria reads before she scores any lead for you.
+      </p>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Workspace Name</label>
+          <input
+            type="text" value={name} readOnly
+            className="w-full max-w-md bg-[#0A0A0A] border border-[#262626] text-[#A3A3A3] px-3 py-2.5 rounded-md text-sm cursor-not-allowed"
+            data-testid="workspace-name-input"
+          />
+          <div className="text-[10px] text-[#737373] mt-1">Ask Emergent Support to rename a workspace.</div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">ICP Definition</label>
+          <textarea
+            rows={5} value={icp} onChange={(e) => setIcp(e.target.value)}
+            placeholder="e.g. Target: SaaS companies with $1M-$10M ARR, B2B focused, 50-500 employees, VP+ level decision-makers, US/EU based, looking to scale growth systems."
+            className="w-full max-w-2xl bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm resize-y focus:border-[#7C35DC] outline-none"
+            data-testid="icp-definition-input"
+          />
+          <div className="text-[10px] text-[#737373] mt-1">
+            Aria injects this into her scoring prompt. Be specific — industry, company size, role, geography, buying signals.
+          </div>
+        </div>
+        {msg && (
+          <div className={`text-sm px-3 py-2 rounded-md border max-w-2xl ${msg.type === 'ok' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`} data-testid="workspace-icp-msg">
+            {msg.text}
+          </div>
+        )}
+        <button
+          onClick={save} disabled={!dirty || saving}
+          data-testid="workspace-icp-save-btn"
+          className="px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: '#7C35DC' }}
+        >
+          {saving ? 'Saving…' : dirty ? 'Save ICP' : 'Saved'}
+        </button>
+      </div>
     </div>
   );
 };

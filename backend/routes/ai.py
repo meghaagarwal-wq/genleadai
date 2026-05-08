@@ -52,7 +52,11 @@ def _extract_json(response_text: str):
 @router.post("/score")
 async def score_lead(request: AIScoreRequest, current_user: dict = Depends(get_current_user)):
     try:
-        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+        # Tenant-scoped lookup: never score a lead belonging to another tenant
+        lead = leads_collection.find_one({
+            "_id": ObjectId(request.lead_id),
+            "tenant_id": current_user.get("tenant_id"),
+        })
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
 
@@ -67,27 +71,64 @@ async def score_lead(request: AIScoreRequest, current_user: dict = Depends(get_c
         Source Channel: {lead.get('source_channel')}
         """
 
+        # Pull this tenant's ICP definition + business context so scoring is
+        # genuinely tenant-aware rather than hardcoded to "growth marketing agency".
+        from pymongo import MongoClient
+        import os as _os
+        _db = MongoClient(_os.environ.get("MONGO_URL"))[_os.environ.get("DB_NAME")]
+        tenant_doc = _db["tenants"].find_one(
+            {"id": current_user.get("tenant_id")},
+            {"_id": 0, "name": 1, "settings": 1},
+        ) or {}
+        onboarding = _db["onboarding_config"].find_one(
+            {"tenant_id": current_user.get("tenant_id")},
+            {"_id": 0},
+        ) or {}
+        settings = tenant_doc.get("settings") or {}
+        bp = onboarding.get("business_profile") or {}
+        sp = onboarding.get("sales_process") or {}
+
+        business_name = bp.get("business_name") or tenant_doc.get("name") or "this business"
+        icp_definition = (
+            settings.get("icp_definition")
+            or "An ideal customer profile best-fit to this business based on industry, company size, buying signals, and role seniority."
+        )
+        business_ctx = (
+            f"Business: {business_name}\n"
+            f"Industry: {bp.get('industry', '—')}\n"
+            f"Product/Service: {sp.get('product_description', '—')}\n"
+            f"Primary market: {bp.get('primary_market', '—')}"
+        )
+
         chat = LlmChat(
             api_key=os.getenv("EMERGENT_LLM_KEY"),
             session_id=f"icp_score_{request.lead_id}",
-            system_message="You are an expert B2B/B2C sales qualification assistant. Score leads against ideal customer profiles and return structured data.",
+            system_message=(
+                f"You are an expert B2B/B2C sales qualification assistant scoring leads for {business_name}. "
+                "Score each lead against their ICP and return strict JSON only."
+            ),
         )
         chat.with_model(*CLAUDE_MODEL)
 
-        prompt = f"""
-        Score this lead from 0-100 based on how well they match an ideal customer profile for a growth marketing agency.
+        prompt = f"""Score this lead from 0-100 based on how well they match {business_name}'s ideal customer profile.
 
-        {lead_info}
+{business_ctx}
 
-        Provide:
-        1. Score (0-100)
-        2. Tier (hot: 70-100, warm: 40-69, cold: 0-39)
-        3. Three bullet points explaining the score
-        4. Recommended next action
-        5. Any red flags
+THIS BUSINESS'S ICP:
+{icp_definition}
 
-        Format: Return ONLY valid JSON with keys: score, tier, reasoning (array), next_action, red_flags (array)
-        """
+LEAD:
+{lead_info}
+
+Provide:
+1. Score (0-100)
+2. Tier (hot: 70-100, warm: 40-69, cold: 0-39)
+3. Three bullet points explaining the score — reference specific ICP criteria above.
+4. Recommended next action tailored to this business's product/service.
+5. Any red flags.
+
+Format: Return ONLY valid JSON with keys: score, tier, reasoning (array), next_action, red_flags (array)
+"""
 
         response = await chat.send_message(UserMessage(text=prompt))
         try:
@@ -102,7 +143,7 @@ async def score_lead(request: AIScoreRequest, current_user: dict = Depends(get_c
             }
 
         leads_collection.update_one(
-            {"_id": ObjectId(request.lead_id)},
+            {"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")},
             {"$set": {
                 "icp_score": ai_result["score"],
                 "icp_tier": ai_result["tier"],
@@ -113,6 +154,7 @@ async def score_lead(request: AIScoreRequest, current_user: dict = Depends(get_c
 
         activities_collection.insert_one({
             "lead_id": request.lead_id,
+            "tenant_id": current_user.get("tenant_id"),
             "user_id": current_user["email"],
             "activity_type": "score_updated",
             "subject": f"ICP Score: {ai_result['score']} ({ai_result['tier']})",

@@ -225,7 +225,7 @@ async def patch_tenant_settings(body: dict, tenant: dict = Depends(get_active_te
     Only whitelisted keys are accepted to avoid rogue writes."""
     if tenant.get("_member_role") not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Owner/Admin only")
-    allowed = {"demo_video_url", "brand_accent_color"}
+    allowed = {"demo_video_url", "brand_accent_color", "icp_definition"}
     current_settings = tenant.get("settings") or {}
     merged = {**current_settings}
     for k, v in (body or {}).items():
