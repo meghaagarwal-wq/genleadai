@@ -195,7 +195,11 @@ def attach_integrations_routes(app, get_current_user, db):
         # Auto-register Lemlist webhook on save
         if payload.lemlist_api_key and payload.lemlist_api_key.strip():
             try:
-                base = os.environ.get("REACT_APP_BACKEND_URL", "")
+                # Use BACKEND_URL (backend convention) instead of
+                # REACT_APP_BACKEND_URL (frontend env var) so this works
+                # correctly in production where only BACKEND_URL is set on the
+                # backend side.
+                base = os.environ.get("BACKEND_URL", "")
                 if base:
                     target = f"{base.rstrip('/')}/api/integrations/lemlist/webhook"
                     await LemlistClient(payload.lemlist_api_key.strip()).register_webhook(target)

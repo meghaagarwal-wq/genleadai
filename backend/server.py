@@ -3230,7 +3230,9 @@ async def send_whatsapp_text(to_phone: str, body: str) -> dict:
 
 
 def _build_tracking_url(tracking_id: str) -> str:
-    base = os.getenv("REACT_APP_BACKEND_URL") or os.getenv("BACKEND_URL", "")
+    # Prefer BACKEND_URL (backend convention) — fall back to REACT_APP_BACKEND_URL
+    # only for legacy environments where BACKEND_URL isn't set.
+    base = os.getenv("BACKEND_URL") or os.getenv("REACT_APP_BACKEND_URL", "")
     base = base.rstrip("/")
     return f"{base}/api/lead-magnets/track/{tracking_id}"
 
