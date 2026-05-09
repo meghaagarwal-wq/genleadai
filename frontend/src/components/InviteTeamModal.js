@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
-import { X, Copy, CheckCircle, Trash, UserPlus, Sparkle, Clock, Warning } from '@phosphor-icons/react';
+import { X, Copy, CheckCircle, Trash, UserPlus, Sparkle, Clock, Warning, PaperPlaneTilt } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 
 const ROLE_OPTIONS = [
@@ -37,9 +37,16 @@ const InviteTeamModal = ({ open, onClose, onCreated }) => {
         expires_in_days: Number(expiresInDays) || 14,
       });
       const inv = res.data?.invitation;
-      const url = `${window.location.origin}/invite/${inv?.token}`;
-      setCreated({ ...inv, full_url: url });
-      toast.success('Invite link ready. Copy and share.');
+      const fullUrl = res.data?.invite_full_url || `${window.location.origin}/invite/${inv?.token}`;
+      const emailStatus = res.data?.email || {};
+      setCreated({ ...inv, full_url: fullUrl, email_status: emailStatus });
+      if (emailStatus.sent) {
+        toast.success(`Invite emailed to ${inv.email}`);
+      } else if (inv?.email && emailStatus.error) {
+        toast.error(`Email failed (${emailStatus.error}). Share the link manually.`);
+      } else {
+        toast.success('Invite link ready. Copy and share.');
+      }
       onCreated?.();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Could not create invite');
@@ -127,10 +134,20 @@ const InviteTeamModal = ({ open, onClose, onCreated }) => {
           </form>
         ) : (
           <div className="p-5 space-y-3" data-testid="invite-created-view">
-            <div className="bg-[#10B981]/10 border border-[#10B981]/30 rounded-md px-3 py-2 flex items-center gap-2">
-              <CheckCircle size={14} weight="fill" className="text-[#10B981]" />
-              <span className="text-sm text-[#10B981] font-semibold">Invite link ready</span>
-            </div>
+            {created.email_status?.sent ? (
+              <div className="bg-[#10B981]/10 border border-[#10B981]/30 rounded-md px-3 py-2 flex items-start gap-2" data-testid="invite-email-sent-banner">
+                <CheckCircle size={14} weight="fill" className="text-[#10B981] mt-0.5" />
+                <div className="text-xs text-[#10B981]">
+                  <div className="font-bold">Invite emailed to {created.email}</div>
+                  <div className="opacity-80 mt-0.5">They'll get a click-to-accept link in their inbox. The link below is the same one — copy it if you want to share via Slack/WhatsApp too.</div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#10B981]/10 border border-[#10B981]/30 rounded-md px-3 py-2 flex items-center gap-2">
+                <CheckCircle size={14} weight="fill" className="text-[#10B981]" />
+                <span className="text-sm text-[#10B981] font-semibold">Invite link ready</span>
+              </div>
+            )}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#737373] mb-1.5">Share this link</label>
               <div className="flex items-center gap-1.5">
@@ -192,6 +209,16 @@ export const PendingInvitesList = ({ refreshKey }) => {
     toast.success('Copied');
   };
 
+  const resendEmail = async (id, email) => {
+    try {
+      await api.post(`/api/invitations/${id}/resend`);
+      toast.success(`Re-sent to ${email}`);
+      setInvites((arr) => arr.map((x) => x.id === id ? { ...x, email_sent: true, email_last_sent_at: new Date().toISOString(), email_send_count: (x.email_send_count || 0) + 1 } : x));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not resend email');
+    }
+  };
+
   if (loading) return null;
   if (invites.length === 0) return null;
 
@@ -224,10 +251,21 @@ export const PendingInvitesList = ({ refreshKey }) => {
                 </div>
                 <div className="text-[10px] text-[#737373] mt-0.5">
                   Created {new Date(inv.created_at).toLocaleDateString()} · Expires {new Date(inv.expires_at).toLocaleDateString()}
+                  {inv.email && (
+                    <span className={`ml-2 ${inv.email_sent ? 'text-[#10B981]' : 'text-[#A3A3A3]'}`}>
+                      · {inv.email_sent ? `Emailed${inv.email_send_count > 1 ? ` (${inv.email_send_count}×)` : ''}` : 'Email pending'}
+                    </span>
+                  )}
                 </div>
               </div>
               {status === 'active' && (
                 <>
+                  {inv.email && (
+                    <button onClick={() => resendEmail(inv.id, inv.email)} data-testid={`invite-resend-${inv.id}`}
+                      className="p-1.5 rounded text-[#A3A3A3] hover:text-[#10B981] hover:bg-[#10B981]/10" title={inv.email_sent ? `Re-send (sent ${inv.email_send_count || 1}x)` : 'Send email'}>
+                      <PaperPlaneTilt size={13} weight="fill" />
+                    </button>
+                  )}
                   <button onClick={() => copyAgain(inv.token)} data-testid={`invite-copy-${inv.id}`}
                     className="p-1.5 rounded text-[#A3A3A3] hover:text-white hover:bg-[#262626]" title="Copy link">
                     <Copy size={13} weight="fill" />

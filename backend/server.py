@@ -3198,38 +3198,15 @@ def _normalize_phone(phone: str) -> str:
     return digits
 
 
-async def send_whatsapp_text(to_phone: str, body: str) -> dict:
-    """Send a text session message via Meta WhatsApp Cloud API.
-    Falls back to log-only if WHATSAPP_ACCESS_TOKEN/PHONE_NUMBER_ID env not set."""
-    normalized = _normalize_phone(to_phone)
-    if not normalized:
-        return {"sent": False, "error": "missing_phone"}
-    if not _whatsapp_configured():
-        return {"sent": False, "error": "not_configured", "logged_only": True}
-    import httpx
-    url = f"{WHATSAPP_API_BASE_URL.rstrip('/')}/{WHATSAPP_GRAPH_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": normalized,
-        "type": "text",
-        "text": {"body": body, "preview_url": True},
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-        if resp.status_code >= 400:
-            print(f"WhatsApp API error {resp.status_code}: {resp.text}")
-            return {"sent": False, "error": "api_error", "status": resp.status_code, "detail": resp.text}
-        data = resp.json()
-        return {"sent": True, "message_id": data.get("messages", [{}])[0].get("id"), "raw": data}
-    except Exception as e:
-        print(f"WhatsApp send exception: {e}")
-        return {"sent": False, "error": str(e)}
+async def send_whatsapp_text(to_phone: str, body: str, tenant_id: str = None) -> dict:
+    """Send a WhatsApp text via the tenant's chosen provider (Meta or 360dialog).
+
+    When tenant_id is None or no tenant config exists, falls back to the global
+    Meta env credentials (legacy single-tenant behaviour). When neither is
+    configured, returns logged_only=True without sending.
+    """
+    from whatsapp_dispatch import send_whatsapp_text as _dispatch
+    return await _dispatch(to_phone, body, tenant_id=tenant_id)
 
 
 def _build_tracking_url(tracking_id: str) -> str:

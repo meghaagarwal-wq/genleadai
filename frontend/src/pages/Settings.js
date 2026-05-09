@@ -828,6 +828,7 @@ const Settings = () => {
         <div className="space-y-4">
           <WorkspaceSettingsSection />
           <DemoVideoSection />
+          <WhatsAppProviderSection />
 
           <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="api-keys-section">
             <h3 className="text-lg font-semibold text-white mb-4">API Configuration</h3>
@@ -1086,6 +1087,207 @@ const DemoVideoSection = () => {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+};
+
+const WhatsAppProviderSection = () => {
+  const [provider, setProvider] = useState('meta');
+  const [providers, setProviders] = useState({});
+  const [apiKey, setApiKey] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneNumberId, setPhoneNumberId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+
+  const load = async () => {
+    try {
+      const r = await api.get('/api/tenants/active/whatsapp');
+      setProvider(r.data?.provider || 'meta');
+      setProviders(r.data?.providers || {});
+    } catch {}
+  };
+
+  useEffect(() => { load(); }, []);
+
+  // Pre-fill phone fields from stored provider when switching tabs
+  useEffect(() => {
+    const cfg = providers[provider] || {};
+    setPhoneNumber(cfg.phone_number || '');
+    setPhoneNumberId(cfg.phone_number_id || '');
+    setApiKey('');
+    setMsg(null);
+    setTestResult(null);
+  }, [provider, providers]);
+
+  const currentCfg = providers[provider] || {};
+  const isConfigured = currentCfg.configured;
+
+  const save = async () => {
+    setSaving(true); setMsg(null); setTestResult(null);
+    try {
+      const body = { provider };
+      if (apiKey) body.api_key = apiKey;
+      if (phoneNumber) body.phone_number = phoneNumber;
+      if (provider === 'meta' && phoneNumberId) body.phone_number_id = phoneNumberId;
+      const r = await api.post('/api/tenants/active/whatsapp', body);
+      setProviders(r.data?.providers || {});
+      setApiKey('');
+      setMsg({ type: 'ok', text: `${provider === '360dialog' ? '360dialog' : 'Meta WhatsApp Cloud API'} saved. Aria will now send WhatsApp via this provider.` });
+    } catch (err) {
+      setMsg({ type: 'err', text: err.response?.data?.detail || 'Could not save' });
+    } finally { setSaving(false); }
+  };
+
+  const testConn = async () => {
+    setTesting(true); setTestResult(null);
+    try {
+      const r = await api.post('/api/tenants/active/whatsapp/test');
+      setTestResult(r.data);
+    } catch (err) {
+      setTestResult({ ok: false, error: err.response?.data?.detail || 'Test failed' });
+    } finally { setTesting(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Remove ${provider === '360dialog' ? '360dialog' : 'Meta'} credentials? Aria will fall back to log-only WhatsApp.`)) return;
+    try {
+      const r = await api.delete(`/api/tenants/active/whatsapp/${provider}`);
+      setProviders(r.data?.providers || {});
+      setProvider(r.data?.provider || 'meta');
+      setMsg({ type: 'ok', text: 'Provider removed.' });
+    } catch (err) {
+      setMsg({ type: 'err', text: err.response?.data?.detail || 'Could not remove' });
+    }
+  };
+
+  return (
+    <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="whatsapp-provider-section">
+      <h3 className="text-lg font-semibold text-white mb-1">WhatsApp provider</h3>
+      <p className="text-xs text-[#A3A3A3] mb-4">
+        Choose how Aria sends WhatsApp messages on this workspace's behalf. Meta Cloud API is direct from Facebook; 360dialog is an official BSP with simpler onboarding.
+      </p>
+
+      {/* Provider tabs */}
+      <div className="flex gap-1 bg-[#0A0A0A] border border-[#262626] rounded-md p-1 w-fit mb-4">
+        {[
+          { id: 'meta', label: 'Meta Cloud API' },
+          { id: '360dialog', label: '360dialog' },
+        ].map((p) => (
+          <button
+            key={p.id} onClick={() => setProvider(p.id)}
+            data-testid={`whatsapp-tab-${p.id}`}
+            className={`px-3 py-1.5 rounded text-xs font-bold transition ${provider === p.id ? 'bg-[#7C35DC] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+          >
+            {p.label}
+            {providers[p.id]?.configured && <span className="ml-1.5 text-[#10B981]">●</span>}
+          </button>
+        ))}
+      </div>
+
+      {provider === '360dialog' && (
+        <div className="space-y-3 max-w-xl" data-testid="d360-form">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">D360 API Key</label>
+            <input
+              type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+              placeholder={isConfigured ? `Currently saved: ${currentCfg.api_key_masked || '••••'} — leave blank to keep` : 'Paste your 360dialog API key'}
+              data-testid="d360-api-key-input"
+              className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+              autoComplete="off"
+            />
+            <div className="text-[10px] text-[#737373] mt-1">Get this from your 360dialog Hub → API Keys. Stored encrypted.</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Sender phone number</label>
+            <input
+              type="text" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="+919876543210"
+              data-testid="d360-phone-input"
+              className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+            />
+          </div>
+        </div>
+      )}
+
+      {provider === 'meta' && (
+        <div className="space-y-3 max-w-xl" data-testid="meta-form">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Permanent access token</label>
+            <input
+              type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+              placeholder={isConfigured ? `Currently saved: ${currentCfg.api_key_masked || '••••'} — leave blank to keep` : 'Paste your Meta WhatsApp access token'}
+              data-testid="meta-token-input"
+              className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+              autoComplete="off"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Phone number ID</label>
+              <input
+                type="text" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
+                placeholder="1234567890"
+                data-testid="meta-phone-id-input"
+                className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">Display number</label>
+              <input
+                type="text" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+15551234567"
+                data-testid="meta-phone-input"
+                className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {msg && (
+        <div className={`text-sm px-3 py-2 rounded-md border max-w-xl mt-3 ${msg.type === 'ok' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`} data-testid="whatsapp-msg">
+          {msg.text}
+        </div>
+      )}
+      {testResult && (
+        <div className={`text-xs px-3 py-2 rounded-md border max-w-xl mt-3 ${testResult.ok ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`} data-testid="whatsapp-test-result">
+          {testResult.ok
+            ? `Connection OK · provider: ${testResult.provider}`
+            : `Connection failed · ${testResult.error || `HTTP ${testResult.status_code}`}`}
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={save} disabled={saving || (!apiKey && !isConfigured)}
+          data-testid="whatsapp-save-btn"
+          className="px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: '#7C35DC' }}
+        >
+          {saving ? 'Saving…' : isConfigured ? 'Update' : 'Save credentials'}
+        </button>
+        {isConfigured && (
+          <button
+            onClick={testConn} disabled={testing}
+            data-testid="whatsapp-test-btn"
+            className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-[#0055FF] hover:bg-[#0044CC] disabled:opacity-50"
+          >
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+        )}
+        {isConfigured && (
+          <button
+            onClick={remove}
+            data-testid="whatsapp-remove-btn"
+            className="px-4 py-2 rounded-md text-sm font-semibold text-[#FF3B30] bg-[#0A0A0A] border border-[#FF3B30]/30 hover:bg-[#FF3B30]/10"
+          >
+            Remove
+          </button>
+        )}
       </div>
     </div>
   );
