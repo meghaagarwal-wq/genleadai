@@ -101,7 +101,7 @@ const InviteTeamModal = ({ open, onClose, onCreated }) => {
               <label className="block text-[10px] font-bold uppercase tracking-[0.2em] text-[#737373] mb-2">Email (optional)</label>
               <input
                 type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                data-testid="invite-email"
+                data-testid="invite-email-input"
                 placeholder="Optional — pre-fills the signup form"
                 className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2 rounded-md text-sm focus:border-[#7C35DC] outline-none"
               />

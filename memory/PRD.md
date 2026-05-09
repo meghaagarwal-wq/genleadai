@@ -63,6 +63,35 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 37 — Real invite emails (Resend) + 360dialog WhatsApp as 2nd provider (Feb 2026)
+
+**Backend** (`/app/backend/routes/tenants.py` + new `/app/backend/whatsapp_dispatch.py`):
+- `POST /api/invitations` now sends a Resend-rendered HTML invite email (purple-gradient CTA, role blurb, expiry stamp) when `payload.email` is provided. Returns `{invite_full_url, email: {sent, id?, error?}}`. Doc captures `email_sent`, `email_send_count`, `email_last_sent_at`, `email_last_message_id`.
+- `POST /api/invitations/{id}/resend` re-sends the invite email and increments the send counter. 400 on no-email invites, 409 on accepted/revoked, 410 on expired.
+- `_frontend_origin(request)` resolves the invite URL host using FRONTEND_URL/APP_URL env → request.headers.origin/referer → BACKEND_URL fallback so emails always carry a clickable absolute URL.
+- New WhatsApp provider config endpoints, all owner/admin-gated:
+  - `GET /api/tenants/active/whatsapp` — returns `{provider, providers:{name:{phone_number, phone_number_id, configured, api_key_masked}}}`. Never returns plaintext keys.
+  - `POST /api/tenants/active/whatsapp` — payload `{provider: meta|360dialog, api_key?, phone_number?, phone_number_id?}`. Encrypts api_key/access_token with Fernet (`ENCRYPTION_KEY` env), stores `api_key_last4` for masking. Switching providers without re-supplying api_key preserves the previously stored credential.
+  - `DELETE /api/tenants/active/whatsapp/{provider}` — clears that provider's stored config; falls back to the other if any.
+  - `POST /api/tenants/active/whatsapp/test` — live-tests credentials. 360dialog → `GET https://waba-v2.360dialog.io/health_status`. Meta → `GET graph.facebook.com/{ver}/{phone_number_id}`.
+- New `whatsapp_dispatch.send_whatsapp_text(to_phone, body, tenant_id=None)` resolves the active tenant's provider and routes to either Meta Cloud API or 360dialog (`https://waba-v2.360dialog.io/messages` with `D360-API-KEY` header). Falls back to global env-based Meta when no tenant config exists; logs-only when neither is set.
+- `server.py send_whatsapp_text` reduced to a thin shim around `whatsapp_dispatch`.
+
+**Frontend**:
+- `InviteTeamModal` — success view shows green `invite-email-sent-banner` "Invite emailed to {email}" when Resend confirms send. Toast variants for sent / failed / link-only.
+- `PendingInvitesList` — each row with a stored email shows an "Emailed" badge + send count and a paper-plane re-send button (`invite-resend-{id}`) calling `POST /api/invitations/{id}/resend`.
+- New `WhatsAppProviderSection` mounted in **Settings → Workspace** tab. Tabbed switcher between **Meta Cloud API** and **360dialog**, each with provider-specific inputs (token, phone_number_id, display number for Meta; api_key + sender phone for 360dialog). Save/Test/Remove buttons wired with success+error banners. Active-provider tab gets a green "●" dot when configured.
+- All interactive elements stamped with `whatsapp-*` data-testids (per project convention).
+
+**Verified (testing_agent_v3 — iter 28, 100% pass)**:
+- Backend 17/17 pytest pass — Resend send + resend counter + role gating + WhatsApp Fernet encryption + provider switching + cross-tenant isolation + `whatsapp_dispatch` smoke (logged_only when unconfigured).
+- Frontend Playwright e2e — invite modal Resend banner, pending list resend button, WhatsApp tabs, save/test/remove flow, masked-key UX.
+
+**Operational notes**:
+- Invite emails go via existing `RESEND_API_KEY` (already in env). Sender = `SENDER_EMAIL` env (default `onboarding@resend.dev`).
+- Sandbox Resend mailbox `delivered@resend.dev` always returns 200 — useful for E2E without real delivery.
+- 360dialog sender phone numbers must be already onboarded inside 360dialog Hub. Tenant just pastes their D360-API-KEY.
+
 ## Iter 36 — Tenant-aware ICP definition feeds Aria's Claude scoring (Feb 2026)
 **Backend**:
 - Added `icp_definition` to whitelisted tenant settings (`PATCH /api/tenants/active/settings`).

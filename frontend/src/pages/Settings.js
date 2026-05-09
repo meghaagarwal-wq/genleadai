@@ -1195,7 +1195,7 @@ const WhatsAppProviderSection = () => {
             <input
               type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
               placeholder={isConfigured ? `Currently saved: ${currentCfg.api_key_masked || '••••'} — leave blank to keep` : 'Paste your 360dialog API key'}
-              data-testid="d360-api-key-input"
+              data-testid="whatsapp-360dialog-apikey-input"
               className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
               autoComplete="off"
             />
@@ -1220,7 +1220,7 @@ const WhatsAppProviderSection = () => {
             <input
               type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
               placeholder={isConfigured ? `Currently saved: ${currentCfg.api_key_masked || '••••'} — leave blank to keep` : 'Paste your Meta WhatsApp access token'}
-              data-testid="meta-token-input"
+              data-testid="whatsapp-meta-token-input"
               className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
               autoComplete="off"
             />
@@ -1231,7 +1231,7 @@ const WhatsAppProviderSection = () => {
               <input
                 type="text" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)}
                 placeholder="1234567890"
-                data-testid="meta-phone-id-input"
+                data-testid="whatsapp-meta-phoneid-input"
                 className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
               />
             </div>
@@ -1240,7 +1240,7 @@ const WhatsAppProviderSection = () => {
               <input
                 type="text" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="+15551234567"
-                data-testid="meta-phone-input"
+                data-testid="whatsapp-meta-phone-input"
                 className="w-full bg-[#0A0A0A] border border-[#262626] text-white px-3 py-2.5 rounded-md text-sm focus:border-[#7C35DC] outline-none"
               />
             </div>
@@ -1264,7 +1264,7 @@ const WhatsAppProviderSection = () => {
       <div className="flex gap-2 mt-4">
         <button
           onClick={save} disabled={saving || (!apiKey && !isConfigured)}
-          data-testid="whatsapp-save-btn"
+          data-testid="whatsapp-save-button"
           className="px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
           style={{ background: '#7C35DC' }}
         >
@@ -1273,7 +1273,7 @@ const WhatsAppProviderSection = () => {
         {isConfigured && (
           <button
             onClick={testConn} disabled={testing}
-            data-testid="whatsapp-test-btn"
+            data-testid="whatsapp-test-button"
             className="px-4 py-2 rounded-md text-sm font-semibold text-white bg-[#0055FF] hover:bg-[#0044CC] disabled:opacity-50"
           >
             {testing ? 'Testing…' : 'Test connection'}
@@ -1282,7 +1282,7 @@ const WhatsAppProviderSection = () => {
         {isConfigured && (
           <button
             onClick={remove}
-            data-testid="whatsapp-remove-btn"
+            data-testid="whatsapp-remove-button"
             className="px-4 py-2 rounded-md text-sm font-semibold text-[#FF3B30] bg-[#0A0A0A] border border-[#FF3B30]/30 hover:bg-[#FF3B30]/10"
           >
             Remove
