@@ -452,7 +452,7 @@ const TouchpointJourney = () => {
     <div className="space-y-6" data-testid="touchpoint-journey-page">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Touchpoint Journey</h1>
+          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Touchpoint Mapping</h1>
           <p className="text-sm text-[#5A4A7A] mt-1">{map?.template_name || 'No template'} · saved {fmt(map?.updated_at)} by {map?.saved_by || '—'}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
