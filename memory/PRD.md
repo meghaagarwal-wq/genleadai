@@ -646,3 +646,35 @@ Custom domain target: app.genleadai.com
 **Testing** (iter_33): 19/19 backend pytest + 100% frontend e2e via testing agent. New regression file `/app/backend/tests/test_iter33_master_admin_revenue.py`. No critical issues.
 
 **Next (Sprint 2)**: CRM Integration Core — `crm_integrations` + `crm_sync_log` schema, HubSpot OAuth connector, sync event engine (14 event types via asyncio queue), Take-over/Resume reflection flow, Lead Detail CRM status badge, Pipedrive API-key connector.
+
+
+## Iter 34/35 — Sprint 2: CRM Integration Layer (Feb 2026)
+**Architecture**: Aria is the engagement layer, CRM is the system of record. Every meaningful lead state change fires a sync event into `crm_sync_log` → asyncio background loop dispatches to the workspace's connected CRM. One active integration per tenant.
+
+**Backend** (`/app/backend/routes/crm_sync.py` — 480 lines, lint clean):
+- Collections (new): `crm_integrations`, `crm_sync_log`. Leads gain `crm_contact_id`, `crm_deal_id`, `crm_last_synced_at`, `crm_contact_deleted` (lazy-set by engine, no migration).
+- 5 connectors implemented as real HTTP calls (httpx async): **HubSpot v3** (contacts/notes/stage), **Pipedrive v1** (persons/notes), **Custom Webhook** (POST JSON), **Zoho** + **Salesforce** (auth scaffolding, dispatch stubbed pending OAuth creds).
+- 15 event types fully wired: `lead.created`, `lead.stage_changed`, `lead.qualified`, `lead.assigned`, `aria.paused`, `aria.resumed`, `conversation.takeover`, `meeting.booked`, `lead.closed_won`, `lead.closed_lost`, `sentiment.negative`, `sentiment.urgent`, `touchpoint.sent`, `lead.re_engaged`, `lead.data_deleted`.
+- Async background loop `crm_sync_loop()` polls pending entries every 5sec (`CRM_SYNC_INTERVAL_SECONDS`), max 3 retries, status transitions pending→retrying→failed/success. Updates `leads.crm_contact_id` on first success.
+- Endpoints under `/api/crm/*`: `GET /integrations`, `POST /connect`, `DELETE /disconnect`, `GET|PUT /field-mapping`, `PUT /sync-rules`, `POST /test-connection`, `GET /sync-log`, `POST /sync-log/{id}/retry`, `POST /sync-log/retry-all-failed`, `GET /leads/{id}/status`, `POST /inbound/{workspace_id}` (CRM → Aria bidirectional), `GET /oauth/{crm}/start` (HubSpot/Zoho/Salesforce authorize URL builder with `placeholder=true` when client IDs unset).
+- `fire_event(tenant_id, lead, event_type, payload)` imported into `server.py` and wired into:
+  - `POST /api/leads` → `lead.created`
+  - `PATCH /api/leads/{id}` with status change → `lead.closed_won` | `lead.closed_lost` | `lead.stage_changed` (whitespace/dash normalized: "Closed Won" → "closed_won").
+  - `POST /api/aria/takeover/{id}` → fires both `conversation.takeover` + `aria.paused` with rep name + last message.
+  - `POST /api/aria/resume/{id}` → `aria.resumed`.
+
+**Frontend**:
+- `/app/frontend/src/components/CrmSettingsTab.js` — Settings → CRM tab end-to-end UX: empty state (5 CRM picker cards: HubSpot/Pipedrive/Zoho/Salesforce/Custom Webhook) → ConnectPanel (OAuth-paste-token or API key or Webhook URL) → connected state with header status row (Test Connection, Disconnect) + sub-tabs (Field Mapping editor with 10 default mappings, Sync Rules grouped in Lead lifecycle / Aria activity / Signals, Sync Log table with status filter + Retry + Retry-all-failed).
+- `/app/frontend/src/components/CrmSyncBadge.js` — reusable lead-level badge (compact + full variants) — green "Synced to {CRM} · 2m ago" / yellow "Sync pending" / red "Sync failed · retry". Hidden when no CRM connected.
+- `LeadDetail.js` — CrmSyncBadge rendered next to lead identity chip.
+
+**Testing**:
+- iter_34: 25/26 backend, 100% frontend. One bug found: stage "Closed Won" (with space) was firing `lead.stage_changed` instead of `lead.closed_won` due to whitespace-vs-underscore mismatch.
+- Fix: normalize `lower().replace(' ','_').replace('-','_')` before comparison.
+- iter_35 regression: 4/4 pass — both space and underscore variants now correctly mapped. Final: **26/26 backend + 100% frontend**.
+
+**Known limitations (intentional per user spec)**:
+- HubSpot/Zoho/Salesforce OAuth client IDs not set in env → OAuth authorize URLs return `placeholder=true`; users can paste a personal access token to connect in test mode.
+- Zoho + Salesforce dispatchers return stub success (real REST calls deferred until credentials are added).
+
+**Next (Sprint 3)**: Security & Compliance — Fernet encryption for stored CRM credentials, webhook signature verification, rate limiting, audit log, DPDP-compliant lead deletion, Privacy/Terms/DPA static pages, nightly retention jobs, Security settings tab, Data export.
