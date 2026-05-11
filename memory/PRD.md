@@ -63,6 +63,60 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 40 — Session B: Opt-In Compliance · 3-Layer Classification · Touchpoint Engine + Journey Tab (Feb 2026)
+
+**The biggest single iteration so far** — three intertwined feature systems shipped together.
+
+### 1.4 — WhatsApp Opt-In Compliance (`/app/backend/routes/compliance.py`)
+- `opted_out_numbers` collection (tenant-scoped) + lead-level `opted_in`/`opted_in_at`/`opted_in_source`/`opted_out` fields.
+- **STOP keyword auto-handler** wired into the inbound webhook (`stop`, `unsubscribe`, `no more`, `stop messages`). Adds the sender to the blocklist + flips the matching lead off + cannot be overridden.
+- `can_send_outbound(tenant_id, lead)` gatekeeper — used by the engine before every send. Returns `{allow, reason}`.
+- Manual endpoints: `POST /api/compliance/lead/opt-in` (with source: `manual_confirmed` / `website_form` / `replied_first` / `imported_with_consent`), `POST /lead/opt-out`, `GET /opted-out`, `DELETE /opted-out/{phone}` (owner-admin only).
+- Auto-opt-in on first inbound message (webhook flips `opted_in=true` source=`replied_first`).
+- **Frontend**: `LeadOptInBanner` — yellow `lead-opt-in-warning` when not opted in, green `lead-opt-in-ok` after confirm. Onboarding Step 5 has `ob-wa-compliance-checkbox` (required to advance — Meta Business Messaging Policy disclaimer).
+
+### 2.2 — Three-Layer Inbound Classification (`/app/backend/routes/classification.py` + `routes/contacts.py`)
+- **Layer 1** — Trigger phrases. 10 default phrases (`i'm interested in`, `pricing please`, `i saw your ad`, etc.) + tenant-custom phrases via `POST /api/classification/triggers`. Match → category=LEAD with confidence 0.95.
+- **Layer 2** — Phone lookup. Checks existing leads (last-10 digit fallback), then `workspace_contacts` (mapping `vendor` → VENDOR, `existing_client` → EXISTING_CLIENT, etc.), then opted-out blocklist.
+- **Layer 3** — Claude classifier. Sends the message + business context to claude-sonnet-4-5 and parses JSON for `{category, confidence, reason}`. Categories: LEAD/EXISTING_CLIENT/VENDOR/OPERATIONAL/JOB_APPLICANT/UNCLEAR/SPAM/WRONG_NUMBER. Routing rules: LEAD ≥0.80 → create lead, 0.50-0.79 → create lead+needs_review, <0.50 → neutral opener; non-leads → canned response intent.
+- All decisions logged to `classification_log` with action_taken + layer_resolved. Override endpoint (`POST /log/{id}/override`) flips category + marks for retraining.
+- **`workspace_contacts` CRUD** with 6 contact types + tenant-scoped phone lookup.
+- **New `/contacts` page** with two tabs:
+  - Contacts table — add/edit/delete + filter by type + 6 colour-coded type badges.
+  - Classification log — last 100 inbound events with phone/category/confidence/layer/action columns.
+- WhatsApp webhook upgraded: resolves tenant from `phone_number_id` metadata, runs STOP keyword + classification, pauses pending touchpoints when an existing lead replies, auto-opts-in the lead, writes to activities + classification_log.
+
+### Touchpoint Execution Engine (`/app/backend/routes/touchpoint_engine.py`)
+- `lead_touchpoint_log` collection — one row per touchpoint per lead, with `status` ∈ {pending, paused, sent, skipped, failed, cancelled, alert_sent}, `scheduled_for`, `fired_at`, `message_sent`, `retry_count`.
+- **Auto-instantiation on lead create** (server.py hooks the POST /api/leads path) — copies the tenant's active map and schedules each row using day+hour offsets from now.
+- **Async background loop** (`engine_loop`) ticks every 60s, picks up to 30 pending rows where `scheduled_for ≤ now`, renders the message via Claude (claude-sonnet-4-5 with lead context + product description) and sends via `whatsapp_dispatch` (tenant-aware Meta or 360dialog) or Resend (email channel). Falls back to heuristic token substitution on Claude failure.
+- **Compliance gate** — every send checks `can_send_outbound()`; if not opted in or blocklisted, row is marked `skipped` with `skip_reason`.
+- **Reply-pause** — webhook calls `pause_lead(tenant_id, lead_id)` when an inbound message arrives for an existing lead.
+- **Closed-Won/Lost cancellation** — lead-update endpoint detects status starting with "Closed" and calls `cancel_lead()` with reason `stage:Closed Won`.
+- **Owner override endpoints**:
+  - `POST /api/touchpoints/lead/{id}/action` with `{action: pause_lead | resume_lead | cancel_remaining}`.
+  - `POST /api/touchpoints/touchpoint/{tp_id}/send-now` — synchronous fire of a specific row (owner/admin only).
+  - `GET /api/touchpoints/lead/{id}/journey` — full per-lead timeline.
+- `alert_human` touchpoints don't send; they create an entry in the `aria_alerts` collection for the team.
+- **Frontend**: new `LeadJourneyTab` component mounted in `LeadDetail.js` between ARIA Agent and Details tabs. Shows full timeline with status pills (sent/pending/paused/failed/cancelled/alert_sent), expandable "View" of sent messages, "Send now" override per row, Pause/Resume/Cancel-remaining controls at top.
+
+### Critical fix mid-iter (lead.id stamp)
+- **RCA from iter31**: leads stored only `_id` (ObjectId) but compliance + engine + classification all look up by `id` (string). 4 HIGH-priority failures.
+- **Fix**: `POST /api/leads` now pre-computes `ObjectId()`, stamps both `_id` and `id = str(_id)` in a single insert. Backfilled all existing leads via `migrate_to_multi_tenant.py` aggregation pipeline.
+
+### Verified (testing_agent_v3 iter31 + iter32 + manual self-test)
+- **Backend 25/25 pytest pass** — compliance (opt-in/out + STOP keyword), classification (all 3 layers + log + triggers + cross-tenant isolation), engine (instantiate + idempotent + pause/resume/cancel + send-now + Closed-Won cancel).
+- **Frontend self-test verified**:
+  - Lead detail Journey tab → 8 touchpoints render, Pause→Resume flow works, Send now fires #1 and renders Claude copy ("Hi there! I'm Aria, the sales assistant at GenLeadAI Demo. Thanks for reaching out! What specific challenge are you hoping our offering can help you solve?") with proper FAILED status + `not_configured` error (expected — demo has no WhatsApp creds).
+  - LeadOptInBanner — green "Opted in · manual_confirmed" banner visible after API opt-in.
+  - Contacts page (/contacts) — add/edit/delete flow + classification log tab.
+
+### Deferred to Session C
+- 3.5 Stale Lead Engine + Pipeline Health Score
+- 3.6 Sentiment detection on every inbound
+- 3.3 Conversations Take-over flow + urgent-float-to-top
+- 5.5 Graceful degradation + failed_message_log + retry queue + owner alerts
+
 ## Iter 39 — Session A: Branding · Pricing overhaul · Trial · Tutorials · Troubleshooting · Limits · Claude preview (Feb 2026)
 
 **Backend** (`/app/backend/routes/billing_plans.py` + `/app/backend/routes/touchpoint_preview.py`):

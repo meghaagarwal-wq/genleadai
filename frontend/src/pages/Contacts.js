@@ -117,8 +117,7 @@ const Contacts = () => {
                 className="bg-white border border-[#E8E0F5] rounded px-2 py-1 text-xs">
                 <option value="">All ({contacts.length})</option>
                 {CONTACT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
-            </div>
+              </select>            </div>
           </div>
 
           <div className="bg-white border border-[#E8E0F5] rounded-xl overflow-hidden">

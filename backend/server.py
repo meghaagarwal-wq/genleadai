@@ -195,14 +195,13 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
     lead_doc["last_contacted_at"] = None
     lead_doc["next_followup_at"] = None
     
-    result = leads_collection.insert_one(lead_doc)
-    # Persist a string 'id' field on leads so downstream modules (compliance,
-    # touchpoint engine, classification) can lookup consistently. Otherwise
-    # /api/compliance/lead/opt-in and /api/touchpoints/lead/instantiate
-    # silently 404 because they query leads_col by 'id'.
-    string_id = str(result.inserted_id)
-    leads_collection.update_one({"_id": result.inserted_id}, {"$set": {"id": string_id}})
-    lead_doc["id"] = string_id
+    # Pre-compute ObjectId so we can stamp `id` (string) in the same insert.
+    # Downstream modules (compliance, touchpoint engine, classification) look
+    # up leads by the `id` field — without this they would 404.
+    new_id = ObjectId()
+    lead_doc["_id"] = new_id
+    lead_doc["id"] = str(new_id)
+    leads_collection.insert_one(lead_doc)
     lead_doc = serialize_doc(lead_doc)
 
     # Instantiate touchpoint journey for this lead (Phase B engine)
