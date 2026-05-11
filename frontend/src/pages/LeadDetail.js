@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import AriaConversationPanel from '../components/AriaConversationPanel';
 import AriaReadPanel from '../components/AriaReadPanel';
+import LeadJourneyTab from '../components/LeadJourneyTab';
+import LeadOptInBanner from '../components/LeadOptInBanner';
 import {
   ArrowLeft,
   Phone,
@@ -197,6 +199,9 @@ const LeadDetail = () => {
         <ArrowLeft size={16} /> Back to Leads
       </button>
 
+      {/* Compliance opt-in banner */}
+      <LeadOptInBanner lead={lead} onUpdated={fetchLead} />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Lead Profile */}
         <div className="lg:col-span-1 space-y-4">
@@ -388,7 +393,7 @@ const LeadDetail = () => {
         <div className="lg:col-span-2 space-y-4">
           {/* Tabs */}
           <div className="flex gap-1 bg-white border border-[#E8E0F5] rounded-xl p-1" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="detail-tabs">
-            {['timeline', 'aria', 'details'].map(tab => (
+            {['timeline', 'aria', 'journey', 'details'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === tab ? (tab === 'aria' ? 'text-white' : 'text-white') : 'text-[#5A4A7A] hover:text-[#7C35DC] hover:bg-[#F9F5FF]'}`}
                 style={activeTab === tab ? { background: tab === 'aria' ? 'var(--gradient-brand)' : '#7C35DC', fontFamily: 'Plus Jakarta Sans' } : { fontFamily: 'Plus Jakarta Sans' }}
@@ -400,6 +405,10 @@ const LeadDetail = () => {
 
           {activeTab === 'aria' && (
             <AriaConversationPanel leadId={id} leadName={`${lead.first_name} ${lead.last_name}`} />
+          )}
+
+          {activeTab === 'journey' && (
+            <LeadJourneyTab leadId={id} />
           )}
 
           {activeTab === 'timeline' && (

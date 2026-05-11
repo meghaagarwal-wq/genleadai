@@ -26,6 +26,7 @@ import Billing from './pages/Billing';
 import Troubleshooting from './pages/Troubleshooting';
 import Tutorials from './pages/Tutorials';
 import Limits from './pages/Limits';
+import Contacts from './pages/Contacts';
 import FollowUps from './pages/FollowUps';
 import AIAssistant from './pages/AIAssistant';
 import Integrations from './pages/Integrations';
@@ -211,6 +212,7 @@ function App() {
                         <Route path="/troubleshooting" element={<Troubleshooting />} />
                         <Route path="/tutorials" element={<Tutorials />} />
                         <Route path="/limits" element={<Limits />} />
+                        <Route path="/contacts" element={<Contacts />} />
                         {/* AI Sales Agent additive routes */}
                         <Route path="/aria-agent/train" element={<TrainAria />} />
                         <Route path="/aria-agent/playbooks" element={<Playbooks />} />

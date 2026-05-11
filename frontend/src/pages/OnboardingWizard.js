@@ -99,6 +99,7 @@ const OnboardingWizard = () => {
     if (step === 1) return form.persona.aria_name.trim().length > 0;
     if (step === 2) return form.sales.product_description.trim().length > 0 && form.sales.pipeline_stages.length >= 2;
     if (step === 3) return touchpointSaved;
+    if (step === 4) return !!form.whatsapp.compliance_agreed;
     return true;
   };
 
@@ -329,6 +330,21 @@ const OnboardingWizard = () => {
                 <div className="text-xs text-[#5A4A7A] bg-[#F4F0FF] border border-[#7C35DC]/20 rounded-lg p-3">
                   <span className="font-bold text-[#7C35DC]">Webhook URL:</span> auto-generated after onboarding.
                   Find it under Settings → Integrations once you're in.
+                </div>
+
+                {/* Compliance checkbox (Meta Business Messaging Policy) */}
+                <div className="bg-[#FEF3C7] border border-[#F59E0B]/40 rounded-lg p-3 mt-3" data-testid="ob-wa-compliance">
+                  <div className="text-xs text-[#92400E] font-bold mb-2">⚠ Meta Business Messaging Policy</div>
+                  <div className="text-[11px] text-[#92400E]/85 mb-2 leading-relaxed">
+                    WhatsApp Business API requires explicit opt-in from every lead before automated outreach. Aria will only message leads who have opted in via a website form, replied first, or been manually confirmed by you.
+                  </div>
+                  <label className="flex items-start gap-2 text-[11px] text-[#92400E] cursor-pointer">
+                    <input type="checkbox" data-testid="ob-wa-compliance-checkbox"
+                      checked={!!form.whatsapp.compliance_agreed}
+                      onChange={(e) => update('whatsapp', { compliance_agreed: e.target.checked })}
+                      className="mt-0.5" />
+                    <span><strong>I agree to message only opted-in leads.</strong> I understand violations may result in suspension by Meta.</span>
+                  </label>
                 </div>
               </>
             )}

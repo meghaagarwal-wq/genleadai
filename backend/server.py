@@ -46,7 +46,11 @@ from routes.tenants import router as tenants_router
 from routes.billing import router as billing_router, webhook_router as stripe_webhook_router
 from routes.touchpoints import router as touchpoints_router
 from routes.touchpoint_preview import router as touchpoint_preview_router
+from routes.touchpoint_engine import router as touchpoint_engine_router, engine_loop, instantiate_for_lead, pause_lead, cancel_lead
 from routes.billing_plans import router as billing_plans_router
+from routes.compliance import router as compliance_router, is_stop_keyword, opt_out_phone, auto_opt_in_on_inbound
+from routes.contacts import router as contacts_router
+from routes.classification import router as classification_router, classify_inbound
 
 load_dotenv()
 
@@ -74,7 +78,11 @@ app.include_router(billing_router)
 app.include_router(stripe_webhook_router)
 app.include_router(touchpoints_router)
 app.include_router(touchpoint_preview_router)
+app.include_router(touchpoint_engine_router)
 app.include_router(billing_plans_router)
+app.include_router(compliance_router)
+app.include_router(contacts_router)
+app.include_router(classification_router)
 register_pietential_startup(app)
 
 
@@ -189,7 +197,15 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
     
     result = leads_collection.insert_one(lead_doc)
     lead_doc = serialize_doc(lead_doc)
-    
+
+    # Instantiate touchpoint journey for this lead (Phase B engine)
+    try:
+        tenant_id = lead_doc.get("tenant_id") or (current_user or {}).get("tenant_id")
+        if tenant_id:
+            instantiate_for_lead(tenant_id, lead_doc)
+    except Exception as e:
+        print(f"[lead-create] touchpoint instantiate failed: {e}")
+
     return lead_doc
 
 class BulkLeadsPayload(BaseModel):
@@ -430,7 +446,17 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             activities_collection.insert_one(activity_doc)
-        
+
+        # Cancel pending touchpoints when stage becomes terminal (Closed Won / Closed Lost)
+        new_status = update_data.get("status")
+        if new_status and isinstance(new_status, str) and new_status.lower().startswith("closed"):
+            try:
+                lead_for_id = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "id": 1})
+                lead_engine_id = (lead_for_id or {}).get("id") or lead_id
+                cancel_lead(current_user.get("tenant_id"), lead_engine_id, reason=f"stage:{new_status}")
+            except Exception as _ce:
+                print(f"[lead-update] touchpoint cancel failed: {_ce}")
+
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
         lead_serialized = serialize_doc(lead)
 
@@ -3629,38 +3655,87 @@ async def whatsapp_webhook_verify(
 
 @app.post("/api/webhooks/whatsapp")
 async def whatsapp_webhook_receive(payload: Dict[str, Any]):
-    """Receive inbound WhatsApp messages and delivery status updates from Meta."""
+    """Receive inbound WhatsApp messages and delivery status updates from Meta.
+
+    Pipeline:
+      1. Resolve tenant from phone_number_id (Meta webhook 'metadata.phone_number_id')
+      2. STOP keyword → opt-out + silent log
+      3. Run 3-layer classification (trigger → contact/lead lookup → Claude)
+      4. Lead path: pause pending touchpoints, log activity, mark opt-in
+      5. Non-lead paths: log canned-response intent (handler routes are owner-side)
+    """
     try:
         for entry in payload.get("entry", []) or []:
             for change in entry.get("changes", []) or []:
                 value = change.get("value", {}) or {}
-                # Inbound text messages
+                # Resolve tenant from phone_number_id metadata.
+                phone_number_id = (value.get("metadata") or {}).get("phone_number_id")
+                tenant = None
+                if phone_number_id:
+                    tenant = db["tenants"].find_one(
+                        {"settings.whatsapp.providers.meta.phone_number_id": phone_number_id},
+                        {"_id": 0},
+                    )
+                # Fallback: legacy single-tenant
+                if not tenant:
+                    tenant = db["tenants"].find_one({}, {"_id": 0})
+
                 for msg in value.get("messages", []) or []:
                     if msg.get("type") != "text":
                         continue
                     from_phone = msg.get("from")
                     body = (msg.get("text") or {}).get("body", "")
-                    # Match to existing lead by phone — exact match on normalized digits or last-10
-                    normalized_from = _normalize_phone(from_phone or "")
-                    last10 = normalized_from[-10:] if len(normalized_from) >= 10 else normalized_from
-                    candidate = None
-                    if normalized_from:
-                        # Try exact phone match first
-                        candidate = leads_collection.find_one({"phone": from_phone}, {"_id": 1})
-                        if not candidate and last10:
-                            # Fallback: anchor regex to ensure last10 digits are at end of phone string
-                            candidate = leads_collection.find_one({"phone": {"$regex": f"{last10}$"}}, {"_id": 1})
-                    if candidate:
-                        lead_id = str(candidate["_id"])
-                        activities_collection.insert_one({
-                            "lead_id": lead_id, "user_id": "whatsapp_webhook",
-                            "activity_type": "whatsapp_received",
-                            "subject": "WhatsApp reply received",
-                            "body": body[:1000],
-                            "outcome": None, "duration_minutes": None,
-                            "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id")},
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                        })
+                    tenant_id = tenant.get("id") if tenant else None
+
+                    if tenant_id:
+                        # STOP keyword auto-opt-out
+                        if is_stop_keyword(body):
+                            opt_out_phone(tenant_id, from_phone or "", reason="stop_keyword")
+                            print(f"[whatsapp] STOP keyword from {from_phone} on tenant {tenant_id}")
+                            continue
+
+                        # Classify via 3-layer pipeline
+                        cls = await classify_inbound(tenant_id, from_phone or "", body)
+                        action = cls.get("action", "neutral_opener")
+
+                        if action in ("continue_lead", "create_lead_or_continue"):
+                            # Match existing lead by phone (last-10)
+                            normalized_from = _normalize_phone(from_phone or "")
+                            last10 = normalized_from[-10:] if len(normalized_from) >= 10 else normalized_from
+                            candidate = None
+                            if normalized_from:
+                                candidate = leads_collection.find_one({"tenant_id": tenant_id, "phone": from_phone}, {"_id": 1, "id": 1})
+                                if not candidate and last10:
+                                    candidate = leads_collection.find_one(
+                                        {"tenant_id": tenant_id, "phone": {"$regex": f"{last10}$"}},
+                                        {"_id": 1, "id": 1},
+                                    )
+                            if candidate:
+                                lead_id = candidate.get("id") or str(candidate.get("_id"))
+                                # Pause pending touchpoints (lead is engaging)
+                                pause_lead(tenant_id, lead_id)
+                                # Auto opt-in on first inbound
+                                leads_collection.update_one(
+                                    {"id": lead_id, "tenant_id": tenant_id},
+                                    {"$set": {
+                                        "opted_in": True,
+                                        "opted_in_at": datetime.now(timezone.utc).isoformat(),
+                                        "opted_in_source": "replied_first",
+                                    }},
+                                )
+                                activities_collection.insert_one({
+                                    "lead_id": lead_id, "tenant_id": tenant_id, "user_id": "whatsapp_webhook",
+                                    "activity_type": "whatsapp_received",
+                                    "subject": "WhatsApp reply received",
+                                    "body": body[:1000],
+                                    "outcome": None, "duration_minutes": None,
+                                    "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id"), "classification": cls.get("category"), "layer": cls.get("layer")},
+                                    "created_at": datetime.now(timezone.utc).isoformat(),
+                                })
+                        # Non-lead categories logged in classification_log; canned responses
+                        # are sent out-of-band by the operator from the Classification Log UI.
+                    else:
+                        print(f"[whatsapp] inbound from {from_phone} could not resolve tenant — skipped")
     except Exception as e:
         print(f"WhatsApp webhook processing error: {e}")
     return {"received": True}
@@ -4124,6 +4199,11 @@ async def _daily_call_plan_loop():
 async def _start_daily_call_plan_loop():
     asyncio.create_task(_daily_call_plan_loop())
     print("[DailyCallPlan] Background loop started (60s tick)")
+
+
+@app.on_event("startup")
+async def _start_touchpoint_engine_loop():
+    asyncio.create_task(engine_loop())
 
 
 
