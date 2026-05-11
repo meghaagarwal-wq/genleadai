@@ -108,3 +108,71 @@ def update_preferences(payload: NotificationPrefsPayload,
         upsert=True,
     )
     return {"ok": True, "preferences": _doc_or_default(tenant["id"])}
+
+
+# ─── Public helper used by notification emitters (daily brief, EOD, etc.) ────
+def _now_local_hour(offset_hours: float = 0.0) -> int:
+    from datetime import datetime, timezone, timedelta
+    local = datetime.now(timezone.utc) + timedelta(hours=offset_hours)
+    return local.hour
+
+
+def _within_quiet_hours(prefs: Dict[str, Any], offset_hours: float = 0.0) -> bool:
+    if not prefs.get("quiet_hours_enabled"):
+        return False
+    start = int(prefs.get("quiet_start_hour", 22))
+    end = int(prefs.get("quiet_end_hour", 8))
+    h = _now_local_hour(offset_hours)
+    if start == end:
+        return False
+    if start < end:
+        return start <= h < end
+    # window crosses midnight (e.g. 22→8)
+    return h >= start or h < end
+
+
+def should_notify_tenant(tenant_id: str, event_key: str, channel: str = "email",
+                         tz_offset_hours: float = 0.0) -> bool:
+    """Gate function used by background senders. Returns True if the tenant
+    has the (event, channel) toggle ON and we're not inside quiet hours
+    (email only — in-app ignores quiet hours).
+
+    Defaults to True if no prefs doc has been saved yet so legacy behaviour
+    is preserved for tenants who never touched the Notifications tab.
+    """
+    if not tenant_id or event_key not in EVENT_KEYS:
+        return True
+    doc = prefs_collection.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    if not doc:
+        return True  # defaults — emit
+    events = doc.get("events") or {}
+    pref = events.get(event_key)
+    if pref is None:
+        return True
+    if not bool(pref.get(channel, True)):
+        return False
+    if channel == "email" and _within_quiet_hours(doc, tz_offset_hours):
+        return False
+    return True
+
+
+def should_notify_email(recipient_email: str, event_key: str,
+                        tz_offset_hours: float = 0.0) -> bool:
+    """Resolve the recipient's tenant via the users collection, then delegate
+    to `should_notify_tenant`. Defaults to True on any resolution failure so
+    we never silently drop a legitimate notification due to lookup errors.
+    """
+    if not recipient_email:
+        return False
+    try:
+        users_col = db["users"]
+        memberships_col = db["tenant_memberships"]
+        user = users_col.find_one({"email": recipient_email.lower().strip()}, {"_id": 0, "id": 1})
+        if not user:
+            return True  # legacy / external recipient — let it through
+        mem = memberships_col.find_one({"user_id": user["id"]}, {"_id": 0, "tenant_id": 1})
+        if not mem:
+            return True
+        return should_notify_tenant(mem["tenant_id"], event_key, "email", tz_offset_hours)
+    except Exception:
+        return True

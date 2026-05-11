@@ -41,6 +41,12 @@ class WidgetConfig(BaseModel):
     require_consent: bool = True
     consent_text: str = "I agree to be contacted via WhatsApp/email regarding my enquiry."
     allowed_origins: List[str] = Field(default_factory=list)  # CORS allowlist; empty = any
+    # Click-to-WhatsApp lite widget (separate floating button, optional add-on).
+    wa_enabled: bool = False
+    wa_phone: str = ""          # E.164 format e.g. +919999999999
+    wa_text: str = "Hi! I saw your website and would like to know more."
+    wa_label: str = "Chat on WhatsApp"
+    wa_color: str = "#25D366"
 
 
 def _now() -> str:
@@ -56,6 +62,7 @@ async def get_config(tenant: dict = Depends(get_active_tenant)):
     return {
         "config": doc,
         "embed_snippet": _build_snippet(tenant["id"], backend_url),
+        "wa_embed_snippet": _build_wa_snippet(doc, tenant["id"], backend_url),
         "widget_js_url": f"{backend_url}/aria-widget.js" if backend_url else "/aria-widget.js",
     }
 
@@ -79,6 +86,31 @@ def _build_snippet(tenant_id: str, backend_url: str) -> str:
         f'  window.AriaWidget.endpoint = "{base}";\n'
         f'</script>\n'
         f'<script src="{base}/aria-widget.js" async defer></script>'
+    )
+
+
+def _build_wa_snippet(cfg: dict, tenant_id: str, backend_url: str) -> str:
+    """Embed snippet for the Click-to-WhatsApp floating button (aria-wa-widget.js).
+    Always returns the snippet — UI decides whether to display based on wa_enabled.
+    """
+    base = backend_url or "https://your-aria-backend.example.com"
+    phone = (cfg.get("wa_phone") or "+919999999999").strip()
+    text = (cfg.get("wa_text") or "Hi! I saw your website and would like to know more.").replace('"', '\\"')
+    label = (cfg.get("wa_label") or "Chat on WhatsApp").replace('"', '\\"')
+    color = cfg.get("wa_color") or "#25D366"
+    return (
+        f'<!-- Aria Click-to-WhatsApp Widget -->\n'
+        f'<script>\n'
+        f'  window.AriaWaWidget = {{\n'
+        f'    phone: "{phone}",\n'
+        f'    text: "{text}",\n'
+        f'    tenantId: "{tenant_id}",\n'
+        f'    endpoint: "{base}",\n'
+        f'    label: "{label}",\n'
+        f'    color: "{color}"\n'
+        f'  }};\n'
+        f'</script>\n'
+        f'<script src="{base}/aria-wa-widget.js" async defer></script>'
     )
 
 

@@ -4231,6 +4231,15 @@ async def _send_daily_call_plan(recipient_email: str, plan_size: int = 5, manual
     """Send the daily call plan email NOW. Returns metadata."""
     if not recipient_email:
         return {"sent": False, "error": "no_recipient"}
+    # Notification preference gate (skip when manually triggered).
+    if not manual:
+        try:
+            from routes.notifications import should_notify_email
+            if not should_notify_email(recipient_email, "daily_brief"):
+                print(f"[DailyCallPlan] Skipped {recipient_email} — daily_brief email muted or quiet hours")
+                return {"sent": False, "error": "muted_by_pref"}
+        except Exception as e:
+            print(f"[DailyCallPlan] pref-gate error (allowing send): {e}")
     plan = _compute_call_priority(limit=plan_size)
     priority = plan.get("priority", [])
     founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "founder"
@@ -4579,6 +4588,15 @@ def _render_eod_wrap_html(wrap: dict, founder_name: str) -> str:
 async def _send_eod_wrap(recipient_email: str, tz_off_hours: float = 0.0, manual: bool = False) -> dict:
     if not recipient_email:
         return {"sent": False, "error": "no_recipient"}
+    # Notification preference gate (skip when manually triggered).
+    if not manual:
+        try:
+            from routes.notifications import should_notify_email
+            if not should_notify_email(recipient_email, "weekly_recap", tz_off_hours):
+                print(f"[EODWrap] Skipped {recipient_email} — weekly_recap email muted or quiet hours")
+                return {"sent": False, "error": "muted_by_pref"}
+        except Exception as e:
+            print(f"[EODWrap] pref-gate error (allowing send): {e}")
     wrap = _compute_eod_wrap(tz_off_hours=tz_off_hours)
     founder_name = (aria_settings_collection.find_one({}) or {}).get("founder_name") or "founder"
     html = _render_eod_wrap_html(wrap, founder_name)

@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../config/api';
 import { toast } from 'sonner';
-import { Copy, Globe, CheckCircle, FloppyDisk, Eye } from '@phosphor-icons/react';
+import { Copy, Globe, CheckCircle, FloppyDisk, Eye, WhatsappLogo } from '@phosphor-icons/react';
 
 const FIELD_LABELS = {
   first_name: 'First name',
@@ -20,12 +20,14 @@ const FIELD_LABELS = {
 const LeadCapture = () => {
   const [config, setConfig] = useState(null);
   const [snippet, setSnippet] = useState('');
+  const [waSnippet, setWaSnippet] = useState('');
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [waCopied, setWaCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   const load = async () => {
-    try { const r = await api.get('/api/lead-capture/config'); setConfig(r.data.config); setSnippet(r.data.embed_snippet); }
+    try { const r = await api.get('/api/lead-capture/config'); setConfig(r.data.config); setSnippet(r.data.embed_snippet); setWaSnippet(r.data.wa_embed_snippet || ''); }
     catch (e) { toast.error('Failed to load widget config'); }
   };
   useEffect(() => { load(); }, []);
@@ -37,6 +39,8 @@ const LeadCapture = () => {
       delete payload.tenant_id; delete payload.updated_at;
       const r = await api.post('/api/lead-capture/config', payload);
       setConfig(r.data.config);
+      // Refetch to get the regenerated WA snippet that reflects the latest WA fields.
+      load();
       toast.success('Widget settings saved');
     } catch (e) { toast.error(e.response?.data?.detail || 'Save failed'); }
     finally { setSaving(false); }
@@ -44,6 +48,11 @@ const LeadCapture = () => {
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(snippet); setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success('Embed code copied'); }
+    catch { toast.error('Could not copy'); }
+  };
+
+  const copyWa = async () => {
+    try { await navigator.clipboard.writeText(waSnippet); setWaCopied(true); setTimeout(() => setWaCopied(false), 2000); toast.success('WhatsApp snippet copied'); }
     catch { toast.error('Could not copy'); }
   };
 
@@ -196,6 +205,93 @@ const LeadCapture = () => {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── Click-to-WhatsApp lite widget ─────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-[#DCFCE7] to-[#FFFFFF] border border-[#16A34A]/30 rounded-2xl p-5 mt-2" data-testid="wa-widget-header">
+        <div className="flex items-center gap-2 mb-1">
+          <WhatsappLogo size={18} weight="fill" className="text-[#16A34A]" />
+          <h2 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Click-to-WhatsApp Button</h2>
+        </div>
+        <p className="text-xs text-[#5A4A7A]">A second, lighter widget — a floating green WhatsApp button that opens wa.me with a pre-filled message. Perfect for visitors who want a one-tap conversation instead of filling a form.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5 space-y-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="wa-widget-config">
+          <div className="flex items-center gap-3">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">Enabled</label>
+            <button onClick={() => setConfig({ ...config, wa_enabled: !config.wa_enabled })} data-testid="wa-enabled-toggle"
+              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${config.wa_enabled ? 'bg-[#16A34A]' : 'bg-[#CBD5E1]'}`}>
+              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${config.wa_enabled ? 'translate-x-5' : 'translate-x-1'}`}></span>
+            </button>
+            <span className="text-xs text-[#5A4A7A]">{config.wa_enabled ? 'Live on your site' : 'Disabled'}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">WhatsApp number</label>
+              <input value={config.wa_phone || ''} onChange={(e) => setConfig({ ...config, wa_phone: e.target.value })} data-testid="wa-phone"
+                placeholder="+919999999999"
+                className="w-full bg-white border border-[#E8E0F5] px-3 py-2 rounded-md text-sm mt-1 font-mono" />
+              <p className="text-[10px] text-[#9B8AB0] mt-1">E.164 format with country code.</p>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">Button label</label>
+              <input value={config.wa_label || ''} onChange={(e) => setConfig({ ...config, wa_label: e.target.value })} data-testid="wa-label"
+                placeholder="Chat on WhatsApp"
+                className="w-full bg-white border border-[#E8E0F5] px-3 py-2 rounded-md text-sm mt-1" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">Pre-filled message</label>
+            <textarea value={config.wa_text || ''} onChange={(e) => setConfig({ ...config, wa_text: e.target.value })} data-testid="wa-text"
+              rows={2}
+              placeholder="Hi! I saw your website and want to know more."
+              className="w-full bg-white border border-[#E8E0F5] px-3 py-2 rounded-md text-sm mt-1 resize-none" />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">Button colour</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="color" value={config.wa_color || '#25D366'} onChange={(e) => setConfig({ ...config, wa_color: e.target.value })} data-testid="wa-color" className="w-12 h-9 rounded cursor-pointer" />
+              <input value={config.wa_color || '#25D366'} onChange={(e) => setConfig({ ...config, wa_color: e.target.value })} className="flex-1 bg-white border border-[#E8E0F5] px-3 py-2 rounded-md text-sm font-mono" />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end pt-3">
+            <button onClick={save} disabled={saving} data-testid="wa-save"
+              className="inline-flex items-center gap-1.5 px-4 py-2 btn-gradient rounded-lg text-xs font-bold disabled:opacity-40"
+              style={{ fontFamily: 'Plus Jakarta Sans' }}>
+              <FloppyDisk size={12} weight="bold" /> {saving ? 'Saving…' : 'Save settings'}
+            </button>
+          </div>
+        </div>
+
+        {/* WA embed + live preview */}
+        <div className="space-y-4">
+          <div className="bg-[#1A0A2E] rounded-2xl p-5 text-white" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="wa-embed-snippet-card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-extrabold inline-flex items-center gap-1.5" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                <WhatsappLogo size={14} weight="fill" className="text-[#25D366]" /> WhatsApp embed code
+              </h3>
+              <button onClick={copyWa} data-testid="wa-embed-copy"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#16A34A] rounded text-xs font-bold hover:bg-[#15803D]">
+                {waCopied ? <><CheckCircle size={11} weight="fill" /> Copied</> : <><Copy size={11} /> Copy</>}
+              </button>
+            </div>
+            <pre className="text-[11px] text-[#9BF1C5] font-mono whitespace-pre-wrap break-all overflow-y-auto max-h-56 leading-relaxed">{waSnippet || 'Save settings to generate the snippet.'}</pre>
+            <p className="text-[10px] text-[#9B8AB0] mt-3">Paste this snippet inside the <code className="text-[#25D366]">{'<head>'}</code> of every page where you want the floating WhatsApp button. Works alongside the contact form widget above.</p>
+          </div>
+
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5 relative h-44" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="wa-preview">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9B8AB0]">Preview</span>
+            <p className="text-xs text-[#5A4A7A] mt-1">This is roughly how the floating button will appear on your site (bottom-right corner).</p>
+            <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 px-4 py-3 rounded-full text-white text-xs font-extrabold shadow-lg" style={{ background: config.wa_color || '#25D366', boxShadow: `0 8px 24px ${(config.wa_color || '#25D366')}55` }} data-testid="wa-preview-button">
+              <WhatsappLogo size={16} weight="fill" /> {config.wa_label || 'Chat on WhatsApp'}
+            </div>
+          </div>
         </div>
       </div>
     </div>
