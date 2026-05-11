@@ -6,6 +6,7 @@ import AriaReadPanel from '../components/AriaReadPanel';
 import LeadJourneyTab from '../components/LeadJourneyTab';
 import LeadOptInBanner from '../components/LeadOptInBanner';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
+import CrmSyncBadge from '../components/CrmSyncBadge';
 import {
   ArrowLeft,
   Phone,
@@ -229,7 +230,10 @@ const LeadDetail = () => {
                 ) : (
                   <h2 className="text-2xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{lead.first_name} {lead.last_name}</h2>
                 )}
-                <span className={`inline-block mt-2 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span>
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className={`inline-block px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span>
+                  <CrmSyncBadge leadId={lead.id || id} />
+                </div>
               </div>
               <button onClick={() => editing ? handleUpdateLead() : setEditing(true)} className="text-sm text-[#7C35DC] hover:text-[#6B28C8] font-semibold transition-colors" data-testid="edit-lead-btn">{editing ? 'Save' : 'Edit'}</button>
             </div>

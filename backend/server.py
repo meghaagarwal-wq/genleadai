@@ -53,6 +53,7 @@ from routes.contacts import router as contacts_router
 from routes.classification import router as classification_router, classify_inbound
 from routes.aria_confidence import router as aria_confidence_router
 from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
+from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
 
 load_dotenv()
 
@@ -88,6 +89,7 @@ app.include_router(classification_router)
 app.include_router(aria_confidence_router)
 app.include_router(admin_revenue_router)
 app.include_router(admin_invoice_router)
+app.include_router(crm_sync_router)
 register_pietential_startup(app)
 
 
@@ -216,6 +218,13 @@ async def create_lead(lead: LeadCreate, current_user: dict = Depends(get_current
             instantiate_for_lead(tenant_id, lead_doc)
     except Exception as e:
         print(f"[lead-create] touchpoint instantiate failed: {e}")
+
+    # CRM sync: fire lead.created
+    try:
+        if lead_doc.get("tenant_id"):
+            crm_fire_event(lead_doc["tenant_id"], lead_doc, "lead.created", {"source": "manual"})
+    except Exception as e:
+        print(f"[lead-create] crm fire failed: {e}")
 
     return lead_doc
 
@@ -467,6 +476,22 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
                 cancel_lead(current_user.get("tenant_id"), lead_engine_id, reason=f"stage:{new_status}")
             except Exception as _ce:
                 print(f"[lead-update] touchpoint cancel failed: {_ce}")
+
+        # CRM sync: fire stage_changed / closed_won / closed_lost events
+        if "status" in update_data:
+            try:
+                lead_after = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
+                tenant_id = lead_after.get("tenant_id") or current_user.get("tenant_id")
+                lead_after["id"] = lead_after.get("id") or str(lead_after.get("_id"))
+                new_stage = (update_data["status"] or "").lower()
+                if new_stage in ("closed_won", "won"):
+                    crm_fire_event(tenant_id, lead_after, "lead.closed_won", {"new_stage": update_data["status"]})
+                elif new_stage in ("closed_lost", "lost"):
+                    crm_fire_event(tenant_id, lead_after, "lead.closed_lost", {"new_stage": update_data["status"]})
+                else:
+                    crm_fire_event(tenant_id, lead_after, "lead.stage_changed", {"new_stage": update_data["status"]})
+            except Exception as _ce:
+                print(f"[lead-update] crm fire failed: {_ce}")
 
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
         lead_serialized = serialize_doc(lead)
@@ -905,6 +930,22 @@ async def takeover_from_aria(lead_id: str, current_user: dict = Depends(get_curr
         }}
     )
     save_aria_message(lead_id, "system", "Human agent has taken over this conversation")
+    # CRM sync — fire takeover + paused events
+    try:
+        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
+        tenant_id = lead_doc.get("tenant_id")
+        if tenant_id:
+            lead_doc["id"] = str(lead_doc.get("_id"))
+            crm_fire_event(tenant_id, lead_doc, "conversation.takeover", {
+                "rep_name": current_user.get("full_name") or current_user.get("email"),
+                "user_email": current_user.get("email"),
+            })
+            crm_fire_event(tenant_id, lead_doc, "aria.paused", {
+                "rep_name": current_user.get("full_name") or current_user.get("email"),
+                "user_email": current_user.get("email"),
+            })
+    except Exception:
+        pass
     return {"message": "You've taken over this conversation from ARIA"}
 
 @app.post("/api/aria/resume/{lead_id}")
@@ -919,6 +960,17 @@ async def resume_aria(lead_id: str, current_user: dict = Depends(get_current_use
         }}
     )
     save_aria_message(lead_id, "system", "ARIA has been resumed for this conversation")
+    try:
+        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
+        tenant_id = lead_doc.get("tenant_id")
+        if tenant_id:
+            lead_doc["id"] = str(lead_doc.get("_id"))
+            crm_fire_event(tenant_id, lead_doc, "aria.resumed", {
+                "rep_name": current_user.get("full_name") or current_user.get("email"),
+                "user_email": current_user.get("email"),
+            })
+    except Exception:
+        pass
     return {"message": "ARIA has been resumed for this lead"}
 
 # ─── ARIA Settings Endpoints ───
@@ -4215,6 +4267,11 @@ async def _start_daily_call_plan_loop():
 @app.on_event("startup")
 async def _start_touchpoint_engine_loop():
     asyncio.create_task(engine_loop())
+
+
+@app.on_event("startup")
+async def _start_crm_sync_loop():
+    asyncio.create_task(crm_sync_loop())
 
 
 
