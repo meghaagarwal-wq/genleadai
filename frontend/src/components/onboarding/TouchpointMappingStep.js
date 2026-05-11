@@ -117,17 +117,30 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
   const resetToRecommended = () => {
     if (!selectedTemplate) return;
     setTouchpoints(JSON.parse(JSON.stringify(selectedTemplate.touchpoints || [])));
-    setEditing(false);
     toast.success('Restored to recommended journey');
   };
+  const cancelEdits = () => {
+    // Revert any in-flight edits so a subsequent Accept doesn't smuggle them
+    // through with is_customised=false.
+    if (selectedTemplate) {
+      setTouchpoints(JSON.parse(JSON.stringify(selectedTemplate.touchpoints || [])));
+    }
+    setEditing(false);
+  };
+
+  // Compute is_customised from a structural diff against the recommended
+  // template — independent of editor open/close state.
+  const isCustomisedNow = useMemo(() => {
+    if (!selectedTemplate) return false;
+    return JSON.stringify(touchpoints) !== JSON.stringify(selectedTemplate.touchpoints || []);
+  }, [touchpoints, selectedTemplate]);
 
   const save = async () => {
     setSaving(true);
     try {
-      const isCustomised = editing && JSON.stringify(touchpoints) !== JSON.stringify(selectedTemplate?.touchpoints || []);
       const payload = {
         template_id: selectedId,
-        is_customised: isCustomised,
+        is_customised: isCustomisedNow,
         touchpoints: touchpoints.map((t, i) => ({
           index: i,
           day: Number(t.day) || 0,
@@ -140,7 +153,7 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
         })),
       };
       await api.post('/api/touchpoints/map', payload);
-      toast.success(isCustomised ? 'Custom journey saved' : 'Journey activated');
+      toast.success(isCustomisedNow ? 'Custom journey saved' : 'Journey activated');
       onSaved?.();
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -303,7 +316,7 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
               <CheckCircle size={14} weight="fill" />
               {saving ? 'Saving…' : 'Save my custom journey'}
             </button>
-            <button type="button" onClick={() => setEditing(false)} data-testid="ob-touchpoint-cancel-edit"
+            <button type="button" onClick={cancelEdits} data-testid="ob-touchpoint-cancel-edit"
               className="px-4 py-2.5 rounded-lg text-sm font-bold border border-[#E8E0F5] text-[#5A4A7A] bg-white hover:border-[#7C35DC]/40">
               Cancel
             </button>

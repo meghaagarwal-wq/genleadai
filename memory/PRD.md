@@ -63,6 +63,48 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 38 — Touchpoint Mapping Layer (Phase A · auto-template + Step 3B UI) (Feb 2026)
+
+**Backend** (`/app/backend/routes/touchpoints.py` + `/app/backend/touchpoint_templates_seed.py`):
+- 8 universal lead-journey templates seeded idempotently on import: `tpl_fast_conversion`, `tpl_warm_nurture`, `tpl_considered_sale`, `tpl_enterprise_track`, `tpl_urgency_led`, `tpl_high_intent_qualifier`, `tpl_abandoned_interest`, `tpl_standard`. Each touchpoint = `{index, day, hour, channel, message_type, aria_role, trigger, message_template}`. Channels: WhatsApp / Email / Call reminder / LinkedIn nudge. Roles: autonomous / alert_human.
+- Auto-selection (`select_template`) priority: **industry override** (Events, Real Estate, E-commerce+B2C) → **market + cycle** (primary) → **deal_size** (secondary) → fallback Standard.
+- New endpoints (all owner/admin gated where mutating):
+  - `GET /api/touchpoints/templates` — read-only library (8 templates).
+  - `GET /api/touchpoints/templates/{id}` — single template.
+  - `GET /api/touchpoints/auto-select` — recommended template for the active tenant's onboarding answers, with `selection.reason`.
+  - `GET /api/touchpoints/map` — active tenant's saved map (or `{map: null}`).
+  - `POST /api/touchpoints/map` — save/replace. Validates channel/role/type, re-indexes 0..n-1, caps at 30 touchpoints. Used by both "Looks good — use this" and "Save my custom journey".
+  - `POST /api/touchpoints/map/reset` — overwrites map with the auto-selected template; `is_customised=false`.
+  - `DELETE /api/touchpoints/map` — clears the map (Aria falls back to no journey).
+- Collections: `touchpoint_templates` (global), `workspace_touchpoint_maps` (tenant-scoped via `tenant_id`).
+
+**Frontend**:
+- New `TouchpointMappingStep` component (`/app/frontend/src/components/onboarding/TouchpointMappingStep.js`).
+- `OnboardingWizard` now has **6 steps**: Business → Aria's Persona → Sales → **Lead Journey** → WhatsApp → Team.
+- Step 4 (Lead Journey) auto-loads with the recommended template based on in-memory form state (no need to save onboarding first):
+  - Header: "Aria has mapped your lead journey."
+  - Gold-bordered badge: `📋 Template: <name> · N touchpoints · D-day journey`.
+  - Read-only timeline: vertical scrollable card list. Each card shows channel pill (WhatsApp green / Email blue / Call orange / LinkedIn purple), day/hour label, message-type label, role pill (`Aria handles` blue / `Alert you` gold), 2-line message preview, trigger label.
+  - Two primary CTAs: **Looks good — use this** (saves auto-template, `is_customised=false`) + **Customise my journey** (opens editor).
+  - **Skip for now** ghost CTA advances to WhatsApp without saving a map.
+- Customise editor: per-touchpoint row with up/down reorder, day+hour inputs, channel/type/role selects, message_template textarea, remove button. Bottom of panel: **Add touchpoint**, **Reset to recommended**, **Cancel** (reverts edits — fixed post-iter29 RCA), **Save my custom journey** (stamps `is_customised=true`).
+- `is_customised` flag computed via structural diff against the recommended template (not just `editing` state) — survives Cancel-revert flow correctly.
+- Wizard nav hides the generic Next button on Step 4 (component handles its own CTAs); shows "Choose to continue" / "Saved · advancing…" label instead.
+
+**Verified (testing_agent_v3 iter29: backend 21/21 pytest pass, frontend Playwright 100%)**:
+- Auto-select correctness across 6 industry+market+cycle scenarios.
+- POST validation rejects invalid channels/roles/types, empty templates, >30 touchpoints.
+- Role gating (sales_rep gets 403), cross-tenant isolation, reset/delete flows.
+- E2E onboarding flow: fresh signup → 6-step wizard → Step 4 auto-shows Considered Sale → accept → advances to WhatsApp → backend GET returns saved map.
+- Cancel-revert fix verified: 8 cards → customise → add row → cancel → 8 cards again → accept → `Journey activated` (not `Custom journey saved`).
+
+**Phase B (deferred, next session):**
+- `lead_touchpoint_log` instantiation on lead create.
+- Async background loop firing due touchpoints, Claude runtime message generation via Emergent LLM key, send via 360dialog/Meta WhatsApp + Resend email.
+- Lead drawer "Journey" tab — status icons + "Send now" override + "Pause Aria for this lead" toggle.
+- Reply-detection pause + Closed-Won/Lost cancellation logic.
+- Campaign-level touchpoint map override.
+
 ## Iter 37 — Real invite emails (Resend) + 360dialog WhatsApp as 2nd provider (Feb 2026)
 
 **Backend** (`/app/backend/routes/tenants.py` + new `/app/backend/whatsapp_dispatch.py`):
