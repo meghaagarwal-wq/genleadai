@@ -162,6 +162,9 @@ const InviteAccept = () => {
         <p className="text-[11px] text-center text-[#9B8AB0] mt-5">
           By joining, you agree to our Terms and Privacy Policy.
         </p>
+        <p className="text-[10px] text-center text-[#A0A8C0] mt-3 tracking-[0.18em] uppercase font-bold" data-testid="genleadai-footer">
+          Powered by Aria · GenLeadAI
+        </p>
       </div>
     </Center>
   );

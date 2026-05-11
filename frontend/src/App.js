@@ -23,6 +23,9 @@ import SleepingLeads from './pages/SleepingLeads';
 import AuditLog from './pages/AuditLog';
 import OnboardingWizard from './pages/OnboardingWizard';
 import Billing from './pages/Billing';
+import Troubleshooting from './pages/Troubleshooting';
+import Tutorials from './pages/Tutorials';
+import Limits from './pages/Limits';
 import FollowUps from './pages/FollowUps';
 import AIAssistant from './pages/AIAssistant';
 import Integrations from './pages/Integrations';
@@ -205,6 +208,9 @@ function App() {
                         <Route path="/audit-log" element={<AuditLog />} />
                         <Route path="/billing" element={<Billing />} />
                         <Route path="/settings" element={<Settings />} />
+                        <Route path="/troubleshooting" element={<Troubleshooting />} />
+                        <Route path="/tutorials" element={<Tutorials />} />
+                        <Route path="/limits" element={<Limits />} />
                         {/* AI Sales Agent additive routes */}
                         <Route path="/aria-agent/train" element={<TrainAria />} />
                         <Route path="/aria-agent/playbooks" element={<Playbooks />} />

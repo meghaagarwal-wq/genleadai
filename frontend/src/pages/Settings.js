@@ -830,6 +830,17 @@ const Settings = () => {
           <DemoVideoSection />
           <WhatsAppProviderSection />
 
+          <div className="bg-[#141414] border border-[#262626] rounded-lg p-4 flex items-center justify-between" data-testid="limits-link">
+            <div>
+              <div className="text-sm font-semibold text-white">Plan limits & scope</div>
+              <div className="text-xs text-[#737373]">Active leads, team seats, what Aria does and doesn't.</div>
+            </div>
+            <a href="/limits" data-testid="settings-view-limits"
+              className="px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-[0.14em] bg-[#0055FF] text-white hover:bg-[#0044CC]">
+              View plan limits & scope →
+            </a>
+          </div>
+
           <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="api-keys-section">
             <h3 className="text-lg font-semibold text-white mb-4">API Configuration</h3>
             <div className="space-y-3">

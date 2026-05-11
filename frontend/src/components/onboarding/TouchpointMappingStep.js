@@ -58,6 +58,8 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
   const [touchpoints, setTouchpoints] = useState([]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previews, setPreviews] = useState(null); // { index: rendered_message }
 
   // Load templates once on mount, then auto-select using form state
   useEffect(() => {
@@ -78,6 +80,36 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-trigger a Claude preview on first mount once we have a template + product description
+  useEffect(() => {
+    if (!selectedId || previews || previewing) return;
+    if (!(form.sales?.product_description || '').trim()) return;
+    runPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const runPreview = async () => {
+    if (!selectedId) return;
+    setPreviewing(true);
+    try {
+      const r = await api.post('/api/touchpoints/preview', {
+        template_id: selectedId,
+        business: form.business,
+        persona: form.persona,
+        sales: form.sales,
+        limit: 2,
+      });
+      const map = {};
+      for (const it of r.data?.items || []) map[it.index] = it;
+      setPreviews(map);
+    } catch {
+      // Silent fail — heuristic preview still shows base template copy
+      setPreviews({});
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   const selectedTemplate = useMemo(
     () => allTemplates.find((t) => t.id === selectedId),
@@ -191,33 +223,63 @@ const TouchpointMappingStep = ({ form, onSaved, onSkip }) => {
       )}
 
       {!editing && (
-        <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1" data-testid="ob-touchpoint-timeline">
-          {touchpoints.map((t, idx) => {
-            const meta = CHANNEL_META[t.channel] || CHANNEL_META.whatsapp;
-            const Icon = meta.icon;
-            return (
-              <div key={idx} className="bg-white border border-[#E8E0F5] rounded-lg p-3 flex items-start gap-3 hover:border-[#7C35DC]/40 transition" data-testid={`ob-touchpoint-card-${idx}`}>
-                <div className="w-9 h-9 rounded-md flex-shrink-0 flex items-center justify-center" style={{ background: `${meta.color}1A`, color: meta.color }}>
-                  <Icon size={16} weight="fill" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center flex-wrap gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7C35DC]">{dayLabel(t)}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5A4A7A]">· {meta.label}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5A4A7A]">· {TYPE_LABELS[t.message_type] || t.message_type}</span>
-                    {t.aria_role === 'alert_human' ? (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em]" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>Alert you</span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em]" style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #3B82F6' }}>Aria handles</span>
-                    )}
+        <>
+          {/* AI Preview banner */}
+          {(previewing || previews) && (
+            <div className="mb-3 bg-gradient-to-r from-[#F4F0FF] to-[#FEF3C7] border border-[#7C35DC]/30 rounded-lg px-3 py-2 flex items-center gap-2" data-testid="ob-touchpoint-preview-banner">
+              <Sparkle size={12} weight="fill" className="text-[#7C35DC]" />
+              <span className="text-[11px] font-bold text-[#1A0A2E]">
+                {previewing
+                  ? 'Aria is drafting sample messages for your product…'
+                  : Object.values(previews || {}).some((p) => p.ai_powered)
+                    ? 'Live preview: first 2 messages drafted by Aria using your product description'
+                    : 'Showing template defaults (add a richer product description in Step 3 to unlock live AI preview)'}
+              </span>
+              {!previewing && (
+                <button onClick={runPreview} data-testid="ob-touchpoint-preview-refresh" className="ml-auto text-[10px] font-bold uppercase tracking-[0.14em] text-[#7C35DC] hover:underline">
+                  Regenerate
+                </button>
+              )}
+            </div>
+          )}
+          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1" data-testid="ob-touchpoint-timeline">
+            {touchpoints.map((t, idx) => {
+              const meta = CHANNEL_META[t.channel] || CHANNEL_META.whatsapp;
+              const Icon = meta.icon;
+              const preview = previews?.[idx];
+              const displayMsg = preview?.rendered_message || t.message_template;
+              const isAiPreview = !!preview?.ai_powered;
+              return (
+                <div key={idx} className={`bg-white border rounded-lg p-3 flex items-start gap-3 transition ${isAiPreview ? 'border-[#7C35DC]/60 ring-1 ring-[#7C35DC]/15' : 'border-[#E8E0F5] hover:border-[#7C35DC]/40'}`} data-testid={`ob-touchpoint-card-${idx}`}>
+                  <div className="w-9 h-9 rounded-md flex-shrink-0 flex items-center justify-center" style={{ background: `${meta.color}1A`, color: meta.color }}>
+                    <Icon size={16} weight="fill" />
                   </div>
-                  <div className="text-xs text-[#1A0A2E] mt-1 line-clamp-2">{t.message_template}</div>
-                  {t.trigger && <div className="text-[10px] text-[#9B8AB0] mt-0.5">Trigger: {t.trigger}</div>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center flex-wrap gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7C35DC]">{dayLabel(t)}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5A4A7A]">· {meta.label}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5A4A7A]">· {TYPE_LABELS[t.message_type] || t.message_type}</span>
+                      {t.aria_role === 'alert_human' ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em]" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #F59E0B' }}>Alert you</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em]" style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #3B82F6' }}>Aria handles</span>
+                      )}
+                      {isAiPreview && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-[0.1em] text-white" style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }} data-testid={`ob-touchpoint-ai-badge-${idx}`}>
+                          <Sparkle size={8} weight="fill" /> AI preview
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-xs mt-1 ${isAiPreview ? 'text-[#1A0A2E] font-medium' : 'text-[#1A0A2E] line-clamp-2'}`} data-testid={`ob-touchpoint-msg-${idx}`}>
+                      {displayMsg}
+                    </div>
+                    {t.trigger && <div className="text-[10px] text-[#9B8AB0] mt-0.5">Trigger: {t.trigger}</div>}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {editing && (

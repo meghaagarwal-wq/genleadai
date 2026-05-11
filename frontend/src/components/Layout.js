@@ -9,12 +9,13 @@ import {
   SignOut, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
   GraduationCap, BookOpen, MapTrifold, FileText, ShieldCheck, ArrowClockwise, Brain,
-  Stack, CalendarCheck,
+  Stack, CalendarCheck, Wrench,
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
+import TrialBanner from './TrialBanner';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
@@ -150,6 +151,8 @@ const Layout = ({ children }) => {
     { icon: Plug, label: 'Sales Engagement', path: '/sales-engagement' },
     { icon: CreditCard, label: 'Plan & Billing', path: '/billing' },
     { icon: UsersThree, label: 'Settings', path: '/settings' },
+    { icon: Wrench, label: 'Troubleshooting', path: '/troubleshooting' },
+    { icon: GraduationCap, label: 'Tutorials', path: '/tutorials' },
   ];
 
   const ariaAgentItems = [
@@ -349,7 +352,7 @@ const Layout = ({ children }) => {
             <NotificationsBell />
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto"><TrialBanner /><div className="p-4 md:p-6">{children}</div></main>
       </div>
       <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
       <AriaToastWatcher />

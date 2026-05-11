@@ -99,6 +99,11 @@ const Login = () => {
             <p className="text-xs text-[#5A4A7A] text-center font-mono">admin@demo.com / Demo1234!</p>
           </div>
         </div>
+
+        {/* GenLeadAI footer wordmark */}
+        <p className="text-[10px] text-center text-[#A0A8C0] mt-6 tracking-[0.18em] uppercase font-bold" data-testid="genleadai-footer">
+          Powered by Aria · GenLeadAI
+        </p>
       </div>
     </div>
   );
