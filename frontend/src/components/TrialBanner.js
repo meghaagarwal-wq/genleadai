@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../config/api';
+import { useAuth } from '../context/AuthContext';
 import { Clock, ArrowRight, X } from '@phosphor-icons/react';
 
 /**
@@ -8,18 +9,34 @@ import { Clock, ArrowRight, X } from '@phosphor-icons/react';
  *
  * - On active trial: gold banner "Your free trial ends in X days. Choose a plan."
  * - On expired trial w/ no plan: full-screen paywall (not dismissible).
+ *
+ * Retries on auth user change so a fresh signup picks up the trial state
+ * once localStorage.active_tenant has been hydrated by the auth flow.
  */
 const TrialBanner = () => {
+  const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
     let alive = true;
-    api.get('/api/plans/status')
-      .then((r) => { if (alive) setStatus(r.data); })
-      .catch(() => {});
+    const fetchStatus = (attempt = 0) => {
+      api.get('/api/plans/status')
+        .then((r) => { if (alive) setStatus(r.data); })
+        .catch((err) => {
+          // Retry once if the first call fires before localStorage.active_tenant is hydrated.
+          if (attempt === 0) {
+            console.warn('[TrialBanner] status fetch failed, retrying once', err?.response?.status);
+            setTimeout(() => fetchStatus(1), 800);
+          } else {
+            console.warn('[TrialBanner] giving up after retry', err?.response?.status);
+          }
+        });
+    };
+    fetchStatus();
     return () => { alive = false; };
-  }, []);
+  }, [user]);
 
   if (!status) return null;
   if (status.plan !== 'trial' || dismissed) return null;

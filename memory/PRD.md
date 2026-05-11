@@ -63,6 +63,41 @@ ARIA is **not** a CRM, **not** a chatbot, **not** an automation dashboard. It's 
 - Wire actual Claude completions into Founder Brief instead of heuristic template
 - "Take over manually" / "Let ARIA reply" actions actually mutating conversation state
 
+## Iter 39 — Session A: Branding · Pricing overhaul · Trial · Tutorials · Troubleshooting · Limits · Claude preview (Feb 2026)
+
+**Backend** (`/app/backend/routes/billing_plans.py` + `/app/backend/routes/touchpoint_preview.py`):
+- **New plans catalog**: DIY (₹4,999) · DWY (₹12,999) · DFY (custom · min ₹29,999). Stored server-side, returned by `GET /api/plans/catalog`.
+- **Trial logic**: `ensure_trial_on_tenant()` idempotently stamps `trial_started_at` + `trial_ends_at` (now + 14d) + `plan='trial'` on first `GET /api/plans/status` for any tenant missing those fields. Preserves legacy `pro`/`starter`/etc. plans untouched.
+- **Plan-state endpoints**:
+  - `GET /api/plans/status` — returns plan + trial_days_left + on_trial + trial_expired + locked + usage counters (active_leads, team_seats).
+  - `POST /api/plans/select` — owner/admin sets `plan` field (DIY/DWY/DFY). Pure metadata switch — no card charge (Stripe still deferred).
+  - `POST /api/plans/contact-sales` — logs a DFY inquiry to `dfy_inquiries` collection.
+- **Touchpoint preview** (`POST /api/touchpoints/preview`): given template_id + in-progress business/persona/sales form state, calls Claude (Emergent Universal Key, claude-sonnet-4-5) to rewrite the first N (default 2) touchpoint templates into founder-specific copy. Each item has `ai_powered: bool` so UI can fall back gracefully when Claude fails. Heuristic token-substitution fallback preserved.
+
+**Frontend**:
+- **Auth pages** — Login, Signup, Invite Accept now carry the GenLeadAI wordmark/tagline (`Powered by Aria · GenLeadAI`, data-testid `genleadai-footer`). Platform "Made with Emergent" badge is platform-level and OUT OF MAIN AGENT SCOPE — user can disable via Emergent settings/plan upgrade (support agent flagged).
+- **Billing rewrite** (`/app/frontend/src/pages/Billing.js`) — 3 cards side-by-side: DIY (blue border) · DWY (gold border + "Most Popular") · DFY (gradient border + "Managed"). Each card has feature/excluded lists with check/x icons, CTA buttons (Start 14-Day Trial / Talk to Us), and the trial disclaimer at the bottom.
+- **TrialBanner** (`/app/frontend/src/components/TrialBanner.js`) — gold top banner for active trial showing days-left + Upgrade-now CTA + dismiss. Full-screen paywall when trial expired. Auth-context-driven retry so it picks up state after axios interceptor is hydrated (post-iter30 fix).
+- **New pages** + sidebar entries:
+  - `/troubleshooting` — 6-item accordion of common issues + contact section (email + Calendly).
+  - `/tutorials` — 15 tutorial cards across 5 sections, guide cards expand inline, video cards open a Loom-placeholder modal.
+  - `/limits` — Current plan summary with usage progress bars (gold @80%, red @95%), In-scope/Out-of-scope lists, SLA-by-plan table.
+- **Settings → Workspace** — new "Plan limits & scope" link to `/limits`.
+- **Onboarding Step 4** — new live Claude preview banner above the timeline: "Live preview: first 2 messages drafted by Aria using your product description". First two touchpoint cards get a gradient "AI PREVIEW" badge and ring; rendered_message shows the AI-generated copy referencing the founder's actual product (verified with a Pixelflow / Figma-to-React product). Regenerate button re-runs Claude on demand. Auto-fires on mount when product_description is non-empty.
+
+**Verified (testing_agent_v3 iter30 + post-fix smoke screenshot)**:
+- Backend 12/12 pytest pass (plans catalog/status/select/contact + touchpoint preview + Claude live call + role gating + cross-tenant isolation + trial idempotency).
+- Frontend Playwright: all 5 new pages + 15 tutorial cards + 6 accordion rows + DIY/DWY/DFY cards + GenLeadAI wordmark on all 3 auth pages + sidebar entries.
+- TrialBanner HIGH issue (didn't render for fresh signups) — RESOLVED by gating the fetch on `useAuth().user` change so the retry waits until axios has the X-Tenant-Id header. Re-tested: banner now correctly shows "Your free trial ends in 14 days." for a brand-new signup after onboarding completes.
+- Claude live preview verified end-to-end: messages reference specific product details (e.g. "Are you looking to speed up your design-to-development workflow, or is there a specific pain point with your current Figma-to-React process?"). Token format `{{first_name}}` preserved correctly after explicit prompt instruction.
+
+**Deferred to Session B**:
+- Touchpoint execution engine (lead_touchpoint_log + scheduler + Claude runtime + Journey tab).
+- `/admin/health` page with live service pings + Pre-Launch Checklist.
+
+**Deferred to Session C** (depends on B):
+- Graceful degradation (Claude timeout fallback / 360dialog retry / DB unreachable buffer) + `failed_message_log` collection.
+
 ## Iter 38 — Touchpoint Mapping Layer (Phase A · auto-template + Step 3B UI) (Feb 2026)
 
 **Backend** (`/app/backend/routes/touchpoints.py` + `/app/backend/touchpoint_templates_seed.py`):
