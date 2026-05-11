@@ -1,3 +1,31 @@
+## Iter 38 — Touchpoint Mapping as hero workspace (vertical timeline + side drawer + scoring) (Feb 2026)
+
+**User intent:** "I want touchpoint mapping to be the biggest and most important functionality of Aria." Promoted from a buried sub-section into the main sidebar; full redesign of the editor page.
+
+**Sidebar:** New top-level "Touchpoint Mapping" entry (`MapTrifold` icon) between **Reports** and **Integrations** in `/app/frontend/src/components/Layout.js`. Removed duplicate from the AI SALES AGENT section. Page route unchanged (`/touchpoint-journey`) so existing deep-links keep working. H1 renamed "Touchpoint Mapping".
+
+**Backend** — extended `/app/backend/routes/touchpoints.py` with two new endpoints + new `touchpoint_ai_quality_cache` collection:
+- `GET /api/touchpoints/scoring` — aggregates `lead_touchpoint_log` per `touchpoint_index`. Returns per-touchpoint `performance` (total_scheduled, sent, skipped, failed, pending, alerts, replies, reply_rate, delivery_rate, skip_rate, **effectiveness** = `0.6*reply_rate + 0.3*delivery + 0.1*(100-skip_rate)`, **grade** A/B/C/D) + `lead_fit` (hot/warm/cold counts from leads.icp_tier) + journey rollup `{score, grade, total_scheduled, total_sent, total_replies, reply_rate, skip_rate, delivery_rate, touchpoint_count}`.
+- `POST /api/touchpoints/ai-quality` — Claude scoring of each message on Clarity / Personalisation / CTA / Tone-fit (1-10 each + verdict). Cached per `(tenant_id, sha256(message)[:16])`. Graceful fallback when EMERGENT_LLM_KEY missing or import fails.
+
+**Frontend** — full rewrite of `/app/frontend/src/pages/TouchpointJourney.js`:
+- **Vertical timeline** (replaces old horizontal scroll) with dashed connector line behind cards.
+- **Drag-and-drop reorder** via react-beautiful-dnd. Each card has a `DotsSixVertical` grab handle.
+- **Right-side detail drawer** (sticky, scrollable) auto-selects the first touchpoint on load. 4 tabs:
+  1. **Details** — inline edit (day/hour/channel/type/role/condition/message + token chips + Move up/down, Duplicate, Delete).
+  2. **Performance** — big effectiveness number + grade badge, 6-tile KPI grid (Scheduled/Sent/Replies/Skipped/Failed/Pending), 3 score bars (reply/delivery/skip rate).
+  3. **Lead-fit** — Hot/Warm/Cold bars with counts + percentages.
+  4. **AI Quality** — Claude scores via 4 score bars + verdict box. Empty state nudges user to click "Score with AI".
+- **Journey score banner** at top: 84px conic gauge + grade chip + 4 stat tiles + "Score with AI" CTA.
+- **Save** button starts disabled ("Saved"), turns on ("Save changes") when draft becomes dirty.
+- Preserved: Template library / Version history / Document upload modals (8 universal templates, last 5 versions, .docx/.xlsx/.pdf via Claude).
+- Counter bar shows N / 32 with tone shift at 28 (gold) and 32 (red).
+
+**Verified — iter38**: Backend 9/9 pytest pass on `/scoring` + `/ai-quality` (live Claude call + cache hit path + graceful fallbacks). Frontend 100% e2e — sidebar nav, vertical layout, drawer auto-select, 4 tabs functional, drag-reorder, dirty/save cycle, add-row counter increment, all 3 modals open. Console clean after react-beautiful-dnd boolean-prop fix.
+
+---
+
+
 # GenLeadAI — Full PRD
 
 ## Stack
