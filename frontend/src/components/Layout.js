@@ -16,6 +16,7 @@ import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
 import TrialBanner from './TrialBanner';
+import AriaModeChip from './AriaModeChip';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
@@ -390,6 +391,7 @@ const Layout = ({ children }) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AriaModeChip />
             <button onClick={() => navigate('/leads')} className="hidden md:flex items-center gap-1.5 px-3 py-2 text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#F4F0FF] rounded-lg transition-all text-xs font-bold" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="topbar-ai-summary">
               <Sparkle size={14} weight="fill" /> AI Summary
             </button>

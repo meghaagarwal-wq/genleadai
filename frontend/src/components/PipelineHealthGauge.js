@@ -37,7 +37,7 @@ const PipelineHealthGauge = () => {
   const dash = (data.score / 100) * circumference;
 
   return (
-    <div className="bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="pipeline-health-gauge">
+    <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="pipeline-health-gauge">
       <div className="flex items-center gap-2 mb-3">
         <Heart size={16} weight="duotone" className="text-[#7C35DC]" />
         <h3 className="font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Pipeline Health</h3>

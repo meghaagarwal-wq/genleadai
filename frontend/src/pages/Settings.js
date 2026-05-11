@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell } from '@phosphor-icons/react';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
 import CrmSettingsTab from '../components/CrmSettingsTab';
 import LeadCaptureSettings from '../components/settings/LeadCaptureSettings';
+import NotificationsTab from '../components/settings/NotificationsTab';
 import AuditLogPanel from '../components/AuditLogPanel';
 
 const Settings = () => {
@@ -277,6 +278,7 @@ const Settings = () => {
           { id: 'crm', label: 'CRM', icon: Database },
           { id: 'magnet', label: 'Lead Magnet', icon: Paperclip },
           { id: 'workspace', label: 'Workspace', icon: Gear },
+          { id: 'notifications', label: 'Notifications', icon: Bell },
           { id: 'security', label: 'Security', icon: Key },
         ].map(tab => (
           <button
@@ -882,6 +884,11 @@ const Settings = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Notifications Tab */}
+      {activeTab === 'notifications' && (
+        <NotificationsTab />
       )}
 
       {/* Security Tab */}

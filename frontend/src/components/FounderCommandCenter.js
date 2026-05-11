@@ -18,7 +18,7 @@ const ROLE_SECTIONS = {
 };
 
 const SectionCard = ({ children, className = '', testId, tone }) => (
-  <div className={`relative bg-white border rounded-2xl ${className}`} style={{ borderColor: tone === 'urgent' ? 'rgba(220,38,38,0.2)' : '#E8E0F5', boxShadow: 'var(--shadow-card)' }} data-testid={testId}>
+  <div className={`aria-card-lift relative bg-white border rounded-2xl ${className}`} style={{ borderColor: tone === 'urgent' ? 'rgba(220,38,38,0.2)' : '#E8E0F5', boxShadow: 'var(--shadow-card)' }} data-testid={testId}>
     {children}
   </div>
 );

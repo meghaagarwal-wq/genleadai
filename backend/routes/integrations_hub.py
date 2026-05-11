@@ -524,3 +524,36 @@ async def apollo_import(payload: ApolloImport, tenant: dict = Depends(get_active
         except Exception:
             failed += 1
     return {"imported": imported, "deduplicated": deduped, "failed": failed, "total": len(payload.leads)}
+
+
+
+# ─── Click-to-WhatsApp lite widget click tracker ─────────────────────────────
+class WaClickPayload(BaseModel):
+    tenant_id: str
+    phone: Optional[str] = None
+    page_url: Optional[str] = None
+    referrer: Optional[str] = None
+
+
+@public_router.post("/widget/wa-click")
+async def wa_click_track(payload: WaClickPayload, request: Request):
+    """Public, no-auth click-tracking ping from the aria-wa-widget.js floating
+    button. Used purely for tenant analytics — does NOT create a lead because
+    the click happens before the visitor types anything into WhatsApp.
+    """
+    events_col.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": payload.tenant_id,
+        "integration_type": "wa_widget",
+        "event_type": "wa_widget_click",
+        "payload": {
+            "phone": payload.phone,
+            "page_url": payload.page_url,
+            "referrer": payload.referrer,
+            "ua": request.headers.get("user-agent"),
+            "ip": request.client.host if request.client else None,
+        },
+        "status": "success",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}

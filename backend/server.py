@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header, Form
+from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, FileResponse
@@ -60,6 +60,7 @@ from routes.reports import router as reports_router
 from routes.lead_capture import router as lead_capture_router, public_router as lead_capture_public_router, widget_public_router as lead_capture_widget_public_router
 from routes.integrations_hub import router as integrations_hub_router, public_router as integrations_hub_public_router, fire_lifecycle_event
 from routes.conversations import router as conversations_router
+from routes.notifications import router as notifications_router
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -116,6 +117,7 @@ app.include_router(lead_capture_widget_public_router)
 app.include_router(integrations_hub_router)
 app.include_router(integrations_hub_public_router)
 app.include_router(conversations_router)
+app.include_router(notifications_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
@@ -3750,16 +3752,47 @@ async def whatsapp_webhook_verify(
 
 
 @app.post("/api/webhooks/whatsapp")
-async def whatsapp_webhook_receive(payload: Dict[str, Any]):
-    """Receive inbound WhatsApp messages and delivery status updates from Meta.
+async def whatsapp_webhook_receive(request: Request):
+    """Receive inbound WhatsApp messages and delivery status updates from Meta / 360dialog.
 
     Pipeline:
+      0. **HMAC signature verification** (Meta `X-Hub-Signature-256` against
+         `WHATSAPP_APP_SECRET`; 360dialog optional `X-D360-Token` against
+         `DIALOG360_WEBHOOK_TOKEN`). Missing secrets log a warning but allow
+         the request through so the platform doesn't break for tenants
+         that haven't completed setup. Bad signatures → 401.
       1. Resolve tenant from phone_number_id (Meta webhook 'metadata.phone_number_id')
       2. STOP keyword → opt-out + silent log
       3. Run 3-layer classification (trigger → contact/lead lookup → Claude)
       4. Lead path: pause pending touchpoints, log activity, mark opt-in
       5. Non-lead paths: log canned-response intent (handler routes are owner-side)
     """
+    # ── 0. Signature verification ────────────────────────────────────────
+    raw_body = await request.body()
+    import hashlib, hmac as _hmac
+    meta_sig = request.headers.get("X-Hub-Signature-256") or request.headers.get("x-hub-signature-256")
+    d360_token = request.headers.get("X-D360-Token") or request.headers.get("x-d360-token")
+    meta_secret = os.getenv("WHATSAPP_APP_SECRET")
+    d360_secret = os.getenv("DIALOG360_WEBHOOK_TOKEN")
+    if meta_sig:
+        if not meta_secret:
+            print("[whatsapp_webhook] WARN: Meta signature present but WHATSAPP_APP_SECRET not set — allowing for now")
+        else:
+            expected = "sha256=" + _hmac.new(meta_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+            if not _hmac.compare_digest(expected, meta_sig.strip()):
+                raise HTTPException(status_code=401, detail="Invalid Meta webhook signature")
+    elif d360_secret and d360_token:
+        if not _hmac.compare_digest(d360_secret, d360_token.strip()):
+            raise HTTPException(status_code=401, detail="Invalid 360dialog webhook token")
+    elif meta_secret or d360_secret:
+        # A secret IS configured but no signature came through — could be a misconfigured caller.
+        print("[whatsapp_webhook] WARN: signature secret configured but no signature header on inbound payload")
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except Exception:
+        payload = {}
+
     try:
         for entry in payload.get("entry", []) or []:
             for change in entry.get("changes", []) or []:
