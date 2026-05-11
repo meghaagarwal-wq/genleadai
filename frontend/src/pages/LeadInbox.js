@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import api from '../config/api';
 import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv, CheckCircle, Warning, DownloadSimple, PaperPlaneTilt } from '@phosphor-icons/react';
 import PushToSequenceModal from '../components/PushToSequenceModal';
+import AriaConfidenceDial from '../components/AriaConfidenceDial';
 
 const NEXT_BEST_ACTION = (lead) => {
   const s = lead.status;
@@ -28,6 +29,7 @@ const TIERS = ['hot','warm','cold'];
 const LeadInbox = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
+  const [confidenceMap, setConfidenceMap] = useState({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -51,6 +53,15 @@ const LeadInbox = () => {
   }, [page, search, filters]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  // Batch-fetch Aria confidence scores whenever the leads list changes.
+  useEffect(() => {
+    if (!leads.length) { setConfidenceMap({}); return; }
+    const ids = leads.map((l) => l.id).filter(Boolean);
+    api.post('/api/aria/confidence/batch', { lead_ids: ids })
+      .then((r) => setConfidenceMap(r.data?.scores || {}))
+      .catch(() => setConfidenceMap({}));
+  }, [leads]);
 
   useEffect(() => {
     api.get('/api/lead-magnets/engagement-map')

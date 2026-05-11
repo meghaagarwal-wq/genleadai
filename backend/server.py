@@ -51,6 +51,7 @@ from routes.billing_plans import router as billing_plans_router
 from routes.compliance import router as compliance_router, is_stop_keyword, opt_out_phone, auto_opt_in_on_inbound
 from routes.contacts import router as contacts_router
 from routes.classification import router as classification_router, classify_inbound
+from routes.aria_confidence import router as aria_confidence_router
 
 load_dotenv()
 
@@ -83,6 +84,7 @@ app.include_router(billing_plans_router)
 app.include_router(compliance_router)
 app.include_router(contacts_router)
 app.include_router(classification_router)
+app.include_router(aria_confidence_router)
 register_pietential_startup(app)
 
 

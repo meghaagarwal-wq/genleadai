@@ -5,6 +5,7 @@ import AriaConversationPanel from '../components/AriaConversationPanel';
 import AriaReadPanel from '../components/AriaReadPanel';
 import LeadJourneyTab from '../components/LeadJourneyTab';
 import LeadOptInBanner from '../components/LeadOptInBanner';
+import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import {
   ArrowLeft,
   Phone,
@@ -40,13 +41,24 @@ const LeadDetail = () => {
   const [engagement, setEngagement] = useState(null);
   const [sendingMagnet, setSendingMagnet] = useState(false);
   const [bestTime, setBestTime] = useState(null);
+  const [confidence, setConfidence] = useState(null);
 
   useEffect(() => {
     fetchLead();
     fetchActivities();
     fetchEngagement();
     fetchBestTime();
+    fetchConfidence();
   }, [id]);
+
+  const fetchConfidence = async () => {
+    try {
+      const r = await api.get(`/api/aria/confidence/${id}`);
+      setConfidence(r.data);
+    } catch {
+      setConfidence(null);
+    }
+  };
 
   const fetchLead = async () => {
     try {
@@ -221,6 +233,33 @@ const LeadDetail = () => {
               </div>
               <button onClick={() => editing ? handleUpdateLead() : setEditing(true)} className="text-sm text-[#7C35DC] hover:text-[#6B28C8] font-semibold transition-colors" data-testid="edit-lead-btn">{editing ? 'Save' : 'Edit'}</button>
             </div>
+
+            {/* Aria Confidence Dial */}
+            {confidence && (
+              <div className="mb-4 p-4 rounded-xl bg-white border border-[#E8E0F5] flex items-center gap-4" data-testid="lead-aria-confidence">
+                <AriaConfidenceDial
+                  score={confidence.score}
+                  color={confidence.color}
+                  factors={confidence.factors}
+                  size="lg"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#9B8AB0]">Aria confidence</div>
+                  <div className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                    {confidence.label === 'hot' ? 'Hot lead — act now' : confidence.label === 'warm' ? 'Warming up' : 'Cold — nurture'}
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {(confidence.factors || []).map((f, i) => (
+                      <li key={i} className="text-[11px] text-[#5A4A7A] flex items-center gap-1">
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full ${f.delta > 0 ? 'bg-[#16A34A]' : f.delta < 0 ? 'bg-[#DC2626]' : 'bg-[#9B8AB0]'}`} />
+                        <span className="font-mono text-[10px] text-[#9B8AB0] w-7">{f.delta > 0 ? '+' : ''}{f.delta}</span>
+                        {f.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
 
             {/* ICP Score */}
             <div className="mb-6 p-4 rounded-xl bg-[#F4F0FF] border border-[#E0D4F7]">
