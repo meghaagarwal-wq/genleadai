@@ -712,3 +712,22 @@ User direction: "do a + c in one session, then do the rest" → security primiti
 - Phase 3.2 — Embeddable Lead Capture widget
 - Sprint 4 — Real OAuth callbacks for HubSpot/Zoho/Salesforce + Historical sync on first connect + Reports Sync Log UI improvements
 - Nightly retention jobs · webhook signature verification · @limiter.limit decorator applications · Data export ZIP · session management UI (placeholders only currently)
+
+
+## Iter 37 — Sprint 4: Touchpoint Mapping Phase C (Feb 2026)
+Master Spec Phase 2.1 completion — augments the existing onboarding step with post-onboarding power features.
+
+**Backend** (`/app/backend/routes/touchpoints.py` extended in place):
+- `MAX_TOUCHPOINTS` raised 30 → 32 (matches Master Spec)
+- `_snapshot_version()` writes to new `touchpoint_map_versions` collection BEFORE every save; prunes to 5 most recent per tenant
+- New endpoints: `GET /api/touchpoints/map/versions`, `POST /api/touchpoints/map/versions/{id}/restore`, `POST /api/touchpoints/import-document` (multipart PDF/DOCX/XLSX up to 10MB → pypdf/python-docx/openpyxl → Claude sonnet-4.5 → normalized preview JSON, 32-cap with `truncated:true`)
+- Audit events fired: `touchpoint_map.updated`, `touchpoint_map.restored`, `touchpoint_map.imported_from_document`
+
+**Frontend** (`/app/frontend/src/pages/TouchpointJourney.js` — new page `/touchpoint-journey`):
+- Timeline view (horizontal scrollable cards) + Edit view (day/hour/channel/type/role/condition + token chips + move/duplicate/delete)
+- 32-cap counter (gold @ 28, red @ 32) + warning chip
+- `TemplateLibraryModal` (8 templates with preview+replace), `VersionHistoryModal` (5-version restore), `DocumentUploadModal` (3-stage upload→parsing→preview)
+- New sidebar nav link "Touchpoint Journey"
+
+**Testing** (iter_37): **17/17 backend pytest pass (100%)**, **100% frontend** — all testids present, no bugs. Regression file: `/app/backend/tests/test_iter37_touchpoint_sprint4.py`.
+**Deps added**: python-docx 1.2.0, openpyxl 3.1.5.

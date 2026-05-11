@@ -56,6 +56,12 @@ from routes.admin_revenue import router as admin_revenue_router, invoice_router 
 from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
 from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, audit_write
 from routes.data_deletion import router as data_deletion_router
+from routes.health_engine import (
+    router as health_router,
+    failed_router as failed_messages_router,
+    stale_lead_loop as health_stale_loop,
+    classify_sentiment as health_classify_sentiment,
+)
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -98,6 +104,8 @@ app.include_router(crm_sync_router)
 app.include_router(audit_log_router)
 app.include_router(admin_workspaces_router)
 app.include_router(data_deletion_router)
+app.include_router(health_router)
+app.include_router(failed_messages_router)
 
 # Rate limiter — applied to sensitive auth & webhook endpoints
 limiter = Limiter(key_func=get_remote_address)
@@ -3790,22 +3798,47 @@ async def whatsapp_webhook_receive(payload: Dict[str, Any]):
                                 lead_id = candidate.get("id") or str(candidate.get("_id"))
                                 # Pause pending touchpoints (lead is engaging)
                                 pause_lead(tenant_id, lead_id)
-                                # Auto opt-in on first inbound
+                                # Lightweight sentiment classification (graceful, never raises)
+                                sentiment = "neutral"
+                                try:
+                                    sentiment = await health_classify_sentiment(body)
+                                except Exception:
+                                    pass
+                                # Auto opt-in + sentiment stamp + last_inbound_at on the lead
                                 leads_collection.update_one(
                                     {"id": lead_id, "tenant_id": tenant_id},
                                     {"$set": {
                                         "opted_in": True,
                                         "opted_in_at": datetime.now(timezone.utc).isoformat(),
                                         "opted_in_source": "replied_first",
+                                        "latest_sentiment": sentiment,
+                                        "last_activity_at": datetime.now(timezone.utc).isoformat(),
+                                        "stale": False,  # any reply clears stale
                                     }},
                                 )
+                                # Mirror onto conversation
+                                aria_conversations_collection.update_one(
+                                    {"lead_id": lead_id, "tenant_id": tenant_id},
+                                    {"$set": {
+                                        "latest_sentiment": sentiment,
+                                        "last_inbound_at": datetime.now(timezone.utc).isoformat(),
+                                    }},
+                                    upsert=True,
+                                )
+                                # Fire sentiment-derived CRM events
+                                try:
+                                    if sentiment in ("negative", "urgent"):
+                                        from routes.crm_sync import fire_event as _cfe
+                                        _cfe(tenant_id, {"id": lead_id, "tenant_id": tenant_id}, f"sentiment.{sentiment}", {"message_preview": body[:140]})
+                                except Exception:
+                                    pass
                                 activities_collection.insert_one({
                                     "lead_id": lead_id, "tenant_id": tenant_id, "user_id": "whatsapp_webhook",
                                     "activity_type": "whatsapp_received",
                                     "subject": "WhatsApp reply received",
                                     "body": body[:1000],
                                     "outcome": None, "duration_minutes": None,
-                                    "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id"), "classification": cls.get("category"), "layer": cls.get("layer")},
+                                    "metadata": {"source": "whatsapp_webhook", "from": from_phone, "message_id": msg.get("id"), "classification": cls.get("category"), "layer": cls.get("layer"), "sentiment": sentiment},
                                     "created_at": datetime.now(timezone.utc).isoformat(),
                                 })
                         # Non-lead categories logged in classification_log; canned responses
@@ -4285,6 +4318,11 @@ async def _start_touchpoint_engine_loop():
 @app.on_event("startup")
 async def _start_crm_sync_loop():
     asyncio.create_task(crm_sync_loop())
+
+
+@app.on_event("startup")
+async def _start_stale_lead_loop():
+    asyncio.create_task(health_stale_loop())
 
 
 
