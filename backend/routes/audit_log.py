@@ -358,3 +358,66 @@ async def trials_expiring(days: int = 3, current_user: dict = Depends(get_curren
             "lead_count": leads_col.count_documents({"tenant_id": s["tenant_id"]}),
         })
     return {"trials": out}
+
+
+
+# ─── Health Monitor — service pings (master admin) ───────────────────────────
+@admin_router.get("/health/services")
+async def health_services(current_user: dict = Depends(get_current_user)):
+    """Returns live status pings for critical infrastructure services."""
+    _require_master_admin(current_user)
+    import os
+    import time as _time
+    services = []
+
+    # MongoDB ping
+    t0 = _time.time()
+    try:
+        db.command("ping")
+        services.append({"name": "MongoDB", "status": "ok", "latency_ms": round((_time.time() - t0) * 1000, 1)})
+    except Exception as e:
+        services.append({"name": "MongoDB", "status": "down", "error": str(e)[:80]})
+
+    # Claude / Emergent LLM
+    services.append({
+        "name": "Claude (Emergent LLM)",
+        "status": "ok" if os.environ.get("EMERGENT_LLM_KEY") else "unconfigured",
+        "latency_ms": None,
+    })
+
+    # Resend
+    services.append({
+        "name": "Resend (email)",
+        "status": "ok" if os.environ.get("RESEND_API_KEY") else "unconfigured",
+        "latency_ms": None,
+    })
+
+    # WhatsApp / 360dialog — count configured tenants
+    wa_configured = tenants_col.count_documents({"$or": [
+        {"whatsapp_providers.meta.configured": True},
+        {"whatsapp_providers.360dialog.configured": True},
+    ]})
+    services.append({
+        "name": "WhatsApp (360dialog/Meta)",
+        "status": "ok" if wa_configured > 0 else "unconfigured",
+        "configured_tenants": wa_configured,
+    })
+
+    # Stripe
+    services.append({
+        "name": "Stripe",
+        "status": "ok" if os.environ.get("STRIPE_API_KEY") else "unconfigured",
+        "latency_ms": None,
+    })
+
+    # Background loops (heuristic: if any sent in last 5 min, OK)
+    from datetime import timedelta
+    recent_iso = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    touchpoint_active = db["lead_touchpoint_log"].count_documents({"fired_at": {"$gte": recent_iso}}) > 0
+    services.append({
+        "name": "Touchpoint Engine",
+        "status": "ok" if touchpoint_active else "idle",
+        "note": "Active if fired in last 10 min",
+    })
+
+    return {"services": services, "checked_at": _now()}

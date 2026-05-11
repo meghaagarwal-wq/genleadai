@@ -15,6 +15,8 @@ import LeadDetail from './pages/LeadDetail';
 import Pipeline from './pages/Pipeline';
 import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
+import Reports from './pages/Reports';
+import FailedMessages from './pages/FailedMessages';
 import Settings from './pages/Settings';
 import AriaFeed from './pages/AriaFeed';
 import AriaAnalytics from './pages/AriaAnalytics';
@@ -210,7 +212,8 @@ function App() {
                         <Route path="/ai-assistant" element={<AIAssistant />} />
                         <Route path="/integrations" element={<Integrations />} />
                         <Route path="/campaigns" element={<Campaigns />} />
-                        <Route path="/reports" element={<Analytics />} />
+                        <Route path="/reports" element={<Reports />} />
+                        <Route path="/admin/failed-messages" element={<FailedMessages />} />
                         <Route path="/analytics" element={<Analytics />} />
                         <Route path="/aria" element={<AriaFeed />} />
                         <Route path="/aria/analytics" element={<AriaAnalytics />} />

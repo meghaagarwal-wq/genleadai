@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ChartLineUp, ShieldCheck, Users, Gear } from '@phosphor-icons/react';
+import { ChartLineUp, ShieldCheck, Users, Heartbeat, Clock } from '@phosphor-icons/react';
 import RevenueTab from '../components/admin/RevenueTab';
 import WorkspacesTab from '../components/admin/WorkspacesTab';
+import HealthMonitorTab from '../components/admin/HealthMonitorTab';
+import TrialExpiriesTab from '../components/admin/TrialExpiriesTab';
 
 const TABS = [
   { key: 'revenue', label: 'Revenue', icon: ChartLineUp, component: RevenueTab },
-  { key: 'workspaces', label: 'Workspaces', icon: Users, component: WorkspacesTab },
-  // Sprint 3 (placeholder tabs — not built yet)
-  { key: 'security', label: 'Security', icon: ShieldCheck, component: null },
-  { key: 'settings', label: 'Platform Settings', icon: Gear, component: null },
+  { key: 'workspaces', label: 'All Workspaces', icon: Users, component: WorkspacesTab },
+  { key: 'trials', label: 'Trial Expiries', icon: Clock, component: TrialExpiriesTab },
+  { key: 'health', label: 'Health Monitor', icon: Heartbeat, component: HealthMonitorTab },
 ];
 
 const MasterAdmin = () => {

@@ -12,6 +12,8 @@ import AriaStories from '../components/AriaStories';
 import LeadFeed from '../components/LeadFeed';
 import PipelineMoodCard from '../components/PipelineMoodCard';
 import EmptyDashboard from '../components/EmptyDashboard';
+import PipelineHealthGauge from '../components/PipelineHealthGauge';
+import StaleLeadAlertChip from '../components/StaleLeadAlertChip';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -119,10 +121,14 @@ const Dashboard = () => {
       {/* ARIA Stories — leads that need attention now */}
       <AriaStories />
 
-      {/* Lead Feed + Pipeline Mood — the central workspace */}
+      {/* Stale lead alert — visible only when stale leads exist */}
+      <StaleLeadAlertChip />
+
+      {/* Lead Feed + Pipeline Mood + Pipeline Health — the central workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
         <LeadFeed />
         <div className="space-y-4">
+          <PipelineHealthGauge />
           <PipelineMoodCard />
         </div>
       </div>

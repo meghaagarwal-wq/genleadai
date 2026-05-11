@@ -248,6 +248,22 @@ const Layout = ({ children }) => {
                 <ShieldCheck size={18} weight="duotone" />
                 <span className="text-sm">Master Admin</span>
               </NavLink>
+              <NavLink
+                to="/admin/failed-messages"
+                onClick={() => mobile && setMobileMenuOpen(false)}
+                data-testid="nav-failed-messages"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                    isActive
+                      ? 'text-white font-semibold'
+                      : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                  }`
+                }
+                style={({ isActive }) => isActive ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' } : { fontFamily: 'Plus Jakarta Sans' }}
+              >
+                <Wrench size={18} weight="duotone" />
+                <span className="text-sm">Failed Messages</span>
+              </NavLink>
             </div>
           </>
         )}

@@ -56,6 +56,7 @@ from routes.admin_revenue import router as admin_revenue_router, invoice_router 
 from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
 from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, audit_write
 from routes.data_deletion import router as data_deletion_router
+from routes.reports import router as reports_router
 from routes.health_engine import (
     router as health_router,
     failed_router as failed_messages_router,
@@ -104,6 +105,7 @@ app.include_router(crm_sync_router)
 app.include_router(audit_log_router)
 app.include_router(admin_workspaces_router)
 app.include_router(data_deletion_router)
+app.include_router(reports_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
