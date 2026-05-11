@@ -1,148 +1,185 @@
+/**
+ * Legal — /privacy, /terms, /dpa pages.
+ *
+ * Self-contained, GenLeadAI branded, DPDP Act 2023 compliant where relevant.
+ */
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowLeft, ShieldCheck, Scroll, FileText } from '@phosphor-icons/react';
 
-const LegalShell = ({ title, lastUpdated, children }) => (
-  <div className="min-h-screen bg-[#0d0d1a] text-white" data-testid={`legal-${title.toLowerCase().replace(/\s+/g, '-')}`}>
-    <header className="border-b border-[#2a2a45] px-6 py-4">
-      <Link to="/" className="text-lg font-extrabold tracking-tight" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-        <span style={{ background: 'linear-gradient(90deg, #4f8ef7, #e2b96f)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>GenLeadAI</span>
-      </Link>
-    </header>
-    <main className="max-w-3xl mx-auto px-6 py-10">
-      <h1 className="text-3xl font-extrabold mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>{title}</h1>
-      <p className="text-sm text-[#a0a8c0] mb-8">Last updated: {lastUpdated}</p>
-      <div className="prose prose-invert max-w-none space-y-4 text-sm text-[#cbd5e1] leading-relaxed">{children}</div>
-      <footer className="mt-12 pt-6 border-t border-[#2a2a45] text-xs text-[#a0a8c0]">
-        Questions? Email <a href="mailto:meghaagarwal@genleadai.com" className="text-[#4f8ef7]">meghaagarwal@genleadai.com</a>. Jurisdiction: Shillong, Meghalaya, India.
-      </footer>
-    </main>
-  </div>
-);
+const LegalShell = ({ title, kind, lastUpdated, children }) => {
+  const icons = { privacy: ShieldCheck, terms: Scroll, dpa: FileText };
+  const Icon = icons[kind] || ShieldCheck;
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#FAFAFA] to-white" data-testid={`legal-${kind}`}>
+      <div className="max-w-3xl mx-auto px-6 py-12">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-xs font-bold text-[#7C35DC] hover:text-[#6B28C8] mb-6">
+          <ArrowLeft size={12} weight="bold" /> Back to Aria
+        </Link>
+        <div className="bg-white border border-[#E8E0F5] rounded-2xl p-8 md:p-10" style={{ boxShadow: 'var(--shadow-card)' }}>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-[#F4F0FF] flex items-center justify-center">
+              <Icon size={20} weight="duotone" className="text-[#7C35DC]" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{title}</h1>
+              <p className="text-xs text-[#9B8AB0]">Last updated: {lastUpdated}</p>
+            </div>
+          </div>
+          <div className="mt-6 space-y-4 text-sm leading-relaxed text-[#1A0A2E] [&_h2]:text-base [&_h2]:font-extrabold [&_h2]:text-[#1A0A2E] [&_h2]:mt-6 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:text-[#1A0A2E] [&_h3]:mt-4 [&_h3]:mb-1 [&_p]:text-[#5A4A7A] [&_ul]:list-disc [&_ul]:pl-5 [&_ul_li]:text-[#5A4A7A] [&_ul_li]:mb-1">
+            {children}
+          </div>
+        </div>
+        <p className="text-[10px] text-[#9B8AB0] text-center mt-6">
+          Powered by Aria · GenLeadAI · <a href="mailto:meghaagarwal@genleadai.com" className="underline">meghaagarwal@genleadai.com</a>
+        </p>
+      </div>
+    </div>
+  );
+};
 
 export const Privacy = () => (
-  <LegalShell title="Privacy Policy" lastUpdated="May 2026">
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">What we collect</h2>
-    <p>Aria by GenLeadAI processes the following personal data on behalf of our workspace clients:</p>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>Lead name, phone number, email</li>
-      <li>Conversation content (WhatsApp messages, internal notes)</li>
-      <li>Usage data (page views, feature usage, API call metadata)</li>
-      <li>Authentication identifiers (email, hashed password, session tokens)</li>
+  <LegalShell title="Privacy Policy" kind="privacy" lastUpdated="11 February 2026">
+    <p>This Privacy Policy describes how <strong>GenLeadAI</strong> ("we", "us", "Aria") collects, uses, stores, and shares personal data when you use the Aria platform (app.genleadai.com).</p>
+
+    <h2>1. Who we are</h2>
+    <p>GenLeadAI operates Aria, an AI-powered WhatsApp Sales PA. We are the <em>Data Processor</em> for personal data uploaded by our customers (workspaces) and the <em>Data Fiduciary</em> for account-holder information you provide to register and use the platform.</p>
+
+    <h2>2. Data we collect</h2>
+    <ul>
+      <li><strong>Account data:</strong> name, email, password (hashed), workspace name.</li>
+      <li><strong>Lead data uploaded by your workspace:</strong> names, phone numbers, email, conversation transcripts, opt-in records.</li>
+      <li><strong>Usage data:</strong> IP address, browser type, timestamps of actions.</li>
+      <li><strong>Billing data:</strong> processed via Stripe; we never store full card details.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Purpose</h2>
-    <p>AI-powered lead qualification, sales pipeline management, and conversation automation on WhatsApp. Aria does not sell, rent, or share personal data with third parties for advertising.</p>
-
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Retention</h2>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>Conversation message bodies: 365 days, then automatically purged (metadata retained)</li>
-      <li>Lead profile data: duration of subscription + 90 days grace</li>
-      <li>Invoices / payment records: 7 years (legal requirement)</li>
-      <li>Audit log: 2 years minimum</li>
-      <li>API usage / classification log: 90 days</li>
+    <h2>3. How we use your data</h2>
+    <ul>
+      <li>Operate the Aria platform and deliver contracted services.</li>
+      <li>Send transactional emails (login, password reset, invoices).</li>
+      <li>Improve product reliability and performance.</li>
+      <li>Comply with applicable legal obligations.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Third-party processors</h2>
-    <ul className="list-disc pl-6 space-y-1">
-      <li><strong>Anthropic</strong> (Claude AI) — sales conversation intelligence</li>
-      <li><strong>360dialog</strong> — WhatsApp Business Cloud API gateway</li>
-      <li><strong>Supabase / MongoDB Atlas</strong> — application database</li>
-      <li><strong>Vercel / Emergent</strong> — hosting infrastructure</li>
-      <li><strong>Stripe</strong> — payments (when enabled)</li>
-      <li><strong>Resend</strong> — transactional email</li>
+    <h2>4. Lawful basis (DPDP Act 2023)</h2>
+    <p>We process personal data under the lawful bases of <strong>contract performance</strong> (delivering Aria to you), <strong>legitimate interest</strong> (security, fraud prevention), and <strong>consent</strong> (marketing, analytics).</p>
+
+    <h2>5. Your rights as a Data Principal</h2>
+    <ul>
+      <li>Right to access, correct or update your data.</li>
+      <li>Right to erasure (delete your account and all associated data).</li>
+      <li>Right to nominate (designate another individual to exercise rights on your behalf).</li>
+      <li>Right to grievance redressal — email <a href="mailto:meghaagarwal@genleadai.com" className="text-[#7C35DC] underline">meghaagarwal@genleadai.com</a>.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Your rights under DPDP Act 2023</h2>
-    <p>You (and the leads we process on your behalf) have the right to:</p>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>Access — request a copy of personal data we hold</li>
-      <li>Correction — fix inaccurate or outdated information</li>
-      <li>Erasure — request anonymisation or hard deletion of personal data</li>
-      <li>Grievance redressal — contact our Data Protection Officer below</li>
+    <h2>6. Data storage and security</h2>
+    <p>Lead data is stored in encrypted-at-rest MongoDB clusters. All third-party API keys (360dialog, CRM tokens, Stripe) are encrypted with Fernet keys stored separately. We use HTTPS for all traffic, rate limiting on authentication, audit logging for sensitive actions, and DPDP-compliant deletion endpoints.</p>
+
+    <h2>7. Sub-processors</h2>
+    <ul>
+      <li><strong>Anthropic Claude</strong> — natural language understanding (no data retention beyond the API call).</li>
+      <li><strong>360dialog</strong> — WhatsApp message delivery.</li>
+      <li><strong>Stripe</strong> — payment processing.</li>
+      <li><strong>Resend</strong> — transactional email.</li>
+      <li><strong>MongoDB Atlas</strong> — primary database hosting.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Data Protection Officer</h2>
-    <p>Megha Agarwal · <a href="mailto:meghaagarwal@genleadai.com" className="text-[#4f8ef7]">meghaagarwal@genleadai.com</a> · Shillong, Meghalaya, India · GSTIN 17BVKPA9777N1ZP</p>
+    <h2>8. Retention</h2>
+    <p>Conversation message content is retained for 365 days. Classification logs for 180 days. API usage logs for 90 days. Resolved failed-message logs for 30 days. Workspace data on the whole is retained for the lifetime of your subscription, plus 30 days after cancellation, after which it is fully deleted.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">Security</h2>
-    <p>All credentials (CRM tokens, WhatsApp API keys) are encrypted at rest with AES-128-GCM (Fernet). Inbound API endpoints are rate-limited. RLS-equivalent tenant scoping is enforced at the application layer.</p>
+    <h2>9. International transfers</h2>
+    <p>Data is primarily processed in India and the EU. Some sub-processors (e.g. Anthropic, Stripe) operate in the United States — adequate contractual safeguards are in place.</p>
+
+    <h2>10. Contact</h2>
+    <p>Grievance Officer: <strong>Megha Agarwal</strong> · <a href="mailto:meghaagarwal@genleadai.com" className="text-[#7C35DC] underline">meghaagarwal@genleadai.com</a>. We will respond within 30 days of receiving a request.</p>
   </LegalShell>
 );
 
 export const Terms = () => (
-  <LegalShell title="Terms of Service" lastUpdated="May 2026">
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">1. Service</h2>
-    <p>Aria by GenLeadAI is a multi-tenant SaaS platform for AI-driven sales pipeline management. Subscription terms (DIY / DWY / DFY) are described at <Link to="/billing" className="text-[#4f8ef7]">/billing</Link>.</p>
+  <LegalShell title="Terms of Service" kind="terms" lastUpdated="11 February 2026">
+    <p>By signing up to or using the Aria platform you agree to these Terms.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">2. Client responsibilities</h2>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>You are responsible for obtaining WhatsApp opt-in consent from every lead you add to Aria.</li>
-      <li>You agree not to use Aria for spam, harassment, or content that violates Meta's WhatsApp Business Messaging Policy.</li>
-      <li>You agree not to use Aria to message minors or for content unlawful in India or the lead's jurisdiction.</li>
+    <h2>1. The service</h2>
+    <p>Aria is an AI-powered WhatsApp Sales PA. Plans (DIY, DWY, DFY) differ only in the operator — the underlying tool is identical. All plans begin with a 14-day free trial; no card required.</p>
+
+    <h2>2. Your responsibilities</h2>
+    <ul>
+      <li><strong>Opt-in compliance:</strong> You are solely responsible for ensuring every lead you contact via Aria has opted in to receive WhatsApp / email communication. Use Aria's opt-in tools to manage consent.</li>
+      <li><strong>Accurate workspace info:</strong> Keep your business profile and Aria configuration accurate.</li>
+      <li><strong>No prohibited content:</strong> No spam, scams, hate, harassment, sexual content, or illegal services.</li>
+      <li><strong>WhatsApp policy:</strong> You must comply with Meta's WhatsApp Business Policy at all times. GenLeadAI is not liable for account bans caused by your messages.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">3. Acceptable use</h2>
-    <p>Prohibited activities include: bulk unsolicited outreach, sending illegal/obscene/defamatory content, attempting to circumvent rate limits or RLS, reverse-engineering Aria's classification or touchpoint engine, and reselling Aria as your own product.</p>
+    <h2>3. Fees and trials</h2>
+    <p>Plan pricing is displayed at <code>/billing</code>. Trials auto-expire after 14 days and access is locked until you select a plan. Refunds are discretionary and handled case-by-case.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">4. Limitation of liability</h2>
-    <p>GenLeadAI is not liable for WhatsApp account suspensions or bans caused by client misuse, third-party API outages (Anthropic, 360dialog, Meta), or revenue loss arising from missed messages. Total liability is capped at fees paid by the client in the 3 months prior to the claim.</p>
+    <h2>4. Acceptable use</h2>
+    <p>You will not (a) reverse-engineer Aria; (b) resell or sublicense without written permission; (c) attempt to bypass rate limits or extract data you do not own; (d) use Aria to harass any person.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">5. Intellectual property</h2>
-    <p>GenLeadAI owns all platform IP including (without limitation) the Aria classification system, touchpoint engine, sync engine, and confidence score algorithm. Client retains ownership of its own lead data and uploaded content.</p>
+    <h2>5. Suspension and termination</h2>
+    <p>We may suspend or terminate a workspace that violates these Terms or Meta's policies, or that becomes a source of abuse complaints. You may cancel at any time from the billing page.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">6. Payment & refunds</h2>
-    <p>Subscriptions billed monthly. 14-day free trial available on DIY and DWY. Refunds: pro-rata refund within 7 days of first payment if Aria provably failed to operate as described. After that, no refunds.</p>
+    <h2>6. Limitation of liability</h2>
+    <p>To the maximum extent allowed by law, GenLeadAI's aggregate liability is capped at the fees you paid in the 12 months preceding the claim. Indirect, consequential, or punitive damages are excluded.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">7. Termination</h2>
-    <p>Either party may terminate with 30 days' written notice. On termination, lead data retained for 90 days then purged. Invoices retained 7 years.</p>
+    <h2>7. Governing law</h2>
+    <p>These Terms are governed by the laws of India. Courts at New Delhi shall have exclusive jurisdiction.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">8. Governing law</h2>
-    <p>These terms are governed by the laws of India. Disputes are subject to the exclusive jurisdiction of courts in Shillong, Meghalaya.</p>
+    <h2>8. Changes</h2>
+    <p>We may update these Terms with notice via email or in-app banner. Continued use after the effective date constitutes acceptance.</p>
+
+    <h2>9. Contact</h2>
+    <p>Questions: <a href="mailto:meghaagarwal@genleadai.com" className="text-[#7C35DC] underline">meghaagarwal@genleadai.com</a></p>
   </LegalShell>
 );
 
-export const DPA = () => (
-  <LegalShell title="Data Processing Agreement" lastUpdated="May 2026">
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">1. Parties & roles</h2>
-    <p>GenLeadAI acts as <strong>Data Processor</strong>. The client (workspace owner) acts as <strong>Data Controller</strong> for all lead and contact data processed within their workspace.</p>
+export const Dpa = () => (
+  <LegalShell title="Data Processing Agreement" kind="dpa" lastUpdated="11 February 2026">
+    <p>This Data Processing Agreement ("DPA") is incorporated into the Terms of Service between you (the "Customer", acting as Data Fiduciary) and GenLeadAI (the "Processor"). It governs Aria's processing of personal data on your behalf.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">2. DPDP Act 2023 compliance</h2>
-    <p>This DPA is designed to satisfy obligations under the Digital Personal Data Protection Act 2023 (India) and is supplementary to our Terms of Service.</p>
+    <h2>1. Scope</h2>
+    <p>This DPA applies whenever Aria processes personal data about your leads, contacts or end customers on your instructions.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">3. Sub-processors</h2>
-    <p>GenLeadAI engages the following sub-processors. Material changes will be notified 30 days in advance.</p>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>Anthropic PBC (Claude API) — US, EU-compliant</li>
-      <li>360dialog GmbH (WhatsApp Business gateway) — Germany</li>
-      <li>MongoDB Atlas — global, encryption at rest</li>
-      <li>Vercel / Emergent — hosting</li>
-      <li>Stripe Payments India Pvt Ltd — payment processing (when enabled)</li>
+    <h2>2. Subject matter and duration</h2>
+    <p>The duration of processing aligns with your subscription term plus any retention period required by these Terms or applicable law.</p>
+
+    <h2>3. Nature and purpose of processing</h2>
+    <ul>
+      <li>Storing and organising lead and conversation data inside your workspace.</li>
+      <li>Sending automated WhatsApp / email touchpoints on your behalf.</li>
+      <li>Running Aria's classification, sentiment, and pipeline-health AI features.</li>
+      <li>Generating analytics and reports for your workspace.</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">4. Security measures</h2>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>AES-128-GCM (Fernet) encryption at rest for stored credentials</li>
-      <li>TLS in transit for all API and webhook traffic</li>
-      <li>Tenant isolation enforced at the application + query layer</li>
-      <li>Rate limiting on auth + webhook endpoints</li>
-      <li>Append-only audit log of all data-modifying actions</li>
-      <li>Backups: daily snapshots, 30-day retention</li>
+    <h2>4. Categories of data</h2>
+    <p>Names, phone numbers, email addresses, company affiliation, message content, opt-in status, deal stage and score.</p>
+
+    <h2>5. Processor obligations</h2>
+    <ul>
+      <li>Process personal data only on your documented instructions.</li>
+      <li>Ensure personnel are bound by confidentiality.</li>
+      <li>Implement technical and organisational measures: encryption at rest, encrypted secrets vault, RBAC, audit logging, rate limiting, DPDP-compliant deletion.</li>
+      <li>Notify you without undue delay of any personal data breach.</li>
+      <li>Assist you in fulfilling Data Principal requests (access, correction, erasure).</li>
     </ul>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">5. Breach notification</h2>
-    <p>In the event of a personal data breach, GenLeadAI will notify the affected Controller within <strong>72 hours</strong> of becoming aware, with description, scope, and mitigation steps.</p>
+    <h2>6. Sub-processors</h2>
+    <p>The current list is published in our <Link to="/privacy" className="text-[#7C35DC] underline">Privacy Policy § 7</Link>. We will notify you (via in-app banner or email) at least 30 days before adding a new sub-processor.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">6. Controller obligations</h2>
-    <ul className="list-disc pl-6 space-y-1">
-      <li>Obtain valid consent from every lead before adding them to Aria (especially for WhatsApp outreach).</li>
-      <li>Honour STOP / unsubscribe requests immediately (Aria does this automatically).</li>
-      <li>Provide leads with a path to request data deletion under DPDP — Aria provides a Delete Personal Data button on every lead.</li>
-    </ul>
+    <h2>7. International transfers</h2>
+    <p>Where personal data is transferred outside India, we rely on contractual safeguards (e.g. Standard Contractual Clauses) with the sub-processor concerned.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">7. Audit rights</h2>
-    <p>Controllers may request the export of their audit log at any time via Settings → Security → Export Audit Log. GenLeadAI will provide reasonable cooperation with any DPDP enforcement audit.</p>
+    <h2>8. Audit</h2>
+    <p>Upon reasonable notice, you may request a written summary of our security controls. On-site audits are available to Enterprise / DFY customers under NDA.</p>
 
-    <h2 className="text-xl font-bold text-white mt-6 mb-2">8. Data return / deletion on termination</h2>
-    <p>On subscription termination, the client may export their data within 30 days. After 90 days, all lead and conversation data is permanently deleted. Invoices retained 7 years per Indian tax law.</p>
+    <h2>9. Return / deletion</h2>
+    <p>On termination, we return or delete all personal data within 30 days, unless retention is required by law.</p>
+
+    <h2>10. Contact</h2>
+    <p>For DPA matters: <a href="mailto:meghaagarwal@genleadai.com" className="text-[#7C35DC] underline">meghaagarwal@genleadai.com</a></p>
   </LegalShell>
 );
+
+const Legal = Privacy;
+export const DPA = Dpa;
+export default Legal;

@@ -9,7 +9,7 @@ import {
   SignOut, MagnifyingGlass, Robot, Moon, List, Lightning, X,
   ClockCounterClockwise, ListChecks, Plug, CreditCard, Sparkle,
   GraduationCap, BookOpen, MapTrifold, FileText, ShieldCheck, ArrowClockwise, Brain,
-  Stack, CalendarCheck, Wrench, AddressBook,
+  Stack, CalendarCheck, Wrench, AddressBook, ChatCircle,
 } from '@phosphor-icons/react';
 import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
@@ -145,6 +145,7 @@ const Layout = ({ children }) => {
     { icon: Tray, label: 'Lead Inbox', path: '/leads' },
     { icon: ChartBar, label: 'Pipeline', path: '/pipeline' },
     { icon: ListChecks, label: 'Follow-Ups', path: '/follow-ups' },
+    { icon: ChatCircle, label: 'Conversations', path: '/conversations' },
     { icon: Robot, label: 'AI Assistant', path: '/ai-assistant' },
     { icon: ChartLineUp, label: 'Reports', path: '/reports' },
     { icon: MapTrifold, label: 'Touchpoint Mapping', path: '/touchpoint-journey' },

@@ -132,6 +132,15 @@ def fire_event(tenant_id: str, lead: dict, event_type: str, payload: Optional[di
     if event_type not in EVENT_TYPES:
         logger.warning("Unknown CRM event type: %s", event_type)
         return None
+
+    # Fan-out to Integration Hub (GA4, Meta CAPI, Zapier, Make) — non-blocking,
+    # fires regardless of whether a CRM is connected.
+    try:
+        from routes.integrations_hub import fire_lifecycle_event as _fire_hub
+        _fire_hub(tenant_id, event_type, lead or {}, payload)
+    except Exception:
+        pass
+
     integ = integrations_col.find_one({"tenant_id": tenant_id, "connection_status": "connected"}, {"_id": 0})
     if not integ:
         return None

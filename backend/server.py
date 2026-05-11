@@ -58,6 +58,9 @@ from routes.audit_log import router as audit_log_router, admin_router as admin_w
 from routes.data_deletion import router as data_deletion_router
 from routes.reports import router as reports_router
 from routes.lead_capture import router as lead_capture_router, public_router as lead_capture_public_router, widget_public_router as lead_capture_widget_public_router
+from routes.integrations_hub import router as integrations_hub_router, public_router as integrations_hub_public_router, fire_lifecycle_event
+from routes.conversations import router as conversations_router
+from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
     failed_router as failed_messages_router,
@@ -110,6 +113,9 @@ app.include_router(reports_router)
 app.include_router(lead_capture_router)
 app.include_router(lead_capture_public_router)
 app.include_router(lead_capture_widget_public_router)
+app.include_router(integrations_hub_router)
+app.include_router(integrations_hub_public_router)
+app.include_router(conversations_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
@@ -4329,6 +4335,12 @@ async def _start_crm_sync_loop():
 @app.on_event("startup")
 async def _start_stale_lead_loop():
     asyncio.create_task(health_stale_loop())
+
+
+@app.on_event("startup")
+async def _start_retention_loop():
+    asyncio.create_task(retention_loop())
+    print("[Retention] Background loop started (24h tick)")
 
 
 

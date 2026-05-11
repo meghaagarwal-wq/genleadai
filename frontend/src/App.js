@@ -17,6 +17,7 @@ import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
 import Reports from './pages/Reports';
 import FailedMessages from './pages/FailedMessages';
+import Conversations from './pages/Conversations';
 import Settings from './pages/Settings';
 import AriaFeed from './pages/AriaFeed';
 import AriaAnalytics from './pages/AriaAnalytics';
@@ -209,6 +210,7 @@ function App() {
                         <Route path="/sleeping-leads" element={<SleepingLeads />} />
                         <Route path="/pipeline" element={<Pipeline />} />
                         <Route path="/follow-ups" element={<FollowUps />} />
+                        <Route path="/conversations" element={<Conversations />} />
                         <Route path="/ai-assistant" element={<AIAssistant />} />
                         <Route path="/integrations" element={<Integrations />} />
                         <Route path="/campaigns" element={<Campaigns />} />
