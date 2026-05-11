@@ -616,3 +616,33 @@ Custom domain target: app.genleadai.com
 - Lead source attribution (`source_type`, utm_*, `needs_review`)
 - Embeddable Lead Capture widget + Settings → Notifications tab
 - Master Admin panel (`/master-admin`) + Pre-launch checklist
+
+
+## Iter 34 — Sprint 1: Master Admin Revenue Panel (Feb 2026)
+**Architecture decision**: User submitted a Supabase/BullMQ/Node spec; translated 1:1 to FastAPI + MongoDB per existing stack constraints. RLS replaced by `role=='admin'` master gate (tenants table is already tenant-scoped).
+
+**Backend** (`/app/backend/routes/admin_revenue.py` — single file, 450 lines, lint clean):
+- Collections (new): `subscriptions`, `payments`, `invoice_sequence` (per-year counter).
+- Auto-provisions a subscription record per tenant on first read; idempotent.
+- 11 endpoints under `/api/admin/revenue/*` + `/api/admin/invoices/{id}/pdf`:
+  - `GET /summary` — 6 KPIs (MRR/ARR/paying clients/active trials/trial→paid %/monthly churn %) + month-over-month trend deltas.
+  - `GET /by-plan?months=6` — Recharts BarChart data (DIY/DWY/DFY stacked).
+  - `GET /subscriptions` — list w/ filters (status, plan, search).
+  - `PUT /subscriptions/{tenant_id}` — change plan, custom_price, notes, status; mirrors plan back to `tenants.plan`.
+  - `POST /subscriptions/{tenant_id}/extend` — +30 day trial extension (also bumps `tenants.trial_ends_at` when on trial).
+  - `POST /subscriptions/{tenant_id}/cancel` — with reason enum (price/no_longer_needed/competitor/support_issue/other).
+  - `GET /payments` — payment history list.
+  - `POST /payments/manual` — record manual payment + auto-generate INV-YYYY-NNNN + advance period 30 days.
+  - `GET /churn` — 12-month line series + 6-cohort retention table + churned accounts list.
+  - `GET /trial-funnel` — 5-stage funnel (Signups → Onboarded → WA connected → First lead → Converted) with tenant lists per stage + "expiring soon (≤3 days)" list with onboarded/WA/lead-count badges.
+  - `GET /invoices/{payment_id}/pdf` — reportlab-rendered PDF with GenLeadAI / Shillong, Meghalaya / GSTIN `17BVKPA9777N1ZP` / GST 18% breakdown / sequential invoice number.
+
+**Frontend** (`/app/frontend/src/pages/MasterAdmin.js` + `/app/frontend/src/components/admin/RevenueTab.js`):
+- New `/master-admin` route, owner-gated by `user.role === 'admin'` (else access-denied screen).
+- New sidebar section "PLATFORM" with Master Admin link (only renders for admins, gold accent).
+- Tabbed layout: Revenue (active), Security / Workspaces / Platform Settings (disabled placeholders for Sprint 2/3).
+- Revenue tab sections: KPI row (6 cards) · Revenue by Plan bar chart · Subscriptions table + Manage modal (plan change / custom price / extend / cancel with reason / notes) · Payment history table + Add Manual Payment modal (auto-PDF download) · Churn line + retention cohort + churned accounts · Trial pipeline funnel with clickable stages + expiring-soon list.
+
+**Testing** (iter_33): 19/19 backend pytest + 100% frontend e2e via testing agent. New regression file `/app/backend/tests/test_iter33_master_admin_revenue.py`. No critical issues.
+
+**Next (Sprint 2)**: CRM Integration Core — `crm_integrations` + `crm_sync_log` schema, HubSpot OAuth connector, sync event engine (14 event types via asyncio queue), Take-over/Resume reflection flow, Lead Detail CRM status badge, Pipedrive API-key connector.
