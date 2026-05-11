@@ -160,6 +160,7 @@ const Layout = ({ children }) => {
     { icon: GraduationCap, label: 'Train ARIA', path: '/aria-agent/train' },
     { icon: BookOpen, label: 'Sales Playbooks', path: '/aria-agent/playbooks' },
     { icon: MapTrifold, label: 'Sales Journeys', path: '/aria-agent/journeys' },
+    { icon: ArrowClockwise, label: 'Touchpoint Journey', path: '/touchpoint-journey' },
     { icon: FileText, label: 'Founder Briefs', path: '/aria-agent/briefs' },
     { icon: ShieldCheck, label: 'Human Handoff', path: '/aria-agent/handoff' },
     { icon: ArrowClockwise, label: 'Revival Engine', path: '/aria-agent/revival' },
