@@ -222,6 +222,34 @@ const Layout = ({ children }) => {
             </NavLink>
           ))}
         </div>
+
+        {(user?.role || '').toLowerCase() === 'admin' && (
+          <>
+            <div className="mt-5 mb-2 px-3 flex items-center gap-2" data-testid="nav-section-master-admin">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[#E2B96F]/80" style={{ fontFamily: 'Plus Jakarta Sans' }}>PLATFORM</span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+            <div className="space-y-0.5">
+              <NavLink
+                to="/master-admin"
+                onClick={() => mobile && setMobileMenuOpen(false)}
+                data-testid="nav-master-admin"
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                    isActive
+                      ? 'text-white font-semibold'
+                      : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                  }`
+                }
+                style={({ isActive }) => isActive ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' } : { fontFamily: 'Plus Jakarta Sans' }}
+              >
+                <ShieldCheck size={18} weight="duotone" />
+                <span className="text-sm">Master Admin</span>
+              </NavLink>
+            </div>
+          </>
+        )}
       </nav>
       <div className="p-4 border-t border-[var(--sidebar-divider)]">
         {/* Plan badge */}

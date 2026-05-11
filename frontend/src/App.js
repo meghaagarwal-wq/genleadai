@@ -42,6 +42,7 @@ import AriaBrain from './pages/AriaBrain';
 import WeeklyRecap from './pages/WeeklyRecap';
 import SalesEngagement from './pages/SalesEngagement';
 import AdminFeedback from './pages/AdminFeedback';
+import MasterAdmin from './pages/MasterAdmin';
 
 // Pietential workspace
 import PtLayout from './pietential/PtLayout';
@@ -226,6 +227,7 @@ function App() {
                         <Route path="/aria-agent/weekly-recap" element={<WeeklyRecap />} />
                         <Route path="/sales-engagement" element={<SalesEngagement />} />
                         <Route path="/admin/feedback" element={<AdminFeedback />} />
+                        <Route path="/master-admin" element={<MasterAdmin />} />
                       </Routes>
                       <UpgradeModal />
                     </Layout>

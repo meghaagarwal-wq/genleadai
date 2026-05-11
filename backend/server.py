@@ -52,6 +52,7 @@ from routes.compliance import router as compliance_router, is_stop_keyword, opt_
 from routes.contacts import router as contacts_router
 from routes.classification import router as classification_router, classify_inbound
 from routes.aria_confidence import router as aria_confidence_router
+from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
 
 load_dotenv()
 
@@ -85,6 +86,8 @@ app.include_router(compliance_router)
 app.include_router(contacts_router)
 app.include_router(classification_router)
 app.include_router(aria_confidence_router)
+app.include_router(admin_revenue_router)
+app.include_router(admin_invoice_router)
 register_pietential_startup(app)
 
 
