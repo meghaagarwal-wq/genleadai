@@ -678,3 +678,37 @@ Custom domain target: app.genleadai.com
 - Zoho + Salesforce dispatchers return stub success (real REST calls deferred until credentials are added).
 
 **Next (Sprint 3)**: Security & Compliance — Fernet encryption for stored CRM credentials, webhook signature verification, rate limiting, audit log, DPDP-compliant lead deletion, Privacy/Terms/DPA static pages, nightly retention jobs, Security settings tab, Data export.
+
+
+## Iter 36 — Sprint 3 + Master Admin Completion (Feb 2026)
+User direction: "do a + c in one session, then do the rest" → security primitives + audit + DPDP + Master Admin Workspaces / Pre-Launch / Platform Stats / Trial Expiry shipped together.
+
+**Backend** (3 new files, all lint clean):
+- `/app/backend/security/encryption.py` — Fernet helper with `encrypt() / decrypt() / encrypt_dict() / decrypt_dict()`. Idempotent + graceful fallback for legacy unencrypted values. Uses `APP_SECRET_KEY` env (stable dev fallback). Wired into `crm_sync.py` for credential storage.
+- `/app/backend/routes/audit_log.py` — append-only audit log + `audit_write(tenant_id, user, action, resource_type, resource_id, metadata, request)` helper (fire-and-forget, never raises). Endpoints: `GET /api/audit-log`, `GET /api/audit-log/export.csv` (Owner/Admin only). Also houses Master Admin `/api/admin/workspaces/*` endpoints: list/detail, extend-trial, launch-checklist (13 items in 5 groups), mark-launch-ready, platform stats (9 counters), trials expiring. 24 known action types pre-registered.
+- `/app/backend/routes/data_deletion.py` — DPDP Act 2023 compliant `POST /api/leads/{id}/delete-personal-data` (mode: anonymise|hard). Anonymise: name→"Deleted User", phone→`[REDACTED-{id}]`, opted_in=false, conversations cleared, activities redacted. Hard: full purge across leads/conversations/activities/touchpoint_log. Both write `data_deletion_log` (kept 7y for legal) + audit row `lead.data_purged`.
+
+**Server.py**:
+- Imports & registers 3 new routers + `slowapi` Limiter (registered globally; per-endpoint `@limiter.limit` decorators can be added later without breaking).
+- CRM `connect`/`disconnect` endpoints now write audit log rows.
+
+**Frontend** (3 new components + 3 legal pages):
+- `/app/frontend/src/pages/legal/Legal.js` — Privacy / Terms / DPA exports, public routes `/privacy`, `/terms`, `/dpa`. Branded GenLeadAI dark theme. Includes DPDP-required sections (Data Protection Officer, sub-processors, retention, breach notification 72h).
+- `/app/frontend/src/components/admin/WorkspacesTab.js` — Platform Stats grid (8 cells) + Trials Expiring panel (+ extend-7-days action per row) + All Workspaces table (search/plan filter/refresh) + ChecklistModal (13-item grouped checklist with force-mark-launch-ready).
+- `/app/frontend/src/components/AuditLogPanel.js` — Audit log table with action filter, expandable metadata, CSV export. Rendered inside Settings → Security tab.
+- `/app/frontend/src/components/DpdpDeleteButton.js` — Delete button + modal on Lead Detail. Anonymise (recommended) vs Hard delete radios. Reason dropdown + "type DELETE to confirm" gate.
+
+**MasterAdmin.js**: Workspaces tab now enabled (was placeholder).
+
+**Testing** (iter_36): **21/21 backend pytest pass (100%)**, frontend ~95% pass. `/app/backend/tests/test_iter36_sprint3_security.py` covers Fernet encryption round-trip, audit log RBAC + CSV export, DPDP anonymise/hard/403/404/400, all 8 master-admin endpoints. No critical/minor bugs. Two optional action items: (1) APP_SECRET_KEY env var not set in preview (using dev fallback — set before production), (2) testid naming "platform-stats" vs "platform-stats-grid" cosmetic.
+
+**Still pending from Master Spec (parked for later sprints per user direction "do the rest")**:
+- Phase 3.3 — Conversations page (`/conversations`) with take-over UI + urgent floats top
+- Phase 3.5 — Stale Lead Engine (daily asyncio job) + Pipeline Health Score gauge on Dashboard
+- Phase 3.6 — Sentiment detection on inbound messages + sentiment-aware response generation
+- Phase 5.5 — Graceful degradation (Claude/360dialog fallback) + `failed_message_log` retry queue
+- Phase 5.1 — Reports page rebuild (funnel + source perf + PDF export)
+- Phase 2.1 — Touchpoint document upload (PDF/Excel/DOCX → Claude → preview table) + version history
+- Phase 3.2 — Embeddable Lead Capture widget
+- Sprint 4 — Real OAuth callbacks for HubSpot/Zoho/Salesforce + Historical sync on first connect + Reports Sync Log UI improvements
+- Nightly retention jobs · webhook signature verification · @limiter.limit decorator applications · Data export ZIP · session management UI (placeholders only currently)
