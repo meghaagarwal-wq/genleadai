@@ -197,6 +197,20 @@ def main():
         if n:
             print(f"[Migrate]   {c}: tagged {n} docs → pietential tenant")
     print(f"[Migrate] Backfill complete: {total} docs tagged")
+
+    # Backfill string `id` on leads documents that only have ObjectId _id.
+    # Required by compliance + touchpoint engine which look up by `id` field.
+    try:
+        leads = db["leads"]
+        # Use a single update with an aggregation pipeline so it's atomic + fast.
+        leads.update_many(
+            {"id": {"$exists": False}},
+            [{"$set": {"id": {"$toString": "$_id"}}}],
+        )
+        print("[Migrate] Backfilled leads.id from _id")
+    except Exception as _e:
+        print(f"[Migrate] leads.id backfill skipped: {_e}")
+
     print("[Migrate] DONE.")
 
 

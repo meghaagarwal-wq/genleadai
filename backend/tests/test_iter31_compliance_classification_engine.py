@@ -233,7 +233,7 @@ class TestTouchpointEngine:
                 {"index": 1, "day": 1, "hour": 0, "channel": "whatsapp", "message_type": "value_add",
                  "aria_role": "autonomous", "trigger": "day_1",
                  "message_template": "Hi {{first_name}}, quick value add about {{product}}."},
-                {"index": 2, "day": 3, "hour": 0, "channel": "email", "message_type": "case_study",
+                {"index": 2, "day": 3, "hour": 0, "channel": "email", "message_type": "social_proof",
                  "aria_role": "autonomous", "trigger": "day_3",
                  "message_template": "Hi {{first_name}}, sharing a case study."},
             ],

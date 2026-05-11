@@ -103,7 +103,7 @@ def can_send_outbound(tenant_id: str, lead: dict) -> dict:
 def auto_opt_in_on_inbound(tenant_id: str, lead_id: str) -> None:
     """When a lead sends the first inbound message, they've implicitly opted in."""
     leads_col.update_one(
-        {"_id": lead_id if not isinstance(lead_id, str) else lead_id, "tenant_id": tenant_id},
+        {"id": lead_id, "tenant_id": tenant_id},
         {"$set": {
             "opted_in": True,
             "opted_in_at": _now(),

@@ -43,7 +43,7 @@ _seed_templates_if_missing()
 ALLOWED_CHANNELS = {"whatsapp", "email", "call_reminder", "linkedin_nudge"}
 ALLOWED_ROLES = {"autonomous", "alert_human"}
 ALLOWED_TYPES = {
-    "intro", "qualifier", "value_drop", "follow_up",
+    "intro", "qualifier", "value_drop", "value_add", "follow_up",
     "social_proof", "soft_cta", "budget_probe", "meeting_cta",
     "human_escalation", "re_engagement", "urgency", "closure",
 }
