@@ -1,3 +1,56 @@
+## Iter 39 — Marathon Session 1: Dashboard wiring + Reports + Admin tabs + Failed Message UI + Website Widget (Feb 2026)
+
+User request: full Phase 1-8 audit against the Master Spec and execute everything missing. Chose Option D (marathon). This is **Session 1 of N** covering:
+
+### Phase 3 — Dashboard wiring (5 min)
+- Wired `<PipelineHealthGauge />` into Dashboard right column (above `<PipelineMoodCard />`).
+- Wired `<StaleLeadAlertChip />` between AriaStories and the main grid — shows only when stale leads exist.
+
+### Phase 5.1 — Reports page (`/reports`)
+- **Backend:** new `/app/backend/routes/reports.py` with 5 endpoints:
+  - `GET /api/reports/summary?period=this_month|last_month|last_3_months` — 4 KPIs with % change vs previous period (leads_handled, qualified, meetings, won).
+  - `GET /api/reports/funnel` — 6-stage Pipeline funnel (Entered → Contacted → Replied → Qualified → Meeting → Won) with drop-off % per stage.
+  - `GET /api/reports/activity` — daily conversation count (last 30d) + touchpoint sent/failed/skipped totals.
+  - `GET /api/reports/sources` — per-source aggregation with conversion %.
+  - `GET /api/reports/export` — branded PDF via reportlab (KPI table + funnel table + source table + GenLeadAI footer).
+- **Frontend:** new `/app/frontend/src/pages/Reports.js` — 3 period toggles, 4 KPI cards, Recharts horizontal bar funnel, Recharts BarChart for daily conversations, PieChart for touchpoint mix, source performance table. `Export PDF` button downloads file.
+- Replaced `/reports` route (was pointing to old `Analytics`).
+
+### Phase 5.5 — Failed Message Log UI (`/admin/failed-messages`)
+- New page `/app/frontend/src/pages/FailedMessages.js` consuming existing `/api/failed-messages` endpoints (list/retry/dismiss already shipped Iter 36).
+- Lists unresolved failures with retry count, channel icon, error reason, payload preview, lead link.
+- Owner/admin buttons: individual Retry, individual Dismiss, "Retry all" batch action.
+- Sidebar nav entry `nav-failed-messages` added under PLATFORM section.
+- Auto-refresh every 30s.
+
+### Phase 5.6 — Master Admin remaining tabs
+- **HealthMonitorTab** — new `/app/backend/routes/audit_log.py` endpoint `GET /api/admin/workspaces/health/services` returning live pings for: MongoDB (with latency), Claude (config status), Resend, WhatsApp providers (configured tenant count), Stripe, Touchpoint engine (idle/ok heuristic). Component auto-refreshes every 30s, shows 6 service cards with status badges.
+- **TrialExpiriesTab** — consumes existing `/api/admin/workspaces/trials/expiring?days=N` endpoint. Window selector (1/3/7/14 days), per-row Extend +7d / Email owner / Mark Converted actions.
+- MasterAdmin.js TABS reduced from 4 placeholders to 4 real tabs: Revenue · All Workspaces · Trial Expiries · Health Monitor.
+
+### Phase 7 — Website Form Widget + Public Lead Capture
+- **Backend:** new `/app/backend/routes/lead_capture.py`:
+  - `GET/POST /api/lead-capture/config` — tenant-side widget config (owner/admin only).
+  - `GET /api/lead-capture/public-config` — public, no-auth, returns safe subset.
+  - `POST /api/leads/capture` — **public lead-creation endpoint** (no auth, tenant_id in body), de-dupes by phone-tail or email, increments score +5 + appends source_history on duplicate, fires touchpoint engine + CRM sync via best-effort imports, respects opt-in compliance.
+  - Origin allowlist enforced if configured.
+- **Public widget JS:** new `/app/frontend/public/aria-widget.js` (≈3KB) — embeddable floating contact form, auto-derives endpoint from script src, fetches public-config, renders form with configured fields/consent/colour, posts to capture endpoint, captures UTM params, shows success state after submit.
+- **Frontend Settings:** new `/app/frontend/src/components/settings/LeadCaptureSettings.js` — toggleable enable, title/subtitle/button label, accent colour picker (live), field chip selector (first_name/last_name/email/phone/company/message), consent checkbox + text, origin allowlist textarea, **embed snippet card** (dark theme, copy button), **live preview** toggle showing form mock with chosen colour.
+- Added "Lead Capture" tab to Settings (between API & Forms and CRM).
+
+### Verified (Iter 39 testing report)
+- **Backend 12/12 pass** — all reports + admin health + trial expiries + lead-capture endpoints return correct shapes and respect tenant scoping & role gates.
+- **Frontend 100% e2e** — Dashboard health gauge + stale chip render, Reports page renders KPIs + funnel + charts + PDF export download verified, Master Admin tabs all clickable + populated, Failed Messages empty state working, Lead Capture settings page + embed snippet card + preview all functional.
+- One LOW console warning about `<span>` inside `<option>` flagged by testing agent was a false positive (option contents are plain text).
+
+### Queued for Session 2 (next "continue")
+- Phase 7 remaining: GA4 server-side events (Measurement Protocol), Meta Conversions API, Zapier triggers, Make.com triggers, Instantly.ai webhook, Apollo.io import, Typeform webhook, Google Ads Lead Form webhook.
+- Phase 8 remaining: Dedicated `/privacy`, `/terms`, `/dpa` legal page routes, Data retention cron (delete old message content / classification log / API usage log), 360dialog webhook HMAC signature verification audit.
+- Phase 3.4: Dedicated `/conversations` page with thread list + urgent-float-to-top.
+
+---
+
+
 ## Iter 38 — Touchpoint Mapping as hero workspace (vertical timeline + side drawer + scoring) (Feb 2026)
 
 **User intent:** "I want touchpoint mapping to be the biggest and most important functionality of Aria." Promoted from a buried sub-section into the main sidebar; full redesign of the editor page.
