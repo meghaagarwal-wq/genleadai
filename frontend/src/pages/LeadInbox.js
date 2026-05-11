@@ -133,16 +133,16 @@ const LeadInbox = () => {
           <table className="w-full text-sm text-left">
             <thead>
               <tr className="bg-[#F4F0FF]">
-                {['Name','Company','Type','Status','ICP','Score','Channel','Next Best Action','Created'].map(h => (
-                  <th key={h} className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily:'Plus Jakarta Sans' }}>{h}</th>
+                {['Name','Company','Type','Status','ICP','Score','Aria','Channel','Next Best Action','Created'].map(h => (
+                  <th key={h} data-testid={`th-${h.toLowerCase().replace(/\s+/g,'-')}`} className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily:'Plus Jakarta Sans' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="px-6 py-12 text-center text-[#9B8AB0]">Loading...</td></tr>
+                <tr><td colSpan={10} className="px-6 py-12 text-center text-[#9B8AB0]">Loading...</td></tr>
               ) : leads.length === 0 ? (
-                <tr><td colSpan={8} className="px-6 py-12 text-center text-[#9B8AB0]">No leads found</td></tr>
+                <tr><td colSpan={10} className="px-6 py-12 text-center text-[#9B8AB0]">No leads found</td></tr>
               ) : leads.map(lead => {
                 const eng = engagementMap[lead.id];
                 const isHot = eng?.is_hot;
@@ -173,6 +173,19 @@ const LeadInbox = () => {
                       </div>
                       <span className="text-xs font-mono text-[#5A4A7A]">{lead.icp_score}</span>
                     </div>
+                  </td>
+                  <td className="px-6 py-4" data-testid={`aria-cell-${lead.id}`}>
+                    {(() => {
+                      const c = confidenceMap[lead.id];
+                      return (
+                        <AriaConfidenceDial
+                          score={c?.score ?? lead.icp_score ?? 0}
+                          color={c?.color || (lead.icp_score >= 70 ? 'green' : lead.icp_score >= 50 ? 'yellow' : 'red')}
+                          size="sm"
+                          factors={c?.factors || []}
+                        />
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-[#5A4A7A] text-xs">{lead.source_channel?.replace('_',' ')}</td>
                   <td className="px-6 py-4">

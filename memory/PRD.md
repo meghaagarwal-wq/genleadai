@@ -595,3 +595,24 @@ Typography alignment:
 
 ## Deployment: READY
 Custom domain target: app.genleadai.com
+
+
+## Iter 33 — Aria Confidence Dial complete (Feb 2026)
+**Backend** (`/app/backend/routes/aria_confidence.py`, already shipped):
+- `GET /api/aria/confidence/{lead_id}` and `POST /api/aria/confidence/batch` compute a 0–100 composite score per lead combining: 60% ICP fit, 25% touchpoint engagement (paused-on-reply = strongest signal), 15% recency (7d/14d), and stage bonus/penalty.
+- Returns `{score, color (green|yellow|red), label (hot|warm|cold), factors[]}`. Batch capped at 200 IDs.
+
+**Frontend**:
+- New reusable `AriaConfidenceDial.js` SVG ring gauge (sm/md/lg sizes) with hover tooltip listing top factors.
+- `LeadDetail` header renders `size="lg"` dial alongside the lead identity (prior session).
+- **NEW (this iter)**: `LeadInbox` table now has an "Aria" column; batch-fetches scores via `useEffect([leads])` and renders a `size="sm"` dial in each row (testid `aria-cell-{lead_id}`). Empty/loading colSpan bumped to 10.
+
+**Backlog (P1 next from Master Build Spec — Session C/D/E)**:
+- Stale Lead Engine background job + Pipeline Health Score gauge on Dashboard
+- Sentiment detection on inbound messages + sentiment-aware responses
+- Conversations page (`/conversations`) with take-over flow + urgent-leads-pinned-top
+- Graceful degradation: `failed_message_log` collection + retry queue
+- Reports page rebuild (funnel, source perf, PDF export)
+- Lead source attribution (`source_type`, utm_*, `needs_review`)
+- Embeddable Lead Capture widget + Settings → Notifications tab
+- Master Admin panel (`/master-admin`) + Pre-launch checklist
