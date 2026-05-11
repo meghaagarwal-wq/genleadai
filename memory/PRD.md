@@ -1,3 +1,29 @@
+## Iter 41 — Dashboard UI/UX Beautification: AriaCommandRoom hero + light/warm glassmorphism (Feb 2026)
+
+**User intent:** "Beautify and upgrade the UI/UX of the existing ARIA dashboard." Light background, warm neutral base, deep navy text, glassmorphism, tasteful micro-animations (page fade-in, hover lift, glowing ring on Hot Leads, soft pulse for ARIA Active), and a new ARIA Personality Layer panel showing current mode + next best action. Backend untouched.
+
+**New component** `/app/frontend/src/components/AriaCommandRoom.js` — the premium AI-first dashboard hero:
+- Warm gradient surface (white → lavender → cream) with radial soft-light overlays.
+- Time-of-day greeting ("Good evening, Megha") with Sun/Moon/Coffee icon.
+- H1: "Your AI sales command room" + supporting copy.
+- **Animated ARIA ACTIVE pill** (`aria-status-pill`) — green pulsing dot via `aria-ping` keyframe + BETA badge + "Multi-tenant · DPDP-ready" subtext.
+- **Today summary stat grid** (`today-summary`): Hot leads (with red glowing ring via `aria-stat-hot` class when > 0), Conversations today, Going cold, Meetings this week — each clickable.
+- **ARIA Personality Panel** (`aria-personality-panel`) — Robot avatar in a colored gradient tile, "Aria is watching your pipeline" eyebrow, dynamic mode chip (`drafting | nurturing | following | listening`) computed from real hot/stale/recent-opens/pending-followups counters, sentence + subtitle from `buildNextAction()` (also fed by real analytics), primary CTA + "Ask Aria what to do next" secondary button.
+- **Quick actions grid** (`quick-actions`): Add lead · Your 5 today · Pipeline · Conversations.
+- Hits real endpoints `/api/analytics/dashboard`, `/api/health/stale-leads`, `/api/leads?icp_tier=hot&limit=1` — no fake data.
+
+**Dashboard.js refactor** (`/app/frontend/src/pages/Dashboard.js`):
+- Replaced `<WorkspaceHero />` with `<AriaCommandRoom userName={user?.full_name} />` at the top.
+- Wrapped root in `aria-fade-up`; AriaStories and the central workspace grid get staggered `aria-fade-up-1` / `aria-fade-up-2` reveals.
+- Every card (KPI grid, all chart cards, Priority Leads, ARIA Activity, B2B/B2C donut, ICP donut, Quick Actions, Recent Leads table) now uses `aria-card-lift` (translateY -2px + shadow-hover on hover) + `rounded-2xl`.
+- Existing motion utilities reused from `index.css`: `aria-fade-up`, `aria-fade-up-1..4`, `aria-card-lift`, `aria-pulse-ring`.
+
+**Verified (testing_agent_v3_fork iter41)**:
+- Frontend 100% — all 24 required data-testids rendered, real backend data hydrated (Hot=19, Going Cold=83), all 4 stat-card navigations work, all 4 quick-actions navigate correctly, ARIA Personality Panel mode chip + CTA work, console clean, zero regressions on legacy dashboard sections.
+
+---
+
+
 ## Iter 40 — Marathon Session 2: Integration Hub + Conversations + Legal + Retention (Feb 2026)
 
 User: "start with session 2" — continued Option D marathon. Built Phase 7 remaining, Phase 8 retention/legal, and Phase 3.4 Conversations page.
