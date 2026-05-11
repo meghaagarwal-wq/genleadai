@@ -7,6 +7,7 @@ import LeadJourneyTab from '../components/LeadJourneyTab';
 import LeadOptInBanner from '../components/LeadOptInBanner';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import CrmSyncBadge from '../components/CrmSyncBadge';
+import DpdpDeleteButton from '../components/DpdpDeleteButton';
 import {
   ArrowLeft,
   Phone,
@@ -207,10 +208,12 @@ const LeadDetail = () => {
 
   return (
     <div data-testid="lead-detail-page" className="space-y-6">
-      {/* Back button */}
-      <button onClick={() => navigate('/leads')} className="flex items-center gap-2 text-[#5A4A7A] hover:text-[#7C35DC] transition-colors text-sm" data-testid="back-to-leads-btn">
-        <ArrowLeft size={16} /> Back to Leads
-      </button>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <button onClick={() => navigate('/leads')} className="flex items-center gap-2 text-[#5A4A7A] hover:text-[#7C35DC] transition-colors text-sm" data-testid="back-to-leads-btn">
+          <ArrowLeft size={16} /> Back to Leads
+        </button>
+        <DpdpDeleteButton leadId={id} leadName={`${lead.first_name} ${lead.last_name}`} onDeleted={() => navigate('/leads')} />
+      </div>
 
       {/* Compliance opt-in banner */}
       <LeadOptInBanner lead={lead} onUpdated={fetchLead} />

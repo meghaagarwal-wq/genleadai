@@ -54,6 +54,11 @@ from routes.classification import router as classification_router, classify_inbo
 from routes.aria_confidence import router as aria_confidence_router
 from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
 from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
+from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, audit_write
+from routes.data_deletion import router as data_deletion_router
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
@@ -90,6 +95,14 @@ app.include_router(aria_confidence_router)
 app.include_router(admin_revenue_router)
 app.include_router(admin_invoice_router)
 app.include_router(crm_sync_router)
+app.include_router(audit_log_router)
+app.include_router(admin_workspaces_router)
+app.include_router(data_deletion_router)
+
+# Rate limiter — applied to sensitive auth & webhook endpoints
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 register_pietential_startup(app)
 
 

@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 
 from deps import db, get_current_user
 from routes.tenants import get_active_tenant
+from security.encryption import encrypt, decrypt
 
 logger = logging.getLogger("crm_sync")
 
@@ -193,7 +194,7 @@ async def _dispatch(integ: dict, entry: dict) -> Dict[str, Any]:
 
 
 async def _dispatch_hubspot(integ: dict, entry: dict) -> Dict[str, Any]:
-    token = (integ.get("credentials") or {}).get("access_token") or os.environ.get("HUBSPOT_TEST_TOKEN")
+    token = decrypt((integ.get("credentials") or {}).get("access_token")) or os.environ.get("HUBSPOT_TEST_TOKEN")
     if not token:
         return {"success": False, "error": "hubspot: no access token (placeholder mode)"}
     base = "https://api.hubapi.com"
@@ -238,7 +239,7 @@ async def _dispatch_hubspot(integ: dict, entry: dict) -> Dict[str, Any]:
 
 
 async def _dispatch_pipedrive(integ: dict, entry: dict) -> Dict[str, Any]:
-    api_key = (integ.get("credentials") or {}).get("api_key")
+    api_key = decrypt((integ.get("credentials") or {}).get("api_key"))
     domain = (integ.get("credentials") or {}).get("api_domain") or "https://api.pipedrive.com"
     if not api_key:
         return {"success": False, "error": "pipedrive: no api_key"}
@@ -265,7 +266,7 @@ async def _dispatch_pipedrive(integ: dict, entry: dict) -> Dict[str, Any]:
 
 
 async def _dispatch_zoho(integ: dict, entry: dict) -> Dict[str, Any]:
-    token = (integ.get("credentials") or {}).get("access_token")
+    token = decrypt((integ.get("credentials") or {}).get("access_token"))
     if not token:
         return {"success": False, "error": "zoho: no access token (placeholder mode)"}
     # Zoho CRM v2 REST shape — placeholder, real call deferred
@@ -273,7 +274,7 @@ async def _dispatch_zoho(integ: dict, entry: dict) -> Dict[str, Any]:
 
 
 async def _dispatch_salesforce(integ: dict, entry: dict) -> Dict[str, Any]:
-    token = (integ.get("credentials") or {}).get("access_token")
+    token = decrypt((integ.get("credentials") or {}).get("access_token"))
     instance = (integ.get("credentials") or {}).get("instance_url")
     if not token or not instance:
         return {"success": False, "error": "salesforce: no access token / instance_url (placeholder mode)"}
@@ -410,7 +411,7 @@ async def connect_crm(payload: ConnectPayload, tenant: dict = Depends(get_active
     if payload.crm_type == "pipedrive":
         if not payload.api_key:
             raise HTTPException(status_code=400, detail="Pipedrive requires api_key")
-        creds["api_key"] = payload.api_key
+        creds["api_key"] = encrypt(payload.api_key)
         if payload.api_domain:
             creds["api_domain"] = payload.api_domain.rstrip("/")
     elif payload.crm_type == "custom_webhook":
@@ -419,10 +420,10 @@ async def connect_crm(payload: ConnectPayload, tenant: dict = Depends(get_active
     elif payload.crm_type in OAUTH_CRMS:
         # Placeholder mode: accept a paste-in access_token via api_key field
         if payload.api_key:
-            creds["access_token"] = payload.api_key
+            creds["access_token"] = encrypt(payload.api_key)
         elif payload.oauth_code:
             # In real OAuth: exchange code → tokens. For now stash the code.
-            creds["oauth_code"] = payload.oauth_code
+            creds["oauth_code"] = encrypt(payload.oauth_code)
             creds["pending_oauth"] = True
 
     doc = {
@@ -442,13 +443,24 @@ async def connect_crm(payload: ConnectPayload, tenant: dict = Depends(get_active
     integrations_col.insert_one(doc.copy())
     doc.pop("_id", None)
     doc.pop("credentials", None)
+    # Audit
+    try:
+        from routes.audit_log import audit_write as _aw
+        _aw(tenant["id"], user, "crm.connected", "crm_integration", doc["id"], {"crm_type": payload.crm_type})
+    except Exception:
+        pass
     return {"status": "ok", "integration": doc}
 
 
 @router.delete("/disconnect")
-async def disconnect_crm(tenant: dict = Depends(get_active_tenant)):
+async def disconnect_crm(tenant: dict = Depends(get_active_tenant), user: dict = Depends(get_current_user)):
     _require_owner(tenant)
     integrations_col.delete_many({"tenant_id": tenant["id"]})
+    try:
+        from routes.audit_log import audit_write as _aw
+        _aw(tenant["id"], user, "crm.disconnected", "crm_integration", None)
+    except Exception:
+        pass
     return {"status": "ok"}
 
 

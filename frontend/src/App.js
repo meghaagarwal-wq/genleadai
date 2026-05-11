@@ -43,6 +43,7 @@ import WeeklyRecap from './pages/WeeklyRecap';
 import SalesEngagement from './pages/SalesEngagement';
 import AdminFeedback from './pages/AdminFeedback';
 import MasterAdmin from './pages/MasterAdmin';
+import { Privacy, Terms, DPA } from './pages/legal/Legal';
 
 // Pietential workspace
 import PtLayout from './pietential/PtLayout';
@@ -138,6 +139,11 @@ function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/demo" element={<DemoSandbox />} />
               <Route path="/invite/:token" element={<InviteAccept />} />
+
+              {/* Legal pages (public) */}
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/dpa" element={<DPA />} />
 
               {/* Public ARIA content ecosystem (crawlable, no auth) */}
               <Route path="/aria" element={<AriaHome />} />

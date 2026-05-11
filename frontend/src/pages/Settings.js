@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database } from '@phosphor-icons/react';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
 import CrmSettingsTab from '../components/CrmSettingsTab';
+import AuditLogPanel from '../components/AuditLogPanel';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -876,8 +877,8 @@ const Settings = () => {
 
       {/* Security Tab */}
       {activeTab === 'security' && (
-        <div className="space-y-4 max-w-xl" data-testid="security-tab">
-          <div className="bg-[#141414] border border-[#262626] rounded-lg p-6">
+        <div className="space-y-4" data-testid="security-tab">
+          <div className="bg-[#141414] border border-[#262626] rounded-lg p-6 max-w-xl">
             <h3 className="text-lg font-semibold text-white">Change password</h3>
             <p className="text-sm text-[#A3A3A3] mt-1">
               Signed in as <span className="font-mono text-white">{user?.email}</span>. Use at least 8 characters.
@@ -931,6 +932,8 @@ const Settings = () => {
               </button>
             </form>
           </div>
+
+          <AuditLogPanel />
         </div>
       )}
 
