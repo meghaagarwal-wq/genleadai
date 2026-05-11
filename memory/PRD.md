@@ -1,3 +1,63 @@
+## Iter 40 — Marathon Session 2: Integration Hub + Conversations + Legal + Retention (Feb 2026)
+
+User: "start with session 2" — continued Option D marathon. Built Phase 7 remaining, Phase 8 retention/legal, and Phase 3.4 Conversations page.
+
+### Phase 7 — Unified Integration Hub
+- **Backend `/app/backend/routes/integrations_hub.py`** (≈360 lines, single unified module):
+  - 8 supported types: `ga4` · `meta_capi` · `zapier` · `make` · `typeform` · `instantly` · `google_ads` · `apollo` — each with category (analytics/automation/lead_source/outreach) and direction (outbound/inbound).
+  - Endpoints: `GET /api/integrations/list`, `POST /api/integrations/{type}/connect`, `DELETE /api/integrations/{type}/disconnect`, `POST /api/integrations/{type}/test`, `GET /api/integrations/events?limit=N`, `POST /api/integrations/events/{id}/retry`.
+  - **Outbound dispatchers:**
+    - `_fire_ga4` — GA4 Measurement Protocol POST with sha256 client_id, maps Aria events to GA4 event names (aria_lead_created, aria_meeting_booked, aria_deal_closed_won…).
+    - `_fire_meta_capi` — Meta Conversions API POST with sha256-hashed user_data (em/ph/fn/ln), supports test_event_code.
+    - `_fire_generic_webhook` — Zapier + Make.com (same JSON body with event_type, lead snapshot, extra).
+  - **Inbound webhooks (no-auth, public):**
+    - `POST /api/integrations/typeform/webhook/{tenant_id}` — parses form_response.answers, normalizes, routes through lead_capture.capture_lead.
+    - `POST /api/integrations/instantly/webhook/{tenant_id}` — handles reply payloads.
+    - `POST /api/integrations/google-ads/webhook/{tenant_id}` — parses user_column_data array.
+    - `POST /api/integrations/apollo/import` (authenticated) — bulk array import, de-dupes via _normalize_and_capture.
+  - **Lifecycle fan-out** — `fire_lifecycle_event(tenant_id, event_type, lead, extra)` injected at top of `crm_sync.fire_event` so it fires for every Aria lifecycle event regardless of CRM connection state. Async/non-blocking; logs every dispatch to `integration_events`.
+  - Secret masking on response — `access_token`, `api_secret`, `webhook_url` etc. are masked as `EAAx••••••••xxxx` so secrets never leak back to UI.
+- **Frontend `/app/frontend/src/pages/Integrations.js`** — full rewrite:
+  - Hub page (`integrations-hub-page`) with category filter pills (`cat-all/analytics/automation/lead_source/outreach`).
+  - 8 integration cards each showing category badge, blurb, connection status (`Connected` green / `Not connected` grey), and last error if any.
+  - Config modal opens on card click. For outbound: input fields (Measurement ID, API secret, Pixel ID, Hook URL, etc.) with masked previews of current values, Save/Test/Disconnect actions. For inbound: shows a **copyable webhook URL card** + docs link. For Apollo: JSON textarea + bulk Import button.
+
+### Phase 3.4 — Conversations page (`/conversations`)
+- **Backend `/app/backend/routes/conversations.py`** — `GET /api/conversations/threads` joins leads + aria_conversations to surface last message preview + Aria confidence + sentiment per thread. Urgent and negative sentiment threads float to top.
+- **Frontend `/app/frontend/src/pages/Conversations.js`** — sentiment filter pills (All/Urgent/Negative/Positive/Neutral with live counts), name/phone search, urgent rows highlighted with red gradient stripe. Click thread → routes to `/lead-inbox?lead={id}` for full takeover.
+- Sidebar nav `nav-conversations` (ChatCircle icon) inserted between Follow-Ups and AI Assistant.
+
+### Phase 8.7 — Data Retention background loop
+- New `/app/backend/routes/retention.py` — 24h tick (started in server.py startup):
+  - Conversation messages older than 365 days → content redacted to `[redacted]` (metadata preserved).
+  - `classification_log` older than 180 days → hard delete.
+  - `api_usage_log` older than 90 days → hard delete.
+  - `failed_message_log` resolved entries older than 30 days → hard delete.
+
+### Phase 8.8 — Legal pages
+- Replaced `/app/frontend/src/pages/legal/Legal.js` (old dark-theme stub) with full GenLeadAI-branded, DPDP Act 2023-compliant content for **/privacy**, **/terms**, **/dpa**. Each page is public (no auth), uses `LegalShell` with a "Back to Aria" link, gradient-friendly icon header, structured H2/H3/UL sections.
+
+### Bug fixed during testing
+- **HIGH:** `lead_capture.py` phone-dedup regex crashed when cleaned phone had a leading `+` (regex `+xxxxx$` rejected by Mongo). Fixed by wrapping in `re.escape(phone_tail)`. Curl-verified with `+91922222` after fix.
+
+### Verified — Iter 40 testing
+- Backend 17/18 pytest pass (1 HIGH issue identified + immediately fixed in-session).
+- Frontend 100% e2e — all 4 new pages render, all data-testids match, no console errors, sidebar nav-conversations works, category filter narrows the hub cards correctly, config modal opens with proper masking, secret retention preserves existing config values.
+
+### Phase 7 not yet built (Session 3+ candidates)
+- Lemlist / Saleshandy hub-style cards (existing Sales Engagement page already covers these via different UI).
+- HubSpot / Pipedrive / Zoho / Salesforce hub-style cards (existing CRM tab in Settings already covers these via dedicated CrmSettingsTab).
+- OAuth flow for Meta Lead Ads (currently uses static webhook URL).
+
+### Remaining marathon items (Session 3+)
+- 360dialog webhook HMAC signature verification audit.
+- Embeddable lead capture widget v2 — "Click-to-WhatsApp" lite button (alt of current form).
+- Settings → Notifications tab (mentioned in Master Spec 4.2).
+- Master Spec Phase 5.6 "Platform Stats" tab for Master Admin.
+
+---
+
+
 ## Iter 39 — Marathon Session 1: Dashboard wiring + Reports + Admin tabs + Failed Message UI + Website Widget (Feb 2026)
 
 User request: full Phase 1-8 audit against the Master Spec and execute everything missing. Chose Option D (marathon). This is **Session 1 of N** covering:

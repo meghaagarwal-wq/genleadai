@@ -125,7 +125,7 @@ async def capture_lead(payload: CapturePayload, request: Request):
     phone_tail = phone_clean[-10:] if phone_clean else None
     existing = None
     if phone_tail:
-        existing = leads_col.find_one({"tenant_id": payload.tenant_id, "phone": {"$regex": f"{phone_tail}$"}}, {"_id": 0})
+        existing = leads_col.find_one({"tenant_id": payload.tenant_id, "phone": {"$regex": f"{re.escape(phone_tail)}$"}}, {"_id": 0})
     if not existing and payload.email:
         existing = leads_col.find_one({"tenant_id": payload.tenant_id, "email": str(payload.email)}, {"_id": 0})
 
