@@ -335,6 +335,64 @@ async def list_events(limit: int = 100, tenant: dict = Depends(get_active_tenant
     return {"events": list(cur)}
 
 
+@router.get("/event-mix")
+async def event_mix(days: int = 7, tenant: dict = Depends(get_active_tenant)):
+    """Per-integration counts + success rate over the last N days.
+    Powers the dashboard 'Event Mix' tile so customers see Aria signal
+    reaching all their analytics + automation tools."""
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
+    pipeline = [
+        {"$match": {"tenant_id": tenant["id"], "created_at": {"$gte": cutoff}, "direction": "outbound"}},
+        {"$group": {
+            "_id": "$integration_type",
+            "total": {"$sum": 1},
+            "success": {"$sum": {"$cond": [{"$eq": ["$processed", True]}, 1, 0]}},
+        }},
+    ]
+    rows = list(events_col.aggregate(pipeline))
+
+    # Per-day buckets for sparkline (last N days)
+    spark_pipeline = [
+        {"$match": {"tenant_id": tenant["id"], "created_at": {"$gte": cutoff}, "direction": "outbound"}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 10]},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    spark = [{"day": r["_id"], "count": r["count"]} for r in events_col.aggregate(spark_pipeline)]
+
+    integrations = []
+    total_all = 0
+    success_all = 0
+    for r in rows:
+        kind = r["_id"]
+        meta = SUPPORTED_TYPES.get(kind, {})
+        success_rate = round((r["success"] / r["total"]) * 100, 1) if r["total"] else 0
+        integrations.append({
+            "type": kind,
+            "label": meta.get("label", kind),
+            "category": meta.get("category"),
+            "total": r["total"],
+            "success": r["success"],
+            "failed": r["total"] - r["success"],
+            "success_rate": success_rate,
+        })
+        total_all += r["total"]
+        success_all += r["success"]
+    integrations.sort(key=lambda x: x["total"], reverse=True)
+
+    return {
+        "days": days,
+        "total_events": total_all,
+        "total_success": success_all,
+        "overall_success_rate": round((success_all / total_all) * 100, 1) if total_all else 0,
+        "integrations": integrations,
+        "sparkline": spark,
+    }
+
+
 @router.post("/events/{event_id}/retry")
 async def retry_event(event_id: str, tenant: dict = Depends(get_active_tenant), current_user: dict = Depends(get_current_user)):
     ev = events_col.find_one({"id": event_id, "tenant_id": tenant["id"]}, {"_id": 0})

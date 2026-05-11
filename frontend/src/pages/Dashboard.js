@@ -14,6 +14,7 @@ import PipelineMoodCard from '../components/PipelineMoodCard';
 import EmptyDashboard from '../components/EmptyDashboard';
 import PipelineHealthGauge from '../components/PipelineHealthGauge';
 import StaleLeadAlertChip from '../components/StaleLeadAlertChip';
+import EventMixTile from '../components/EventMixTile';
 import {
   Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
   CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
@@ -130,6 +131,7 @@ const Dashboard = () => {
         <div className="space-y-4">
           <PipelineHealthGauge />
           <PipelineMoodCard />
+          <EventMixTile />
         </div>
       </div>
 
