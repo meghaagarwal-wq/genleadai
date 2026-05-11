@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
-import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle, WarningCircle } from '@phosphor-icons/react';
+import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle, WarningCircle, GitBranch } from '@phosphor-icons/react';
 import { Toaster, toast } from 'sonner';
+import TouchpointMappingStep from '../components/onboarding/TouchpointMappingStep';
 
 const STEPS = [
   { id: 'business', title: 'Business Profile', icon: Buildings },
   { id: 'persona', title: "Aria's Persona", icon: Robot },
   { id: 'sales', title: 'Sales Process', icon: Target },
+  { id: 'touchpoints', title: 'Lead Journey', icon: GitBranch },
   { id: 'whatsapp', title: 'WhatsApp', icon: ChatTeardropDots },
   { id: 'team', title: 'Team', icon: UsersThree },
 ];
@@ -38,6 +40,7 @@ const OnboardingWizard = () => {
   const [saving, setSaving] = useState(false);
   const [tenantName, setTenantName] = useState('');
   const [submitError, setSubmitError] = useState(null);
+  const [touchpointSaved, setTouchpointSaved] = useState(false);
 
   const [form, setForm] = useState({
     business: {
@@ -95,6 +98,7 @@ const OnboardingWizard = () => {
     if (step === 0) return form.business.business_name.trim().length > 0;
     if (step === 1) return form.persona.aria_name.trim().length > 0;
     if (step === 2) return form.sales.product_description.trim().length > 0 && form.sales.pipeline_stages.length >= 2;
+    if (step === 3) return touchpointSaved;
     return true;
   };
 
@@ -284,8 +288,23 @@ const OnboardingWizard = () => {
               </>
             )}
 
-            {/* STEP 3: WhatsApp */}
+            {/* STEP 3: Touchpoint Mapping (auto-generated from steps 0-2) */}
             {step === 3 && (
+              <TouchpointMappingStep
+                form={form}
+                onSaved={() => {
+                  setTouchpointSaved(true);
+                  setStep(4);
+                }}
+                onSkip={() => {
+                  setTouchpointSaved(true);
+                  setStep(4);
+                }}
+              />
+            )}
+
+            {/* STEP 4: WhatsApp */}
+            {step === 4 && (
               <>
                 <div className="text-sm text-[#5A4A7A] mb-2">
                   Aria primarily operates over WhatsApp. You can configure this now or later from Settings.
@@ -314,8 +333,8 @@ const OnboardingWizard = () => {
               </>
             )}
 
-            {/* STEP 4: Team (skippable) */}
-            {step === 4 && (
+            {/* STEP 5: Team (skippable) */}
+            {step === 5 && (
               <>
                 <div className="text-sm text-[#5A4A7A]">
                   You can invite teammates right now or later from <span className="font-bold">Settings → Team</span>.
@@ -350,7 +369,12 @@ const OnboardingWizard = () => {
               data-testid="ob-back" className="flex items-center gap-1 text-sm font-bold text-[#5A4A7A] hover:text-[#7C35DC] disabled:opacity-40">
               <ArrowLeft size={14} /> Back
             </button>
-            {step < STEPS.length - 1 ? (
+            {/* Step 3 (touchpoints) handles its own Continue/Customise CTAs internally */}
+            {step === 3 ? (
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9B8AB0]">
+                {touchpointSaved ? 'Saved · advancing…' : 'Choose to continue'}
+              </span>
+            ) : step < STEPS.length - 1 ? (
               <button type="button" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}
                 data-testid="ob-next"
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-white text-sm font-bold disabled:opacity-50"
