@@ -206,6 +206,7 @@ function App() {
                     <Layout>
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
+                        <Route path="/dashboard" element={<Navigate to="/" replace />} />
                         <Route path="/your-5-today" element={<YourFiveToday />} />
                         <Route path="/leads" element={<LeadInbox />} />
                         <Route path="/leads/:id" element={<LeadDetail />} />

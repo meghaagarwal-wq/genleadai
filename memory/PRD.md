@@ -1,3 +1,44 @@
+## Iter 42 — P0/P2 + Backlog: Persistent Aria mode chip · Notifications tab · Platform Stats · WA HMAC · Click-to-WhatsApp widget (Feb 2026)
+
+**User intent:** "Now do next action items, future/backlog and then potential enhancement." Single batch covering every item promised in iter41's finish: polish remaining dashboard cards, persistent Aria mode chip in topbar, Settings → Notifications tab, Master Admin → Platform Stats tab, 360dialog/Meta webhook HMAC verification, embeddable Click-to-WhatsApp widget v2.
+
+**Frontend — new components:**
+- `AriaModeChip.js` — persistent topbar pill that surfaces Aria's current mode ("Drafting / Nurturing / Following / Listening") with a pulsing dot. Polls `/api/analytics/dashboard` + `/api/health/stale-leads` every 90s. Mounted in `Layout.js` immediately before the AI Summary button. Visible on every authenticated page; click → routes to `/`.
+- `settings/NotificationsTab.js` — 7 event × 2 channel (In-app, Email) toggle matrix + Quiet hours card (enable + start/end hour 0-23). Save button only enables when dirty; success toast on PUT.
+- `admin/PlatformStatsTab.js` — Master Admin Phase 5.6 panel. 8 KPI tiles (Total workspaces, Paying clients, Trials, Total leads, Conversations, Messages 24h, Failed 24h, Claude calls) + Claude cost-today card. Polls `/api/admin/workspaces/platform/stats` every 60s.
+
+**Frontend — polish:**
+- `PipelineHealthGauge`, `FounderCommandCenter.SectionCard` — both upgraded to `rounded-2xl` + `aria-card-lift` so the dashboard's visual rhythm matches top to bottom.
+- `App.js` — added `<Route path="/dashboard" element={<Navigate to="/" replace />} />` so deep-links to `/dashboard` no longer render a blank main panel.
+- `Settings.js` — Bell icon + new `notifications` tab between Workspace and Security.
+- `MasterAdmin.js` — TABS array extended with a 5th `platform-stats` entry.
+
+**Backend — new module `/app/backend/routes/notifications.py`**:
+- `GET /api/notifications/preferences` — returns the tenant's prefs doc (or defaults if none saved). Backfills any new event keys with defaults so the matrix is always complete.
+- `PUT /api/notifications/preferences` — owner/admin only. Validates event keys against `EVENT_KEYS` whitelist and persists to `tenant_notification_prefs` collection (upsert by `tenant_id`).
+- 7 event keys: `new_hot_lead`, `stale_lead_alert`, `failed_message`, `weekly_recap`, `daily_brief`, `aria_escalation`, `meeting_booked`.
+- Quiet hours fields stored alongside: `quiet_hours_enabled`, `quiet_start_hour`, `quiet_end_hour`.
+
+**Backend — Click-to-WhatsApp widget v2:**
+- `/app/frontend/public/aria-wa-widget.js` — embeddable ~3KB floating green button. Reads `window.AriaWaWidget = { phone, text, tenantId?, endpoint?, label?, color? }`. On click: opens `https://wa.me/<phone>?text=<encoded>` AND fires a non-blocking `sendBeacon`/`fetch` ping to `/api/integrations/widget/wa-click`.
+- New endpoint `POST /api/integrations/widget/wa-click` (public, no-auth) — logs to `integration_events` with `event_type=wa_widget_click` + UA + referrer + page_url.
+
+**Backend — 360dialog / Meta webhook HMAC audit:**
+- `whatsapp_webhook_receive` now reads raw bytes via `Request` and verifies:
+  - Meta: `X-Hub-Signature-256` header HMAC-SHA256 against `WHATSAPP_APP_SECRET` env.
+  - 360dialog: `X-D360-Token` header compared to `DIALOG360_WEBHOOK_TOKEN` env (constant-time).
+- Bad signature → 401. Missing env secret → warn-and-allow (graceful for tenants who haven't completed Meta App Dashboard setup yet).
+
+**Verified (iter42 testing_agent_v3_fork)**:
+- Backend 9/9 pytest pass — notifications GET/PUT, role gating (sales_rep gets 403 on PUT), platform stats master-admin gating, wa-click public POST + integration_events insert, /aria-wa-widget.js static serve, webhook signature warn-allow path.
+- Frontend 100% on iter42 features — topbar chip persists across `/` `/pipeline` `/leads`, all 7 notification rows render + toggle + save + quiet hours, Platform Stats tab in Master Admin with 8 tiles + cost card, zero regressions on existing dashboard.
+- Two LOW design issues from the test report addressed:
+  - `/dashboard` deep-link blank screen — fixed with Navigate redirect.
+  - `<span>` inside `<option>` console warning — confirmed false positive (recurring from iter39, no actual span in any option child).
+
+---
+
+
 ## Iter 41 — Dashboard UI/UX Beautification: AriaCommandRoom hero + light/warm glassmorphism (Feb 2026)
 
 **User intent:** "Beautify and upgrade the UI/UX of the existing ARIA dashboard." Light background, warm neutral base, deep navy text, glassmorphism, tasteful micro-animations (page fade-in, hover lift, glowing ring on Hot Leads, soft pulse for ARIA Active), and a new ARIA Personality Layer panel showing current mode + next best action. Backend untouched.
