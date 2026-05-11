@@ -6,17 +6,18 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-// Dark theme palette (per spec)
+// GenLeadAI brand palette (light theme — matches main app)
 const C = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  primary: '#4f8ef7',
-  gold: '#e2b96f',
-  text: '#ffffff',
-  textDim: '#a0a8c0',
-  border: '#2a2a45',
-  success: '#34d399',
-  danger: '#f87171',
+  bg: '#FAFAFA',           // page background
+  surface: '#FFFFFF',      // cards
+  primary: '#7C35DC',      // brand purple
+  primaryAlt: '#C044E0',   // pink-purple secondary
+  gold: '#E2B96F',         // Aria accent
+  text: '#1A0A2E',         // primary text
+  textDim: '#5A4A7A',      // secondary text
+  border: '#E8E0F5',       // soft purple border
+  success: '#16A34A',
+  danger: '#DC2626',
 };
 
 const SHARE_URL = 'https://app.genleadai.com/demo';
@@ -73,11 +74,11 @@ const Bubble = ({ role, text, paused }) => {
       <div
         className="max-w-[78%] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-line"
         style={{
-          background: isAria ? C.primary : '#2a3447',
-          color: '#fff',
+          background: isAria ? C.primary : '#E8EDF5',
+          color: isAria ? '#fff' : '#1A2540',
           borderRadius: isAria ? '14px 14px 14px 4px' : '14px 14px 4px 14px',
           opacity: paused ? 0.45 : 1,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+          boxShadow: '0 2px 6px rgba(26,10,46,0.12)',
         }}
       >
         {text}
@@ -105,7 +106,7 @@ const PhoneFrame = ({ businessName = 'GenLeadAI', children }) => (
       <div className="px-4 py-3 flex items-center gap-3" style={{ background: '#1f2c3d' }}>
         <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: C.primary }}>A</div>
         <div className="flex-1 min-w-0">
-          <div className="text-white text-sm font-bold truncate" style={{ fontFamily: 'Inter' }}>{businessName}</div>
+          <div className="text-white text-sm font-bold truncate" style={{ fontFamily: 'Plus Jakarta Sans' }}>{businessName}</div>
           <div className="text-[10px]" style={{ color: '#94a3b8' }}>+91 98XXX XXXXX · online</div>
         </div>
       </div>
@@ -126,9 +127,9 @@ const PhoneFrame = ({ businessName = 'GenLeadAI', children }) => (
 const PanelCard = ({ title, icon, children, accent = C.primary }) => (
   <div
     className="rounded-xl p-4 mb-3"
-    style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, backdropFilter: 'blur(8px)' }}
+    style={{ background: '#FAF7FF', border: `1px solid ${C.border}`, boxShadow: '0 4px 12px rgba(124,53,220,0.06)' }}
   >
-    <div className="flex items-center gap-2 mb-3 text-xs font-bold uppercase tracking-[0.18em]" style={{ color: accent, fontFamily: 'Inter' }}>
+    <div className="flex items-center gap-2 mb-3 text-xs font-bold uppercase tracking-[0.18em]" style={{ color: accent, fontFamily: 'Plus Jakarta Sans' }}>
       {icon} {title}
     </div>
     {children}
@@ -179,8 +180,8 @@ function useConversationPlayer(script, autoStart = true) {
 // Scenes
 // ──────────────────────────────────────────────────────────────────────────
 const SceneTitle = ({ children }) => (
-  <div className="mb-5 p-4 rounded-xl" style={{ background: 'rgba(79,142,247,0.08)', border: `1px solid ${C.primary}33` }}>
-    <p className="text-base md:text-lg leading-relaxed" style={{ color: C.text, fontFamily: 'Inter' }}>{children}</p>
+  <div className="mb-5 p-4 rounded-xl" style={{ background: 'linear-gradient(135deg, #FAF7FF 0%, #FFFFFF 100%)', border: `1px solid ${C.primary}33`, boxShadow: '0 4px 16px rgba(124,53,220,0.06)' }}>
+    <p className="text-base md:text-lg leading-relaxed" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>{children}</p>
   </div>
 );
 
@@ -223,7 +224,7 @@ const Scene1 = () => {
 
           <PanelCard title="Live Lead Score" icon={<span>📊</span>}>
             <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-3xl font-extrabold" style={{ color: C.gold, fontFamily: 'Inter' }}>{panelState?.score || 0}</span>
+              <span className="text-3xl font-extrabold" style={{ color: C.gold, fontFamily: 'Plus Jakarta Sans' }}>{panelState?.score || 0}</span>
               <span className="text-xs" style={{ color: C.textDim }}>/ 100</span>
             </div>
             <div className="h-2 rounded-full overflow-hidden mb-2" style={{ background: C.border }}>
@@ -274,7 +275,7 @@ const Scene2 = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <PhoneFrame>
           {/* Greyed previous convo summary */}
-          <div className="mb-3 p-2 rounded-lg text-center text-[10px]" style={{ background: '#0a1320', color: '#637184', border: `1px dashed ${C.border}` }}>
+          <div className="mb-3 p-2 rounded-lg text-center text-[10px]" style={{ background: '#F1F5F9', color: '#94a3b8', border: `1px dashed ${C.border}` }}>
             ← scrolled-up: yesterday's qualification chat (5 messages)
           </div>
           {messages.map((m, i) => {
@@ -349,7 +350,7 @@ const KPI = ({ label, value, delta, deltaSign = 'up' }) => (
   <div className="rounded-xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
     <div className="text-[10px] uppercase tracking-[0.15em] font-bold mb-2" style={{ color: C.textDim }}>{label}</div>
     <div className="flex items-baseline gap-2">
-      <span className="text-3xl font-extrabold" style={{ color: C.text, fontFamily: 'Inter' }}>{value}</span>
+      <span className="text-3xl font-extrabold" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>{value}</span>
       <span className="text-xs font-bold" style={{ color: deltaSign === 'up' ? C.success : C.danger }}>{deltaSign === 'up' ? '▲' : '▼'} {delta}</span>
     </div>
   </div>
@@ -402,7 +403,7 @@ const PipelineHealthGauge = () => (
 );
 
 const KanbanColumn = ({ title, count, cards, accent }) => (
-  <div className="flex-1 min-w-[180px] rounded-xl p-3" style={{ background: C.bg, border: `1px solid ${C.border}` }}>
+  <div className="flex-1 min-w-[180px] rounded-xl p-3" style={{ background: '#F4F0FF', border: `1px solid ${C.border}` }}>
     <div className="flex items-center justify-between mb-3">
       <span className="text-[10px] uppercase tracking-[0.15em] font-bold" style={{ color: accent }}>{title}</span>
       <span className="text-[10px] font-mono" style={{ color: C.textDim }}>{count}</span>
@@ -429,7 +430,7 @@ const Scene3Dashboard = () => (
     </div>
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       <PipelineHealthGauge />
-      <div className="rounded-xl p-4" style={{ background: 'linear-gradient(135deg, #1c1f3a 0%, #1a1a2e 100%)', border: `1px solid ${C.gold}44` }}>
+      <div className="rounded-xl p-4" style={{ background: 'linear-gradient(135deg, #FAF7FF 0%, #F4EFFF 100%)', border: `1px solid ${C.gold}55` }}>
         <div className="text-xs uppercase tracking-[0.15em] font-bold mb-2" style={{ color: C.gold }}>Aria's Impact This Month</div>
         <div className="text-xs leading-relaxed" style={{ color: C.text }}>
           Aria handled <strong>143 conversations</strong> · Qualified <strong>31 leads</strong> · Saved your team an estimated <strong style={{ color: C.gold }}>19 hours</strong>.
@@ -535,7 +536,7 @@ const Scene3Leads = () => {
       </div>
       <div className="rounded-xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
         <table className="w-full text-xs">
-          <thead style={{ background: '#0f0f24' }}>
+          <thead style={{ background: '#F4F0FF' }}>
             <tr>{['Name', 'Source', 'Stage', 'Sentiment', 'Score', 'Opt-in', 'CRM'].map((h) => (
               <th key={h} className="px-3 py-2 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: C.textDim }}>{h}</th>
             ))}</tr>
@@ -578,7 +579,7 @@ const Scene3 = () => {
               background: tab === t.id ? C.primary : 'transparent',
               color: tab === t.id ? '#fff' : C.textDim,
               border: `1px solid ${tab === t.id ? C.primary : C.border}`,
-              fontFamily: 'Inter',
+              fontFamily: 'Plus Jakarta Sans',
             }}>
             {t.label}
           </button>
@@ -654,7 +655,7 @@ const Scene4 = () => {
               </div>
               <button onClick={() => setTaken(true)} data-testid="take-over-btn"
                 className="mt-4 w-full py-2.5 rounded-lg text-sm font-bold transition-all hover:opacity-90"
-                style={{ background: C.primary, color: '#fff', fontFamily: 'Inter' }}>
+                style={{ background: C.primary, color: '#fff', fontFamily: 'Plus Jakarta Sans' }}>
                 Take Over Conversation
               </button>
             </PanelCard>
@@ -679,11 +680,11 @@ const Scene4 = () => {
                     placeholder="Type your reply as Vikram's rep…"
                     data-testid="rep-reply-input"
                     className="w-full mt-1 px-3 py-2 text-sm rounded-md"
-                    style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
+                    style={{ background: '#FAFAFA', border: `1px solid ${C.border}`, color: C.text }}
                   />
                   <button onClick={sendReply} disabled={!reply.trim()} data-testid="rep-send-btn"
                     className="mt-2 w-full py-2 rounded-lg text-sm font-bold disabled:opacity-40"
-                    style={{ background: C.gold, color: '#000', fontFamily: 'Inter' }}>
+                    style={{ background: C.gold, color: '#000', fontFamily: 'Plus Jakarta Sans' }}>
                     Send reply
                   </button>
                 </div>
@@ -733,7 +734,7 @@ const AnimatedKPI = ({ label, target, suffix = '', sub = '' }) => {
   return (
     <div className="rounded-xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
       <div className="text-[10px] uppercase tracking-[0.15em] font-bold mb-2" style={{ color: C.textDim }}>{label}</div>
-      <div className="text-3xl font-extrabold" style={{ color: C.gold, fontFamily: 'Inter' }}>{v}{suffix}</div>
+      <div className="text-3xl font-extrabold" style={{ color: C.gold, fontFamily: 'Plus Jakarta Sans' }}>{v}{suffix}</div>
       {sub && <div className="text-xs mt-1" style={{ color: C.textDim }}>{sub}</div>}
     </div>
   );
@@ -781,7 +782,7 @@ const TouchpointPie = () => {
       <div className="relative w-32 h-32 flex-shrink-0">
         <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${C.success} 0deg ${sent}deg, ${C.gold} ${sent}deg ${sent + skipped}deg, ${C.danger} ${sent + skipped}deg 360deg)` }}></div>
         <div className="absolute inset-3 rounded-full flex items-center justify-center" style={{ background: C.surface }}>
-          <span className="text-xl font-extrabold" style={{ color: C.text, fontFamily: 'Inter' }}>{total}</span>
+          <span className="text-xl font-extrabold" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>{total}</span>
         </div>
       </div>
       <div className="space-y-1.5 text-xs">
@@ -822,7 +823,7 @@ const SourceTable = () => {
         <div className="text-xs uppercase tracking-[0.15em] font-bold" style={{ color: C.primary }}>Lead Source Performance</div>
       </div>
       <table className="w-full text-xs">
-        <thead style={{ background: '#0f0f24' }}>
+        <thead style={{ background: '#F4F0FF' }}>
           <tr>{['Source', 'Leads', 'Qualified', 'Conv %', 'Avg Days'].map((h) => (
             <th key={h} className="px-4 py-2 text-left text-[10px] uppercase tracking-wider font-bold" style={{ color: C.textDim }}>{h}</th>
           ))}</tr>
@@ -862,33 +863,33 @@ const Scene5 = () => (
 
     <div className="mb-6"><SourceTable /></div>
 
-    <div className="rounded-xl p-6 mb-6 text-center" style={{ background: `linear-gradient(135deg, ${C.surface} 0%, #1f1a30 100%)`, border: `2px solid ${C.gold}` }}>
+    <div className="rounded-xl p-6 mb-6 text-center" style={{ background: `linear-gradient(135deg, #FAF7FF 0%, #FFF7E6 100%)`, border: `2px solid ${C.gold}` }}>
       <div className="text-xs uppercase tracking-[0.18em] font-bold mb-2" style={{ color: C.gold }}>💰 Aria's ROI This Month</div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 text-left">
         <div>
           <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: C.textDim }}>Revenue from Aria-touched deals</div>
-          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Inter' }}>₹3,40,000</div>
+          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>₹3,40,000</div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: C.textDim }}>Cost of Aria this month</div>
-          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Inter' }}>₹12,999</div>
+          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>₹12,999</div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider font-bold" style={{ color: C.textDim }}>Hours saved</div>
-          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Inter' }}>~19 hours</div>
+          <div className="text-2xl font-extrabold" style={{ color: C.text, fontFamily: 'Plus Jakarta Sans' }}>~19 hours</div>
         </div>
       </div>
       <div className="mt-4 pt-4 border-t" style={{ borderColor: C.gold + '55' }}>
         <span className="text-sm font-bold" style={{ color: C.textDim }}>Return on investment:</span>
-        <span className="text-3xl font-extrabold ml-3" style={{ color: C.gold, fontFamily: 'Inter' }}>2,515%</span>
+        <span className="text-3xl font-extrabold ml-3" style={{ color: C.gold, fontFamily: 'Plus Jakarta Sans' }}>2,515%</span>
       </div>
     </div>
 
     <div className="rounded-2xl p-6 md:p-8 text-center" style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #6a5acd 100%)` }} data-testid="scene5-cta">
-      <h2 className="text-2xl md:text-3xl font-extrabold mb-2" style={{ color: '#fff', fontFamily: 'Inter' }}>Ready to see this for your business?</h2>
+      <h2 className="text-2xl md:text-3xl font-extrabold mb-2" style={{ color: '#fff', fontFamily: 'Plus Jakarta Sans' }}>Ready to see this for your business?</h2>
       <p className="text-sm md:text-base mb-5" style={{ color: '#dde6ff' }}>Start your 14-day free trial. Set up in under 4 hours.</p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        <a href={SIGNUP_URL} data-testid="cta-start-trial" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:scale-105" style={{ background: '#fff', color: '#1a1a2e', fontFamily: 'Inter' }}>Start Free Trial</a>
+        <a href={SIGNUP_URL} data-testid="cta-start-trial" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:scale-105" style={{ background: '#fff', color: '#1a1a2e', fontFamily: 'Plus Jakarta Sans' }}>Start Free Trial</a>
         <a href="mailto:meghaagarwal@genleadai.com?subject=Book%20a%20demo%20call" data-testid="cta-book-call" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:bg-white/10" style={{ background: 'transparent', color: '#fff', border: '1.5px solid #fff' }}>Book a Demo Call</a>
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs" style={{ color: '#dde6ff' }}>
@@ -964,10 +965,10 @@ const BonusB = () => {
         {touchpoints.map((tp, i) => (
           <div key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} data-testid={`bonus-tp-${i}`}
             className="rounded-lg p-3 flex items-center gap-3 transition-all cursor-pointer"
-            style={{ background: hovered === i ? '#1f1a30' : C.surface, border: `1px solid ${hovered === i ? C.gold + '88' : C.border}` }}>
+            style={{ background: hovered === i ? '#FAF7FF' : C.surface, border: `1px solid ${hovered === i ? C.primary + '55' : C.border}` }}>
             <div className="flex-shrink-0 flex flex-col items-center w-12 py-1 rounded-md" style={{ background: C.primary + '20', border: `1px solid ${C.primary}55` }}>
               <span className="text-[9px] font-bold" style={{ color: C.primary }}>DAY</span>
-              <span className="text-base font-extrabold" style={{ color: '#fff', fontFamily: 'Inter' }}>{tp.day}</span>
+              <span className="text-base font-extrabold" style={{ color: '#fff', fontFamily: 'Plus Jakarta Sans' }}>{tp.day}</span>
               <span className="text-[9px] font-mono" style={{ color: C.textDim }}>{String(tp.hour).padStart(2, '0')}:00</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -1047,7 +1048,7 @@ const InteractiveDemo = () => {
     meta.content = 'See Aria in action. Watch how she qualifies leads, books meetings, and manages your WhatsApp pipeline — live interactive demo.';
     // Preload Inter font
     const fontLink = document.createElement('link');
-    fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap';
     fontLink.rel = 'stylesheet';
     document.head.appendChild(fontLink);
     return () => {
@@ -1058,7 +1059,7 @@ const InteractiveDemo = () => {
   }, []);
 
   return (
-    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }} data-testid="interactive-demo-page">
+    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'Plus Jakarta Sans, Inter, system-ui, sans-serif' }} data-testid="interactive-demo-page">
 
       <style>{`
         @keyframes aria-bounce {
@@ -1070,7 +1071,7 @@ const InteractiveDemo = () => {
       `}</style>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between gap-4 backdrop-blur-md" style={{ background: 'rgba(13,13,26,0.85)', borderBottom: `1px solid ${C.border}` }}>
+      <header className="sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between gap-4 backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.92)', borderBottom: `1px solid ${C.border}` }}>
         <div className="flex items-center gap-3">
           <a href="/" className="flex items-center gap-2">
             <span className="text-base md:text-lg font-extrabold tracking-tight" style={{
