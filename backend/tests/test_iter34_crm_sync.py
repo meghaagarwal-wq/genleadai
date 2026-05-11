@@ -245,6 +245,35 @@ class TestEventFiring:
         assert u.status_code == 200, u.text
         entry = self._find_log(admin, lead_id, "lead.closed_won")
         assert entry, "lead.closed_won event was not queued"
+        # And it should NOT be misclassified as stage_changed
+        sc = self._find_log(admin, lead_id, "lead.stage_changed", wait_s=2)
+        assert sc is None, f"PATCH 'Closed Won' incorrectly fired lead.stage_changed too: {sc}"
+
+    def test_closed_lost_fires_with_space(self, admin, connected):
+        r = admin.post(f"{BASE_URL}/api/leads", json={
+            "first_name": "TEST_Lost", "last_name": "Space",
+            "email": f"lostsp+{uuid.uuid4().hex[:6]}@demo.com",
+            "phone": "+919999000033", "source_channel": "manual", "lead_type": "B2C",
+        })
+        lead_id = r.json().get("id")
+        u = admin.patch(f"{BASE_URL}/api/leads/{lead_id}", json={"status": "Closed Lost"})
+        assert u.status_code == 200, u.text
+        entry = self._find_log(admin, lead_id, "lead.closed_lost")
+        assert entry, "lead.closed_lost event was not queued for 'Closed Lost' (space)"
+        sc = self._find_log(admin, lead_id, "lead.stage_changed", wait_s=2)
+        assert sc is None, f"PATCH 'Closed Lost' incorrectly fired lead.stage_changed too: {sc}"
+
+    def test_closed_won_underscore_still_fires(self, admin, connected):
+        r = admin.post(f"{BASE_URL}/api/leads", json={
+            "first_name": "TEST_Won", "last_name": "Under",
+            "email": f"wonu+{uuid.uuid4().hex[:6]}@demo.com",
+            "phone": "+919999000034", "source_channel": "manual", "lead_type": "B2C",
+        })
+        lead_id = r.json().get("id")
+        u = admin.patch(f"{BASE_URL}/api/leads/{lead_id}", json={"status": "closed_won"})
+        assert u.status_code == 200, u.text
+        entry = self._find_log(admin, lead_id, "lead.closed_won")
+        assert entry, "lead.closed_won (underscore) event was not queued"
 
     def test_takeover_fires_two_events(self, admin, connected):
         r = admin.post(f"{BASE_URL}/api/leads", json={

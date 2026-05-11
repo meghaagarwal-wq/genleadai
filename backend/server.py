@@ -483,7 +483,7 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
                 lead_after = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
                 tenant_id = lead_after.get("tenant_id") or current_user.get("tenant_id")
                 lead_after["id"] = lead_after.get("id") or str(lead_after.get("_id"))
-                new_stage = (update_data["status"] or "").lower()
+                new_stage = (update_data["status"] or "").lower().replace(" ", "_").replace("-", "_")
                 if new_stage in ("closed_won", "won"):
                     crm_fire_event(tenant_id, lead_after, "lead.closed_won", {"new_stage": update_data["status"]})
                 elif new_stage in ("closed_lost", "lost"):
