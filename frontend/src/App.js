@@ -18,6 +18,7 @@ import Analytics from './pages/Analytics';
 import Reports from './pages/Reports';
 import FailedMessages from './pages/FailedMessages';
 import Conversations from './pages/Conversations';
+import InteractiveDemo from './pages/InteractiveDemo';
 import Settings from './pages/Settings';
 import AriaFeed from './pages/AriaFeed';
 import AriaAnalytics from './pages/AriaAnalytics';
@@ -141,7 +142,8 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Navigate to="/signup" replace />} />
               <Route path="/signup" element={<Signup />} />
-              <Route path="/demo" element={<DemoSandbox />} />
+              <Route path="/demo" element={<InteractiveDemo />} />
+              <Route path="/demo-sandbox" element={<DemoSandbox />} />
               <Route path="/invite/:token" element={<InviteAccept />} />
 
               {/* Legal pages (public) */}
