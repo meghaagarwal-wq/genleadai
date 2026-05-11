@@ -7,7 +7,7 @@ import FounderCommandCenter from '../components/FounderCommandCenter';
 import AriaTodayWidget from '../components/AriaTodayWidget';
 import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
 import SyncActivityDigest from '../components/SyncActivityDigest';
-import WorkspaceHero from '../components/WorkspaceHero';
+import AriaCommandRoom from '../components/AriaCommandRoom';
 import AriaStories from '../components/AriaStories';
 import LeadFeed from '../components/LeadFeed';
 import PipelineMoodCard from '../components/PipelineMoodCard';
@@ -115,18 +115,20 @@ const Dashboard = () => {
   }
 
   return (
-    <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto">
-      {/* ━━━ Workspace layer — first impression should be "what ARIA needs me to do today", not "here's what ARIA is" ━━━ */}
-      <WorkspaceHero userName={user?.full_name} />
+    <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto aria-fade-up">
+      {/* ━━━ AriaCommandRoom — the premium AI-first hero (welcome · status · today's pipeline · personality panel · quick actions) ━━━ */}
+      <AriaCommandRoom userName={user?.full_name} />
 
       {/* ARIA Stories — leads that need attention now */}
-      <AriaStories />
+      <div className="aria-fade-up aria-fade-up-1">
+        <AriaStories />
+      </div>
 
       {/* Stale lead alert — visible only when stale leads exist */}
       <StaleLeadAlertChip />
 
       {/* Lead Feed + Pipeline Mood + Pipeline Health — the central workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 aria-fade-up aria-fade-up-2">
         <LeadFeed />
         <div className="space-y-4">
           <PipelineHealthGauge />
@@ -384,7 +386,7 @@ const Dashboard = () => {
           { label: 'Won Deals', value: analytics?.status_distribution?.won || 0, icon: Target, color: '#16A34A', sub: 'Closed', onClick: () => navigate('/pipeline') },
           { label: 'ARIA Convos', value: ariaStats?.total_conversations || 0, icon: Robot, color: '#7C35DC', sub: `${ariaStats?.reply_rate || 0}% reply rate`, onClick: () => navigate('/aria') },
         ].map(kpi => (
-          <button key={kpi.label} onClick={kpi.onClick} className="bg-white border border-[#E8E0F5] rounded-xl p-4 hover:shadow-[var(--shadow-hover)] hover:-translate-y-0.5 transition-all text-left group" style={{ boxShadow: 'var(--shadow-card)' }} data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}>
+          <button key={kpi.label} onClick={kpi.onClick} className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4 text-left group" style={{ boxShadow: 'var(--shadow-card)' }} data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.label}</span>
               <kpi.icon size={18} style={{ color: kpi.color }} weight="duotone" />
@@ -404,7 +406,7 @@ const Dashboard = () => {
         {/* Left: Top Leads to Act On + ARIA Summary */}
         <div className="space-y-4">
           {/* Your Top 3 */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="top-leads-widget">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="top-leads-widget">
             <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Lightning size={16} className="text-[#7C35DC]" weight="fill" />
@@ -438,7 +440,7 @@ const Dashboard = () => {
 
           {/* ARIA Activity */}
           {ariaStats && (
-            <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="aria-summary-widget">
+            <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="aria-summary-widget">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
                   <Robot size={14} className="text-white" weight="fill" />
@@ -468,7 +470,7 @@ const Dashboard = () => {
         {/* Center: Charts */}
         <div className="space-y-4">
           {/* Channel Chart */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-channels">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-channels">
             <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Leads by Channel</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={channelData} barSize={24}>
@@ -482,7 +484,7 @@ const Dashboard = () => {
           </div>
 
           {/* Funnel */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-funnel">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-funnel">
             <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversion Funnel</h3>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={funnelData}>
@@ -505,7 +507,7 @@ const Dashboard = () => {
         {/* Right: Donut Charts + Quick Actions */}
         <div className="space-y-4">
           {/* B2B vs B2C */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-lead-type">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-lead-type">
             <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Lead Split</h3>
             <div className="flex items-center gap-4">
               <ResponsiveContainer width={120} height={120}>
@@ -530,7 +532,7 @@ const Dashboard = () => {
           </div>
 
           {/* ICP Distribution */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-icp">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-icp">
             <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>ICP Distribution</h3>
             <div className="flex items-center gap-4">
               <ResponsiveContainer width={120} height={120}>
@@ -555,7 +557,7 @@ const Dashboard = () => {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white border border-[#E8E0F5] rounded-xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="quick-actions-widget">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="quick-actions-widget">
             <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Quick Actions</h3>
             <div className="space-y-2">
               {[
@@ -576,7 +578,7 @@ const Dashboard = () => {
       </div>
 
       {/* Recent Leads Table */}
-      <div className="bg-white border border-[#E8E0F5] rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="recent-leads-table">
+      <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="recent-leads-table">
         <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
           <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Recent Leads</h3>
           <button onClick={() => navigate('/leads')} className="text-xs text-[#7C35DC] hover:text-[#6B28C8] font-semibold">View all</button>
