@@ -1,3 +1,32 @@
+## Iter 43 — Notification gate wired into emitters + Click-to-WhatsApp config UI (Feb 2026)
+
+**User intent:** "Work on next action items and backlog and give me my dashboard credentials." Two remaining items from iter42's roadmap completed.
+
+**Backend:**
+- `routes/notifications.py` — added 3 helpers:
+  - `_within_quiet_hours(prefs, tz_offset_hours)` — handles same-day and across-midnight windows (e.g. 22→8).
+  - `should_notify_tenant(tenant_id, event_key, channel="email", tz_offset_hours=0.0)` — returns False when (event, channel) is toggled off OR (email-only) we're inside quiet hours. Defaults True when no prefs doc exists (legacy safety).
+  - `should_notify_email(recipient_email, event_key, tz_offset_hours)` — resolves recipient → user → tenant, then delegates. Returns True on any lookup error (never silently drop a legitimate email).
+- `server.py` — wired the helpers into:
+  - `_send_daily_call_plan(..., manual=False)` — checks `should_notify_email(recipient, "daily_brief")` for background loop sends. `manual=True` override (from `/send-now` admin endpoint) bypasses the gate.
+  - `_send_eod_wrap(..., manual=False)` — checks `should_notify_email(recipient, "weekly_recap", tz_off_hours)` for loop sends, same manual override.
+- `routes/lead_capture.py` — `WidgetConfig` extended with 5 WhatsApp fields: `wa_enabled`, `wa_phone`, `wa_text`, `wa_label`, `wa_color`. `GET /api/lead-capture/config` response now includes `wa_embed_snippet` built by new `_build_wa_snippet()` that produces a paste-ready `<script>` tag for `aria-wa-widget.js`.
+
+**Frontend:**
+- `components/settings/LeadCaptureSettings.js` — added a full Click-to-WhatsApp section below the existing form widget:
+  - Gradient green header strip (`wa-widget-header`) with WhatsappLogo icon.
+  - Config card (`wa-widget-config`): enable toggle (`wa-enabled-toggle`), phone input (`wa-phone`), button label (`wa-label`), pre-filled message textarea (`wa-text`), button colour picker (`wa-color`), Save (`wa-save`).
+  - Embed snippet card (`wa-embed-snippet-card`) with dark-theme code block + green Copy button (`wa-embed-copy`).
+  - Live preview card (`wa-preview`) showing the floating green button (`wa-preview-button`) bottom-right that reflects current colour + label in real-time.
+  - Save also re-fetches config so the snippet always reflects the just-saved values.
+
+**Verified (iter43 testing_agent_v3_fork)**:
+- Backend 5/5 pytest pass — notification gate helper (manual override + tenant resolution), WA config GET/POST persistence, sales_rep 403 on POST, wa_embed_snippet correctness after save.
+- Frontend 100% — all 6 new WA testids render, toggle/inputs/save/copy/preview all functional, zero regressions on existing form widget, Notifications tab, Dashboard or AriaCommandRoom.
+
+---
+
+
 ## Iter 42 — P0/P2 + Backlog: Persistent Aria mode chip · Notifications tab · Platform Stats · WA HMAC · Click-to-WhatsApp widget (Feb 2026)
 
 **User intent:** "Now do next action items, future/backlog and then potential enhancement." Single batch covering every item promised in iter41's finish: polish remaining dashboard cards, persistent Aria mode chip in topbar, Settings → Notifications tab, Master Admin → Platform Stats tab, 360dialog/Meta webhook HMAC verification, embeddable Click-to-WhatsApp widget v2.
