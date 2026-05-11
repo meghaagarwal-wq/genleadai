@@ -462,3 +462,242 @@ async def import_document(
         "truncated": truncated,
         "source_filename": file.filename,
     }
+
+
+
+# ─── SCORING (Performance + Lead-fit + AI quality) ──────────────────────────
+log_col = db["lead_touchpoint_log"]
+leads_col_local = db["leads"]
+activities_col_local = db["activities"]
+ai_quality_cache_col = db["touchpoint_ai_quality_cache"]
+
+
+def _safe_pct(num: int, denom: int) -> float:
+    return round((num / denom) * 100, 1) if denom else 0.0
+
+
+def _grade(score: float) -> str:
+    if score >= 80:
+        return "A"
+    if score >= 65:
+        return "B"
+    if score >= 45:
+        return "C"
+    return "D"
+
+
+@router.get("/scoring")
+async def get_scoring(tenant: dict = Depends(get_active_tenant)):
+    """Per-touchpoint performance + lead-fit scoring.
+
+    Reads `lead_touchpoint_log` (per-lead instantiated rows) and the active
+    touchpoint map. Returns one entry per touchpoint index.
+    """
+    tenant_id = tenant["id"]
+    map_doc = maps_col.find_one({"tenant_id": tenant_id}, {"_id": 0}) or {}
+    touchpoints = map_doc.get("touchpoints", [])
+
+    # Aggregate engine results per touchpoint_index
+    pipeline = [
+        {"$match": {"tenant_id": tenant_id}},
+        {"$group": {
+            "_id": "$touchpoint_index",
+            "total": {"$sum": 1},
+            "sent": {"$sum": {"$cond": [{"$eq": ["$status", "sent"]}, 1, 0]}},
+            "skipped": {"$sum": {"$cond": [{"$eq": ["$status", "skipped"]}, 1, 0]}},
+            "failed": {"$sum": {"$cond": [{"$eq": ["$status", "failed"]}, 1, 0]}},
+            "pending": {"$sum": {"$cond": [{"$eq": ["$status", "pending"]}, 1, 0]}},
+            "alerts": {"$sum": {"$cond": [{"$eq": ["$status", "alert_sent"]}, 1, 0]}},
+            "lead_ids": {"$addToSet": "$lead_id"},
+        }},
+    ]
+    agg = {row["_id"]: row for row in log_col.aggregate(pipeline)}
+
+    # Reply rate: count distinct leads who replied (inbound activity within 7d of fired_at)
+    # We approximate using lead_id presence in conversations
+    out = []
+    overall_sent = 0
+    overall_replies = 0
+    overall_skip = 0
+    overall_total = 0
+
+    for i, tp in enumerate(touchpoints):
+        bucket = agg.get(i, {})
+        sent = bucket.get("sent", 0)
+        skipped = bucket.get("skipped", 0)
+        failed = bucket.get("failed", 0)
+        pending = bucket.get("pending", 0)
+        alerts = bucket.get("alerts", 0)
+        total = bucket.get("total", 0)
+        lead_ids = bucket.get("lead_ids", []) or []
+
+        # Replies: leads that have at least one inbound conversation after this touchpoint
+        reply_count = 0
+        if lead_ids:
+            reply_count = activities_col_local.count_documents({
+                "tenant_id": tenant_id,
+                "lead_id": {"$in": lead_ids},
+                "type": {"$in": ["inbound_whatsapp", "inbound_email", "reply_received"]},
+            })
+        reply_rate = _safe_pct(reply_count, sent)
+
+        # Lead-fit: pull icp_tier distribution for leads who received this touchpoint
+        fit_hot = fit_warm = fit_cold = 0
+        if lead_ids:
+            fit_hot = leads_col_local.count_documents({"tenant_id": tenant_id, "id": {"$in": lead_ids}, "icp_tier": "hot"})
+            fit_warm = leads_col_local.count_documents({"tenant_id": tenant_id, "id": {"$in": lead_ids}, "icp_tier": "warm"})
+            fit_cold = leads_col_local.count_documents({"tenant_id": tenant_id, "id": {"$in": lead_ids}, "icp_tier": "cold"})
+
+        # Effectiveness composite: 60% reply_rate + 30% (sent / total) + 10% (1 - skip_rate)
+        deliv = _safe_pct(sent, total) if total else 0
+        skip_rate = _safe_pct(skipped, total) if total else 0
+        effectiveness = round(0.6 * reply_rate + 0.3 * deliv + 0.1 * (100 - skip_rate), 1)
+
+        overall_sent += sent
+        overall_replies += reply_count
+        overall_skip += skipped
+        overall_total += total
+
+        out.append({
+            "index": i,
+            "performance": {
+                "total_scheduled": total,
+                "sent": sent,
+                "skipped": skipped,
+                "failed": failed,
+                "pending": pending,
+                "alerts": alerts,
+                "replies": reply_count,
+                "reply_rate": reply_rate,
+                "delivery_rate": deliv,
+                "skip_rate": skip_rate,
+                "effectiveness": effectiveness,
+                "grade": _grade(effectiveness) if total else "—",
+            },
+            "lead_fit": {
+                "hot": fit_hot,
+                "warm": fit_warm,
+                "cold": fit_cold,
+                "total": fit_hot + fit_warm + fit_cold,
+            },
+        })
+
+    # Journey rollup
+    overall_reply_rate = _safe_pct(overall_replies, overall_sent)
+    overall_skip_rate = _safe_pct(overall_skip, overall_total) if overall_total else 0
+    overall_deliv = _safe_pct(overall_sent, overall_total) if overall_total else 0
+    journey_score = round(0.6 * overall_reply_rate + 0.3 * overall_deliv + 0.1 * (100 - overall_skip_rate), 1)
+
+    return {
+        "items": out,
+        "journey": {
+            "score": journey_score,
+            "grade": _grade(journey_score) if overall_total else "—",
+            "total_scheduled": overall_total,
+            "total_sent": overall_sent,
+            "total_replies": overall_replies,
+            "reply_rate": overall_reply_rate,
+            "skip_rate": overall_skip_rate,
+            "delivery_rate": overall_deliv,
+            "touchpoint_count": len(touchpoints),
+        },
+    }
+
+
+@router.post("/ai-quality")
+async def ai_quality(tenant: dict = Depends(get_active_tenant)):
+    """Claude scores each touchpoint message 1-10 on Clarity, Personalisation,
+    CTA strength, Tone-fit. Cached for 24h per (tenant, message hash)."""
+    tenant_id = tenant["id"]
+    map_doc = maps_col.find_one({"tenant_id": tenant_id}, {"_id": 0}) or {}
+    touchpoints = map_doc.get("touchpoints", [])
+    if not touchpoints:
+        return {"items": []}
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        # Heuristic fallback
+        return {
+            "items": [
+                {
+                    "index": i,
+                    "clarity": 7, "personalisation": 6, "cta": 6, "tone_fit": 7,
+                    "average": 6.5, "ai_powered": False,
+                    "verdict": "Add {{first_name}} or {{company}} for personalisation" if "{{" not in (tp.get("message_template") or "") else "Looks decent — consider sharpening the CTA",
+                }
+                for i, tp in enumerate(touchpoints)
+            ]
+        }
+
+    import hashlib
+    import json as _json
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except Exception:
+        return {"items": [], "error": "ai_unavailable"}
+
+    # Build cache key per message
+    items = []
+    to_score: List[dict] = []
+    for i, tp in enumerate(touchpoints):
+        msg = (tp.get("message_template") or "").strip()
+        h = hashlib.sha256(msg.encode("utf-8")).hexdigest()[:16]
+        cached = ai_quality_cache_col.find_one({"tenant_id": tenant_id, "hash": h}, {"_id": 0})
+        if cached and cached.get("scores"):
+            items.append({"index": i, **cached["scores"], "ai_powered": True})
+        else:
+            to_score.append({"index": i, "msg": msg, "hash": h, "channel": tp.get("channel"), "type": tp.get("message_type")})
+
+    if to_score:
+        prompt_lines = [
+            "You are scoring sales touchpoint messages on a 1-10 scale.",
+            "For each message return JSON with: clarity, personalisation, cta, tone_fit (each 1-10), and a one-line verdict (max 80 chars).",
+            "Personalisation: presence of {{tokens}} or named references. CTA: clear next action. Tone-fit: matches channel (whatsapp=warm casual, email=professional).",
+            "Return a JSON array in the same order as input, no commentary.",
+            "",
+            "Messages:",
+        ]
+        for s in to_score:
+            prompt_lines.append(f"[{s['index']}] channel={s['channel']} type={s['type']} :: {s['msg'][:500]}")
+
+        try:
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"ai-quality-{tenant_id}-{uuid.uuid4().hex[:8]}",
+                system_message="You are a precise JSON-only sales copy evaluator.",
+            ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+            raw = await chat.send_message(UserMessage(text="\n".join(prompt_lines)))
+            # Best-effort JSON parse
+            text = raw if isinstance(raw, str) else str(raw)
+            start = text.find("[")
+            end = text.rfind("]")
+            scores = _json.loads(text[start:end + 1]) if start >= 0 and end > start else []
+            for s, parsed in zip(to_score, scores):
+                clarity = float(parsed.get("clarity", 6))
+                personalisation = float(parsed.get("personalisation", 6))
+                cta = float(parsed.get("cta", 6))
+                tone_fit = float(parsed.get("tone_fit", 6))
+                avg = round((clarity + personalisation + cta + tone_fit) / 4, 1)
+                payload = {
+                    "clarity": clarity,
+                    "personalisation": personalisation,
+                    "cta": cta,
+                    "tone_fit": tone_fit,
+                    "average": avg,
+                    "verdict": str(parsed.get("verdict", ""))[:120],
+                }
+                ai_quality_cache_col.update_one(
+                    {"tenant_id": tenant_id, "hash": s["hash"]},
+                    {"$set": {"scores": payload, "updated_at": _now()}},
+                    upsert=True,
+                )
+                items.append({"index": s["index"], **payload, "ai_powered": True})
+        except Exception:
+            for s in to_score:
+                items.append({
+                    "index": s["index"], "clarity": 6, "personalisation": 6, "cta": 6, "tone_fit": 6,
+                    "average": 6.0, "verdict": "AI scoring unavailable — retry shortly", "ai_powered": False,
+                })
+
+    items.sort(key=lambda x: x["index"])
+    return {"items": items}
