@@ -455,7 +455,7 @@ const DetailDrawer = ({ tp, scoring, ai, onChange, onDelete, onDuplicate, onClos
                 )}
 
                 {!ai.ai_powered && (
-                  <p className="text-[10px] text-[#9B8AB0] italic text-center">Heuristic fallback — connect Emergent LLM key for full Claude scoring.</p>
+                  <p className="text-[10px] text-[#9B8AB0] italic text-center">Heuristic fallback — Claude key not configured.</p>
                 )}
               </>
             )}

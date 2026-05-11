@@ -4,6 +4,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safety net — hide any third-party watermark / badge that might be injected at runtime */
+a[href*="emergent.sh"],
+a[href*="emergent-badge"],
+[class*="emergent-badge" i],
+[id*="emergent-badge" i],
+#emergent-badge,
+#emergent-watermark {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+
 :root {
   /* Core Brand Gradient */
   --gradient-brand: linear-gradient(135deg, #C044E0 0%, #7C35DC 50%, #5B28D4 100%);

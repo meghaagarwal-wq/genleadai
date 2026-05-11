@@ -864,10 +864,10 @@ const Settings = () => {
             <h3 className="text-lg font-semibold text-white mb-4">API Configuration</h3>
             <div className="space-y-3">
               {[
-                { name: 'AI Scoring (Claude API)', desc: 'Emergent LLM Key', connected: true },
+                { name: 'AI Scoring (Claude API)', desc: 'Managed Claude API key', connected: true },
                 { name: 'Email (Resend)', desc: 'Transactional email service', connected: true },
                 { name: 'Calendly', desc: 'Meeting booking integration', connected: true },
-                { name: 'Object Storage', desc: 'Emergent Object Storage', connected: true },
+                { name: 'Object Storage', desc: 'Managed object storage', connected: true },
               ].map(item => (
                 <div key={item.name} className="flex items-center justify-between p-3 bg-[#0A0A0A] rounded-lg">
                   <div>
@@ -1001,7 +1001,7 @@ const WorkspaceSettingsSection = () => {
             className="w-full max-w-md bg-[#0A0A0A] border border-[#262626] text-[#A3A3A3] px-3 py-2.5 rounded-md text-sm cursor-not-allowed"
             data-testid="workspace-name-input"
           />
-          <div className="text-[10px] text-[#737373] mt-1">Ask Emergent Support to rename a workspace.</div>
+          <div className="text-[10px] text-[#737373] mt-1">Contact GenLeadAI support to rename a workspace.</div>
         </div>
         <div>
           <label className="block text-xs font-semibold uppercase tracking-[0.2em] text-[#737373] mb-2">ICP Definition</label>
