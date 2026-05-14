@@ -3,6 +3,7 @@ import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell } from '@phosphor-icons/react';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
+import AvatarPicker from '../components/AvatarPicker';
 import CrmSettingsTab from '../components/CrmSettingsTab';
 import LeadCaptureSettings from '../components/settings/LeadCaptureSettings';
 import NotificationsTab from '../components/settings/NotificationsTab';
@@ -295,37 +296,53 @@ const Settings = () => {
       {/* Team Tab */}
       {activeTab === 'team' && (
         <div className="space-y-4">
-          <div className="bg-[#141414] border border-[#262626] rounded-lg" data-testid="team-members-list">
-            <div className="p-6 border-b border-[#262626] flex items-center justify-between gap-3 flex-wrap">
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="team-members-list">
+            <div className="p-5 border-b border-[#F0ECF9] flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="text-lg font-semibold text-white">Team Members</h3>
-                <p className="text-sm text-[#A3A3A3] mt-1">{users.length} members</p>
+                <h3 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Team Members</h3>
+                <p className="text-xs text-[#5A4A7A] mt-0.5">{users.length} {users.length === 1 ? 'member' : 'members'} · click any avatar to change.</p>
               </div>
               <button
                 onClick={() => setInviteOpen(true)}
                 data-testid="open-invite-modal"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-white text-sm font-bold hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 btn-gradient rounded-lg text-xs font-extrabold text-white"
+                style={{ fontFamily: 'Plus Jakarta Sans' }}
               >
-                <UserPlus size={14} weight="fill" /> Invite teammate
+                <UserPlus size={13} weight="fill" /> Invite teammate
               </button>
             </div>
-            <div className="divide-y divide-[#262626]">
-              {users.map((member, index) => (
-                <div key={index} className="p-6 flex items-center justify-between hover:bg-[#1E1E1E] transition-colors" data-testid={`team-member-${member.email}`}>
-                  <div className="flex items-center gap-4">
-                    <img src={member.avatar_url || `https://ui-avatars.com/api/?name=${member.full_name}`} alt={member.full_name} className="w-10 h-10 rounded-full" />
-                    <div>
-                      <div className="text-sm font-medium text-white">{member.full_name}</div>
-                      <div className="text-xs text-[#737373] font-mono">{member.email}</div>
+            <div className="divide-y divide-[#F0ECF9]">
+              {users.map((member, index) => {
+                const canEdit = user?.role === 'owner' || user?.role === 'admin' || user?.email === member.email;
+                return (
+                  <div key={index} className="p-5 flex items-center justify-between gap-4 hover:bg-[#FAF7FF] transition-colors" data-testid={`team-member-${member.email}`}>
+                    <div className="flex items-center gap-4 min-w-0">
+                      <AvatarPicker
+                        user={member}
+                        email={user?.email === member.email ? null : member.email}
+                        editable={canEdit}
+                        size={48}
+                        testidPrefix={`avatar-${member.email}`}
+                        onUpdated={(newUrl) => {
+                          // Optimistic in-place update so the section refreshes without a full reload
+                          setUsers((prev) => prev.map(u => u.email === member.email ? { ...u, avatar_url: newUrl } : u));
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm font-extrabold text-[#1A0A2E] inline-flex items-center gap-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                          {member.full_name}
+                          {user?.email === member.email && <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#7C35DC] bg-[#F4F0FF] px-1.5 py-0.5 rounded">You</span>}
+                        </div>
+                        <div className="text-xs text-[#9B8AB0] font-mono truncate">{member.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {member.team && <span className="text-xs text-[#5A4A7A] hidden sm:inline">{member.team}</span>}
+                      <span className={roleBadge(member.role)}>{(member.role || 'sales_rep').replace('_', ' ')}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-[#A3A3A3]">{member.team}</span>
-                    <span className={roleBadge(member.role)}>{member.role.replace('_', ' ')}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -847,6 +864,31 @@ const Settings = () => {
       {/* Workspace Tab */}
       {activeTab === 'workspace' && (
         <div className="space-y-4">
+          {/* ── Your Profile — primary spot for the logged-in user's avatar + name ── */}
+          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="your-profile-card">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <AvatarPicker
+                  user={user}
+                  size={72}
+                  testidPrefix="profile-avatar"
+                  onUpdated={(newUrl) => {
+                    // Mirror into the Team list so it updates instantly there too
+                    if (user?.email) setUsers((prev) => prev.map(u => u.email === user.email ? { ...u, avatar_url: newUrl } : u));
+                  }}
+                />
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-[#7C35DC] mb-0.5">Your profile</div>
+                  <div className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{user?.full_name || 'You'}</div>
+                  <div className="text-xs text-[#9B8AB0] font-mono">{user?.email}</div>
+                </div>
+              </div>
+              <div className="text-xs text-[#5A4A7A] max-w-xs sm:text-right">
+                Click your avatar to upload or change it. PNG/JPG/WEBP — auto-resized to 256×256 to keep things snappy.
+              </div>
+            </div>
+          </div>
+
           <WorkspaceSettingsSection />
           <DemoVideoSection />
           <WhatsAppProviderSection />

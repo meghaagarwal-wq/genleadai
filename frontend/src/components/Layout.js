@@ -21,6 +21,37 @@ import AriaTourModal from './AriaTourModal';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
+// ── SidebarUserAvatar — initials fallback + live update on avatar change ──
+const sidebarInitials = (name = '', email = '') => {
+  const s = (name || email || '?').trim();
+  const parts = s.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return s.slice(0, 2).toUpperCase();
+};
+
+const SidebarUserAvatar = ({ user }) => {
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || null);
+  useEffect(() => { setAvatarUrl(user?.avatar_url || null); }, [user?.avatar_url]);
+  useEffect(() => {
+    const onUpdate = (e) => setAvatarUrl(e?.detail?.avatar_url ?? null);
+    window.addEventListener('aria:user-avatar-updated', onUpdate);
+    return () => window.removeEventListener('aria:user-avatar-updated', onUpdate);
+  }, []);
+  const isUiAvatars = typeof avatarUrl === 'string' && avatarUrl.includes('ui-avatars.com');
+  if (avatarUrl && !isUiAvatars) {
+    return <img src={avatarUrl} alt={user?.full_name || 'You'} className="w-9 h-9 rounded-full object-cover border border-white/15" data-testid="sidebar-user-avatar-img" />;
+  }
+  return (
+    <span
+      className="w-9 h-9 rounded-full flex items-center justify-center text-white font-extrabold text-xs border border-white/15"
+      style={{ background: 'var(--gradient-brand)', fontFamily: 'Plus Jakarta Sans' }}
+      data-testid="sidebar-user-avatar-initials"
+    >
+      {sidebarInitials(user?.full_name, user?.email)}
+    </span>
+  );
+};
+
 const AriaWorkspaceSwitcher = () => {
   const { active, setActive } = useWorkspace();
   const navigate = useNavigate();
@@ -291,7 +322,7 @@ const Layout = ({ children }) => {
           )}
         </button>
         <div className="flex items-center gap-3">
-          <img src={user?.avatar_url || 'https://ui-avatars.com/api/?name=User&background=7C35DC&color=fff'} alt="User" className="w-9 h-9 rounded-full" />
+          <SidebarUserAvatar user={user} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-white truncate" style={{ fontFamily: 'Plus Jakarta Sans' }}>{user?.full_name}</div>
             <div className="text-xs text-[var(--sidebar-text-muted)] truncate">{user?.role}</div>

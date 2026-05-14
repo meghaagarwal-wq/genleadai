@@ -1,3 +1,42 @@
+## Iter 50 — Profile pictures: upload, change, remove (Feb 2026)
+
+**User intent:** "Give me the option of changing or adding profile pictures of workspace owner and team members." One-shot final feature before pause.
+
+**Backend (`/app/backend/routes/user_profile.py`, new):**
+- `PUT /api/users/me/avatar` — current user updates their own avatar.
+- `DELETE /api/users/me/avatar` — current user clears theirs.
+- `PUT /api/users/{user_email}/avatar` — owner/admin can update teammates in the same workspace (membership-gated).
+- `DELETE /api/users/{user_email}/avatar` — same gate as above.
+- Avatars persisted as base64 JPEG data URLs (~30-60KB after client-side resize) directly in `users.avatar_url`. Server validates MIME (`image/jpeg|png|webp`), decodes-checks base64, caps payload at 800KB.
+- Cross-tenant guard: caller must either own that email OR be owner/admin of a tenant the target also belongs to.
+
+**Frontend (`components/AvatarPicker.js`, new — reusable):**
+- Click the avatar → native file picker.
+- Client-side resize: load image → off-screen canvas → center-crop square → downscale to 256×256 → export JPEG @ q=0.85.
+- Optimistic preview, busy spinner overlay, hover-revealed camera badge, hover-revealed remove (×) button.
+- Stable per-email gradient color for the initials fallback so two members with the same letters don't blur together.
+- Auto-skips the legacy `ui-avatars.com` fallback URL — treats it as no avatar so the upgrade path is clean.
+- Mirrors avatar changes into localStorage and dispatches `aria:user-avatar-updated` window event so the sidebar / topbar refresh live without a page reload.
+
+**Settings wiring (`pages/Settings.js`):**
+- New **"Your Profile"** card at the top of the **Workspace** tab — 72px AvatarPicker + name + email + helpful copy. Primary destination for the logged-in user.
+- **Team** tab rewritten with the light/warm theme (was dark/cyberpunk). Each row now has a 48px AvatarPicker — the current user can edit their own, owners/admins can edit anyone else; sales reps can only edit themselves. "YOU" badge next to the current user's name. Status pills + role badges preserved.
+
+**Sidebar live-refresh (`components/Layout.js`):**
+- New `SidebarUserAvatar` helper renders either the user's `avatar_url` OR a gradient initials fallback. Listens for `aria:user-avatar-updated` so it refreshes instantly when the user changes their picture in Settings (no F5).
+
+**Verified (curl + screenshot):**
+- Upload happy path: PUT → 200, avatar_url length 1055 bytes, /auth/me confirms persistence.
+- Bad MIME (text/plain) → 400.
+- Oversize payload → 413.
+- Sales rep tries to edit admin's avatar → 403.
+- DELETE clears avatar back to null.
+- Workspace tab shows "Your Profile" card with 72px purple initials avatar + name + email.
+- Team tab shows 34 members with mixed AvatarPicker triggers (initials for new accounts, real photos for seeded users); current user has "YOU" badge.
+
+---
+
+
 ## Iter 49 — Backlog cleared: brute-force protection, audit log admin, mode tooltip, inline form widget (Feb 2026)
 
 **User intent:** "Future backlog — do this." Final session before pause. Ship the four code items from iter48's backlog and document DKIM/DMARC.
