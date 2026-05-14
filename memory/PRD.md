@@ -1,3 +1,47 @@
+## Iter 49 — Backlog cleared: brute-force protection, audit log admin, mode tooltip, inline form widget (Feb 2026)
+
+**User intent:** "Future backlog — do this." Final session before pause. Ship the four code items from iter48's backlog and document DKIM/DMARC.
+
+**1. Brute-force protection on `/api/auth/login` (`routes/auth.py` rewritten):**
+- Dual-axis rate limit using a new `login_attempts` collection with a 1h TTL index.
+- Per-email: 5 failures in 15 min → 429 lockout with the friendly "Try again in 15 minutes or use 'Forgot password'" detail.
+- Per-IP: 20 failures in 15 min → 429 (slower lockout for shared offices).
+- Successful login wipes the email's failure history (legitimate users aren't punished).
+- Every login attempt + lockout is mirrored to the audit_log collection with action `auth.login_success / login_failed / login_blocked` + IP + reason — surfaces in the new Master Admin Audit Log tab.
+
+**2. Master Admin Audit Log tab:**
+- Backend: new dedicated `admin_audit_router` at `/api/admin/audit-log` (separated from `/api/admin/workspaces/{tenant_id}` to avoid the path-collision that initially caused "Workspace not found" — fixed mid-iter). Supports filter by action, user_email, tenant_id, and a `sensitive_only=true` toggle that limits results to a curated SENSITIVE_ACTIONS set (auth events, data purges, role changes, CRM connects, plan changes, payments).
+- Frontend: new `components/admin/AuditLogAdminTab.js` — sortable table with WHEN/ACTION/ACTOR/TENANT/IP columns, action-colored badges (red for failed/blocked, green for success, etc.), client-side search, top-action pill filters with live counts, "Sensitive only" toggle, and a soft red row-tint for attack actions.
+- Wired into MasterAdmin TABS as the 7th tab.
+
+**3. AriaModeChip rich tooltip (`components/AriaModeChip.js` rewritten):**
+- Hover the topbar pill → opens a 320px-wide rich tooltip with:
+  - "Right now" eyebrow + headline + body for the current mode.
+  - 3 live counters (Hot · Stale · Opens) — the active one is highlighted to match the current mode's tint.
+  - "All 4 modes" legend with icons + tint + body, current mode opaque, others dimmed.
+  - "Open Aria's Command Center →" CTA button.
+- Same auto-poll cadence (90s) and same backend signals — UI-only enhancement.
+
+**4. Inline contact-form widget (`/aria-form-widget.js`):**
+- Drop-in inline alternative to the floating WA button + Click-to-WhatsApp.
+- Renders into `#aria-form-widget` (or any `[data-aria-form]` host) with a clean Aria-branded form (name, email, company, message).
+- Configurable via `window.AriaFormWidget = { title, subtitle, buttonLabel, color, endpoint, page }`.
+- Submits to the same `/api/contact/request` backend — leads land in Master Admin → Contact Inbox.
+- Self-contained styling — no external CSS conflicts. Auto-handles success / error states.
+
+**5. DKIM/DMARC (documented for user action):**
+- Once `genleadai.com` is verified at resend.com/domains, Resend auto-generates DKIM + Return-Path + DMARC records. Just paste them at the user's DNS registrar. The email_delivery wrapper will then auto-detect (test-mode forwards stop, direct sends start) — zero code change needed.
+
+**Verified (curl + screenshot):**
+- 5 bad-password attempts → 5×401 → 6th attempt → 429 lockout with friendly message ✅
+- Audit log endpoint returns 13 real entries with action breakdown ✅
+- Master Admin → Audit Log tab renders with 14 rows + 8 action pills, including the test brute-force attempts color-coded red ✅
+- AriaModeChip tooltip on hover shows headline + live counters + 4-mode legend + CTA ✅
+- `/aria-form-widget.js` serves 200 with full widget code ✅
+
+---
+
+
 ## Iter 48 — Inbound CRM: Contact Requests Inbox + real Resend health (Feb 2026)
 
 **User intent:** Ship the iter47 backlog (Resend status pill on Master Admin Health Monitor) + the potential enhancement (`/admin/contact-requests` tab with sortable inbox). Final session — user paused for credits.

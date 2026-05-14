@@ -56,7 +56,7 @@ from routes.classification import router as classification_router, classify_inbo
 from routes.aria_confidence import router as aria_confidence_router
 from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
 from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
-from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, audit_write
+from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, admin_audit_router, audit_write
 from routes.data_deletion import router as data_deletion_router
 from routes.reports import router as reports_router
 from routes.lead_capture import router as lead_capture_router, public_router as lead_capture_public_router, widget_public_router as lead_capture_widget_public_router
@@ -114,6 +114,7 @@ app.include_router(admin_invoice_router)
 app.include_router(crm_sync_router)
 app.include_router(audit_log_router)
 app.include_router(admin_workspaces_router)
+app.include_router(admin_audit_router)
 app.include_router(data_deletion_router)
 app.include_router(reports_router)
 app.include_router(lead_capture_router)

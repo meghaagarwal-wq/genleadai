@@ -453,3 +453,59 @@ async def health_services(current_user: dict = Depends(get_current_user)):
     })
 
     return {"services": services, "checked_at": _now()}
+
+
+
+# ─── Cross-tenant audit log (Master Admin) ──────────────────────────────────
+SENSITIVE_ACTIONS = {
+    "auth.login_failed", "auth.login_blocked", "auth.login_success",
+    "lead.data_purged", "workspace.deleted", "member.removed", "member.role_changed",
+    "api_key.rotated", "settings.updated",
+    "crm.connected", "crm.disconnected",
+    "plan.changed", "payment.recorded",
+}
+
+
+# Dedicated router so the path doesn't collide with /api/admin/workspaces/{tenant_id}
+admin_audit_router = APIRouter(prefix="/api/admin/audit-log", tags=["admin-audit"])
+
+
+@admin_audit_router.get("")
+async def admin_audit_log(
+    action: Optional[str] = None,
+    user_email: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+    sensitive_only: bool = False,
+    limit: int = 100,
+    skip: int = 0,
+    user: dict = Depends(get_current_user),
+):
+    """Cross-tenant audit log for Master Admin — surfaces sensitive actions
+    across every workspace. Supports filtering by action, user, tenant, and
+    a 'sensitive_only' toggle that limits to the curated SENSITIVE_ACTIONS set.
+    """
+    _require_master_admin(user)
+    q: Dict[str, Any] = {}
+    if action:
+        q["action"] = action
+    if user_email:
+        q["user_id"] = user_email.lower()
+    if tenant_id:
+        q["tenant_id"] = tenant_id
+    if sensitive_only:
+        q["action"] = {"$in": list(SENSITIVE_ACTIONS)}
+    total = col.count_documents(q)
+    rows = list(col.find(q, {"_id": 0}).sort("created_at", -1).skip(max(0, skip)).limit(min(max(1, limit), 500)))
+    pipe = list(col.aggregate([
+        {"$match": q if q else {}},
+        {"$group": {"_id": "$action", "n": {"$sum": 1}}},
+        {"$sort": {"n": -1}},
+    ]))
+    by_action = {p["_id"]: p["n"] for p in pipe}
+    return {
+        "entries": rows,
+        "total": total,
+        "by_action": by_action,
+        "sensitive_actions": sorted(SENSITIVE_ACTIONS),
+        "known_actions": sorted(KNOWN_ACTIONS | SENSITIVE_ACTIONS),
+    }
