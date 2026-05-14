@@ -263,11 +263,6 @@ const Login = () => {
               <Link to="/register" className="text-[#7C35DC] hover:text-[#6B28C8] font-semibold" data-testid="register-link">Sign up</Link>
             </p>
           </div>
-
-          <div className="mt-6 pt-6 border-t border-[#E8E0F5]">
-            <p className="text-xs text-[#9B8AB0] text-center mb-1.5">Demo Account:</p>
-            <p className="text-xs text-[#5A4A7A] text-center font-mono">admin@demo.com / Demo1234!</p>
-          </div>
         </div>
 
         <p className="text-[10px] text-center text-[#A0A8C0] mt-6 tracking-[0.18em] uppercase font-bold" data-testid="genleadai-footer">
