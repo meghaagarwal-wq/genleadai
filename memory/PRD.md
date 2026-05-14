@@ -1,3 +1,53 @@
+## Iter 46 — Market-readiness: Auth-extras (Forgot Password + Email Code Login) + Aria Spotlights + Restart Tour (Feb 2026)
+
+**User intent:** Execute next-action-items + future-backlog + the iter45 enhancement + "make the app market ready" + add Forgot Password and Email Code login flows.
+
+**Backend — new module `/app/backend/routes/auth_extras.py`** (4 endpoints, ~245 lines):
+- `POST /api/auth/password/forgot` — sends a 6-digit reset code to the user via Resend. Always returns 200 (idempotent, no enumeration leak). Rate-limited at 3 requests per email per 15 minutes.
+- `POST /api/auth/password/reset` — verifies the code + sets the new password (min 8 chars). Returns the same JWT shape as `/api/auth/login` so the user is logged in immediately.
+- `POST /api/auth/email-code/request` — passwordless: sends a 6-digit login code via email. Same rate limit + idempotency.
+- `POST /api/auth/email-code/verify` — accepts code, issues JWT.
+- Codes stored in `auth_codes` Mongo collection with bcrypt-hashed code value + 10-min `expires_at` + TTL index. Verify counter caps at 5 attempts before auto-deletion. Code is one-shot (deleted on success).
+- Naive-UTC datetime handling (fixed mid-iter after PyMongo strips tz info on read).
+- Rate-limit history in `auth_code_requests` (created_at).
+- Resend email template — branded purple gradient header, monospaced code in a dashed box, GenLeadAI footer.
+
+**Backend wiring:**
+- `server.py` imports + includes `auth_extras_router` right after the existing `auth_router`.
+
+**Frontend — Login rewrite (`pages/Login.js`):**
+- Same screen now hosts 3 modes via local `mode` state: `password` (default), `email-code`, `forgot`.
+- Each mode has its own form with a clean back-to-password link. The email-code + forgot flows are two-step (request → verify), banner shows "Code sent to <email>" with security micro-copy (10-min expiry, 5-attempt cap).
+- 6-digit code input is centered, monospaced, tracking-wide; auto-strips non-digits; max 6 chars; uses `autoComplete="one-time-code"` for native iOS keychain pickers.
+- New password input on the forgot flow enforces min 8 chars + show/hide toggle.
+- All flows resolve to the same `{token, user}` payload and call `AuthContext.setSession()` to mirror state.
+
+**Frontend — AuthContext addition (`context/AuthContext.js`):**
+- New `setSession({token, user})` helper exposed via context — used by passwordless flows so they don't have to duplicate localStorage + setUser logic.
+
+**Frontend — Aria Spotlights (`components/AriaSpotlight.js`, new):**
+- Portal-rendered tooltip with a glowing purple ring around any anchor element + an "Aria tip" card with title, body, Got it CTA, and X close.
+- Auto-positions (top/bottom/left/right placements), reposions on scroll/resize, clamps to viewport, gracefully no-ops if the anchor isn't in the DOM yet (800ms delay).
+- Dismissal persisted to `localStorage` (`aria.spotlight.<id>`) — never shows again once dismissed.
+
+**Frontend — Spotlight integrations:**
+- `/leads` → Spotlight on the status tab ribbon: "Filter by stage" + URL bookmark explainer.
+- `/touchpoint-journey` → Spotlight on the first drag handle: "Drag to reorder — Aria fires in this exact sequence."
+- `/aria-agent/train` → Spotlight on the completion card: "Aim for 80%+ to unlock Aria's full power."
+- `/integrations` → Spotlight on the "All" category pill: "Connect your channels — start with WhatsApp or website form."
+
+**Frontend — Settings → Workspace → Restart Aria Tour:**
+- New `restart-aria-tour-card` with primary CTA (`restart-aria-tour-btn`) that clears `aria.tour.completed.v1` from localStorage and navigates to `/?tour=1` to re-trigger the AriaTourModal.
+
+**Backend fixes during the iter:**
+- `/api/integrations/list` correct path used by SetupChecklist + AriaModeChip (previously hit `/hub` 404).
+- `/api/touchpoints/map` response shape `{map: {touchpoints: []}}` correctly traversed by SetupChecklist.
+
+**Verified (iter46 testing_agent_v3_fork)**: Backend 9/9 PASS (forgot/reset/email-code, rate-limit cap, attempts cap, password-length, mongo persistence). Frontend 26/26 PASS (15/15 Login flow + 11/11 Spotlight & Restart-Tour). Admin password verified restored to `Demo1234!` at end. Zero regressions on any previously shipped feature.
+
+---
+
+
 ## Iter 45 — Backlog cleared + Aria Tour enhancement (Feb 2026)
 
 **User intent:** Execute remaining backlog items (Aria-says microcopy on Conversations + FollowUps, `?tab=` URL persistence on those pages, SetupChecklist on dashboard) and ship the iter44 potential enhancement — a 30-second first-login Aria Tour.
