@@ -134,43 +134,38 @@ def _verify_code(email: str, code: str, purpose: str) -> bool:
     return True
 
 
-def _send_code_email(to_email: str, code: str, purpose: str) -> None:
-    """Send the code via Resend. Failures are swallowed so the API stays idempotent."""
+def _send_code_email(to_email: str, code: str, purpose: str) -> dict:
+    """Send the code via Resend. Returns the delivery result so endpoints
+    can mirror it back to the UI (e.g. show a 'check spam' or test-mode hint).
+    """
     try:
-        if not os.getenv("RESEND_API_KEY"):
-            print(f"[auth-extras] RESEND_API_KEY missing — would have sent code {code} to {to_email}")
-            return
-        resend.api_key = os.getenv("RESEND_API_KEY")
-        sender = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
-        subject = "Your Aria login code" if purpose == "email_code" else "Reset your Aria password"
-        intro = (
-            "Use this code to sign in to Aria. It expires in 10 minutes."
-            if purpose == "email_code"
-            else "Use this code to reset your password. It expires in 10 minutes."
-        )
-        html = f"""
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: linear-gradient(135deg, #FFFFFF 0%, #FAF7FF 100%); border-radius: 16px;">
-            <div style="text-align: center; margin-bottom: 24px;">
-                <div style="display: inline-block; padding: 12px 18px; background: linear-gradient(135deg, #C044E0 0%, #7C35DC 50%, #5B28D4 100%); color: white; border-radius: 12px; font-weight: 800; letter-spacing: 0.1em;">ARIA</div>
-            </div>
-            <h2 style="color: #1A0A2E; font-weight: 800; margin: 0 0 8px 0;">{subject}</h2>
-            <p style="color: #5A4A7A; line-height: 1.6; margin: 0 0 24px 0;">{intro}</p>
-            <div style="text-align: center; background: white; border: 2px dashed #C044E0; border-radius: 12px; padding: 24px; margin: 24px 0;">
-                <div style="font-size: 36px; font-weight: 900; color: #7C35DC; letter-spacing: 0.3em; font-family: 'SF Mono', Menlo, monospace;">{code}</div>
-            </div>
-            <p style="color: #9B8AB0; font-size: 12px; line-height: 1.5;">If you didn't request this code, you can safely ignore this email. The code will expire automatically.</p>
-            <p style="color: #9B8AB0; font-size: 11px; margin-top: 24px;">— {APP_NAME}</p>
-        </div>
-        """
-        params = {
-            "from": sender,
-            "to": [to_email],
-            "subject": subject,
-            "html": html,
-        }
-        resend.Emails.send(params)
+        from email_delivery import send_email_safe
     except Exception as e:
-        print(f"[auth-extras] Resend send failed for {to_email}: {e}")
+        print(f"[auth-extras] email_delivery import failed: {e}")
+        return {"delivered": False, "delivery_status": "skipped"}
+
+    subject = "Your Aria login code" if purpose == "email_code" else "Reset your Aria password"
+    intro = (
+        "Use this code to sign in to Aria. It expires in 10 minutes."
+        if purpose == "email_code"
+        else "Use this code to reset your password. It expires in 10 minutes."
+    )
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: linear-gradient(135deg, #FFFFFF 0%, #FAF7FF 100%); border-radius: 16px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <div style="display: inline-block; padding: 12px 18px; background: linear-gradient(135deg, #C044E0 0%, #7C35DC 50%, #5B28D4 100%); color: white; border-radius: 12px; font-weight: 800; letter-spacing: 0.1em;">ARIA</div>
+        </div>
+        <h2 style="color: #1A0A2E; font-weight: 800; margin: 0 0 8px 0;">{subject}</h2>
+        <p style="color: #5A4A7A; line-height: 1.6; margin: 0 0 24px 0;">{intro}</p>
+        <div style="text-align: center; background: white; border: 2px dashed #C044E0; border-radius: 12px; padding: 24px; margin: 24px 0;">
+            <div style="font-size: 36px; font-weight: 900; color: #7C35DC; letter-spacing: 0.3em; font-family: 'SF Mono', Menlo, monospace;">{code}</div>
+        </div>
+        <p style="color: #9B8AB0; font-size: 12px; line-height: 1.5;">If you didn't request this code, you can safely ignore this email. The code will expire automatically.</p>
+        <p style="color: #9B8AB0; font-size: 11px; margin-top: 24px;">— {APP_NAME}</p>
+    </div>
+    """
+    r = send_email_safe(to_email=to_email, subject=subject, html=html, purpose=purpose)
+    return {"delivered": r.delivered, "delivery_status": r.delivery_status, "forwarded_to": r.forwarded_to}
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────
@@ -180,13 +175,14 @@ def password_forgot(payload: ForgotRequest):
     email = payload.email.lower().strip()
     if _rate_limited(email):
         # Still return 200 to avoid enumeration; just don't send.
-        return {"ok": True}
+        return {"ok": True, "delivery_status": "rate_limited"}
+    delivery = {"delivered": False, "delivery_status": "skipped"}
     user = users_collection.find_one({"email": email})
     if user:
         code = _issue_code(email, "password_reset")
-        _send_code_email(email, code, "password_reset")
+        delivery = _send_code_email(email, code, "password_reset")
     _record_request(email, "password_reset")
-    return {"ok": True}
+    return {"ok": True, **delivery}
 
 
 @router.post("/password/reset")
@@ -229,13 +225,14 @@ def email_code_request(payload: EmailCodeRequest):
     """Step 1 of passwordless email-code login. Idempotent."""
     email = payload.email.lower().strip()
     if _rate_limited(email):
-        return {"ok": True}
+        return {"ok": True, "delivery_status": "rate_limited"}
+    delivery = {"delivered": False, "delivery_status": "skipped"}
     user = users_collection.find_one({"email": email})
     if user:
         code = _issue_code(email, "email_code")
-        _send_code_email(email, code, "email_code")
+        delivery = _send_code_email(email, code, "email_code")
     _record_request(email, "email_code")
-    return {"ok": True}
+    return {"ok": True, **delivery}
 
 
 @router.post("/email-code/verify")

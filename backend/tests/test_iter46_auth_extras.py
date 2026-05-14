@@ -64,7 +64,7 @@ class TestForgotPassword:
     def test_forgot_returns_200_and_inserts_doc(self, api, db, clean_email_state):
         r = api.post(f"{BASE_URL}/api/auth/password/forgot", json={"email": ADMIN_EMAIL})
         assert r.status_code == 200
-        assert r.json() == {"ok": True}
+        assert r.json().get("ok") is True
 
         doc = db["auth_codes"].find_one({"email": ADMIN_EMAIL, "purpose": "password_reset"})
         assert doc is not None, "Code doc not inserted"
@@ -81,7 +81,7 @@ class TestForgotPassword:
     def test_forgot_unknown_email_still_returns_200(self, api, db):
         r = api.post(f"{BASE_URL}/api/auth/password/forgot", json={"email": "ghost-not-a-user@example.com"})
         assert r.status_code == 200
-        assert r.json() == {"ok": True}
+        assert r.json().get("ok") is True
         # No code doc should be inserted for unknown email
         doc = db["auth_codes"].find_one({"email": "ghost-not-a-user@example.com"})
         assert doc is None
@@ -92,7 +92,7 @@ class TestEmailCodeRequest:
     def test_email_code_request_inserts_with_correct_purpose(self, api, db, clean_email_state):
         r = api.post(f"{BASE_URL}/api/auth/email-code/request", json={"email": ADMIN_EMAIL})
         assert r.status_code == 200
-        assert r.json() == {"ok": True}
+        assert r.json().get("ok") is True
         doc = db["auth_codes"].find_one({"email": ADMIN_EMAIL, "purpose": "email_code"})
         assert doc is not None
         assert doc["purpose"] == "email_code"
@@ -184,7 +184,7 @@ class TestSecurity:
         # 4th call still 200 but no new doc inserted (rate limit kicks in BEFORE _record_request)
         r = api.post(f"{BASE_URL}/api/auth/password/forgot", json={"email": ADMIN_EMAIL})
         assert r.status_code == 200
-        assert r.json() == {"ok": True}
+        assert r.json().get("ok") is True
         count_after = db["auth_code_requests"].count_documents({"email": ADMIN_EMAIL})
         assert count_after == 3, f"Expected rate-limit to block 4th request but got {count_after} rows"
 

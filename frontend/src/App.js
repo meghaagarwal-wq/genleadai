@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Signup from './pages/Signup';
+import LandingPage from './pages/LandingPage';
 import DemoSandbox from './pages/DemoSandbox';
 import InviteAccept from './pages/InviteAccept';
 import Dashboard from './pages/Dashboard';
@@ -93,6 +94,7 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ children, requireOnboarded = true }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   const [gateState, setGateState] = React.useState({ checked: false, completed: true, tenantId: null });
 
   React.useEffect(() => {
@@ -122,7 +124,12 @@ function ProtectedRoute({ children, requireOnboarded = true }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  // Unauthenticated visitors at the root URL land on the public marketing page
+  // instead of bouncing to /login. Any other deep-link still requires sign-in.
+  if (!user) {
+    if (location.pathname === '/' || location.pathname === '') return <LandingPage />;
+    return <Navigate to="/login" replace />;
+  }
 
   if (requireOnboarded && !gateState.completed) {
     return <Navigate to="/onboarding" replace />;

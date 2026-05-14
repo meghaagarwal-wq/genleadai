@@ -61,9 +61,13 @@ const Login = () => {
     e?.preventDefault?.();
     setError(''); setLoading(true);
     try {
-      await axios.post(`${API}/api/auth/email-code/request`, { email });
+      const { data } = await axios.post(`${API}/api/auth/email-code/request`, { email });
       setCodeSent(true);
-      toast.success('Check your inbox — code expires in 10 minutes.');
+      if (data?.delivery_status === 'test_mode_forwarded') {
+        toast.info('Resend is in test mode — code forwarded to your admin inbox. Verify a domain at resend.com to send to any address.', { duration: 8000 });
+      } else {
+        toast.success('Check your inbox — code expires in 10 minutes.');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Could not send code. Please try again.');
     } finally { setLoading(false); }
@@ -94,9 +98,13 @@ const Login = () => {
     e?.preventDefault?.();
     setError(''); setLoading(true);
     try {
-      await axios.post(`${API}/api/auth/password/forgot`, { email });
+      const { data } = await axios.post(`${API}/api/auth/password/forgot`, { email });
       setCodeSent(true);
-      toast.success('If that email is registered, a reset code is on its way.');
+      if (data?.delivery_status === 'test_mode_forwarded') {
+        toast.info('Resend is in test mode — reset code forwarded to your admin inbox. Verify a domain at resend.com to send to any address.', { duration: 8000 });
+      } else {
+        toast.success('If that email is registered, a reset code is on its way.');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Could not send reset code.');
     } finally { setLoading(false); }

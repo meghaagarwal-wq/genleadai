@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="9" time="13.944" timestamp="2026-05-14T13:25:03.128385+00:00" hostname="agent-env-0ba9a290-1bd1-435d-b5fb-f5291b2cace4"><testcase classname="backend.tests.test_iter46_auth_extras.TestForgotPassword" name="test_forgot_returns_200_and_inserts_doc" time="0.970"><failure message="AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}&#10;  &#10;  Omitting 1 identical items, use -vv to show&#10;  Left contains 3 more items:&#10;  {'delivered': True,&#10;   'delivery_status': 'test_mode_forwarded',&#10;   'forwarded_to': 'meghaagarwaljain2015@gmail.com'}&#10;  ...&#10;  &#10;  ...Full output truncated (7 lines hidden), use '-vv' to show">backend/tests/test_iter46_auth_extras.py:67: in test_forgot_returns_200_and_inserts_doc
+    assert r.json() == {"ok": True}
+E   AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Left contains 3 more items:
+E     {'delivered': True,
+E      'delivery_status': 'test_mode_forwarded',
+E      'forwarded_to': 'meghaagarwaljain2015@gmail.com'}
+E     ...
+E     
+E     ...Full output truncated (7 lines hidden), use '-vv' to show</failure></testcase><testcase classname="backend.tests.test_iter46_auth_extras.TestForgotPassword" name="test_forgot_unknown_email_still_returns_200" time="0.210"><failure message="AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}&#10;  &#10;  Omitting 1 identical items, use -vv to show&#10;  Left contains 2 more items:&#10;  {'delivered': False, 'delivery_status': 'skipped'}&#10;  &#10;  Full diff:&#10;    {...&#10;  &#10;  ...Full output truncated (4 lines hidden), use '-vv' to show">backend/tests/test_iter46_auth_extras.py:84: in test_forgot_unknown_email_still_returns_200
+    assert r.json() == {"ok": True}
+E   AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Left contains 2 more items:
+E     {'delivered': False, 'delivery_status': 'skipped'}
+E     
+E     Full diff:
+E       {...
+E     
+E     ...Full output truncated (4 lines hidden), use '-vv' to show</failure></testcase><testcase classname="backend.tests.test_iter46_auth_extras.TestEmailCodeRequest" name="test_email_code_request_inserts_with_correct_purpose" time="0.772"><failure message="AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}&#10;  &#10;  Omitting 1 identical items, use -vv to show&#10;  Left contains 3 more items:&#10;  {'delivered': True,&#10;   'delivery_status': 'test_mode_forwarded',&#10;   'forwarded_to': 'meghaagarwaljain2015@gmail.com'}&#10;  ...&#10;  &#10;  ...Full output truncated (7 lines hidden), use '-vv' to show">backend/tests/test_iter46_auth_extras.py:95: in test_email_code_request_inserts_with_correct_purpose
+    assert r.json() == {"ok": True}
+E   AssertionError: assert {'delivered':...', 'ok': True} == {'ok': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Left contains 3 more items:
+E     {'delivered': True,
+E      'delivery_status': 'test_mode_forwarded',
+E      'forwarded_to': 'meghaagarwaljain2015@gmail.com'}
+E     ...
+E     
+E     ...Full output truncated (7 lines hidden), use '-vv' to show</failure></testcase><testcase classname="backend.tests.test_iter46_auth_extras.TestResetHappyPath" name="test_full_reset_flow_via_mongo_hash_override" time="3.986" /><testcase classname="backend.tests.test_iter46_auth_extras.TestSecurity" name="test_bad_code_returns_400" time="1.145" /><testcase classname="backend.tests.test_iter46_auth_extras.TestSecurity" name="test_short_password_rejected" time="1.150" /><testcase classname="backend.tests.test_iter46_auth_extras.TestSecurity" name="test_rate_limit_after_three_requests" time="2.181"><failure message="AssertionError: assert {'delivery_st...', 'ok': True} == {'ok': True}&#10;  &#10;  Omitting 1 identical items, use -vv to show&#10;  Left contains 1 more item:&#10;  {'delivery_status': 'rate_limited'}&#10;  &#10;  Full diff:&#10;    {...&#10;  &#10;  ...Full output truncated (3 lines hidden), use '-vv' to show">backend/tests/test_iter46_auth_extras.py:187: in test_rate_limit_after_three_requests
+    assert r.json() == {"ok": True}
+E   AssertionError: assert {'delivery_st...', 'ok': True} == {'ok': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Left contains 1 more item:
+E     {'delivery_status': 'rate_limited'}
+E     
+E     Full diff:
+E       {...
+E     
+E     ...Full output truncated (3 lines hidden), use '-vv' to show</failure></testcase><testcase classname="backend.tests.test_iter46_auth_extras.TestSecurity" name="test_five_wrong_attempts_deletes_code" time="2.621" /><testcase classname="backend.tests.test_iter46_auth_extras" name="test_zz_final_password_restoration" time="0.653" /></testsuite></testsuites>

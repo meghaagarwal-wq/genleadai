@@ -344,11 +344,10 @@ const ContactModal = ({ onClose, prefillEmail = '' }) => {
       // Best-effort: POST to the beta-feedback endpoint with kind='contact' so the
       // master-admin /admin/feedback tab gets the inbound lead. If the endpoint
       // is unavailable we still show a graceful toast so the visitor isn't blocked.
-      await axios.post(`${API}/api/beta-feedback/public`, {
-        kind: 'contact',
+      await axios.post(`${API}/api/contact/request`, {
         ...form,
         page: 'signup',
-      }).catch(() => { /* swallow — endpoint may be auth-only */ });
+      }).catch(() => { /* swallow — UI still confirms */ });
       toast.success("Thanks — we'll be in touch within 1 business day.");
       onClose();
     } finally { setBusy(false); }
