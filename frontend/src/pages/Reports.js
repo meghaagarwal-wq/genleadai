@@ -126,7 +126,7 @@ const Reports = () => {
           const up = kpi.change >= 0;
           return (
             <div key={key} data-testid={`kpi-${key}`}
-              className="bg-white border border-[#E8E0F5] rounded-xl p-4"
+              className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4"
               style={{ boxShadow: 'var(--shadow-card)' }}>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{meta.label}</span>
@@ -144,7 +144,7 @@ const Reports = () => {
       </div>
 
       {/* Funnel */}
-      <div className="bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="funnel-chart">
+      <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="funnel-chart">
         <div className="flex items-center gap-2 mb-4">
           <Funnel size={18} weight="duotone" className="text-[#7C35DC]" />
           <h2 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Pipeline Funnel</h2>
@@ -173,7 +173,7 @@ const Reports = () => {
 
       {/* Activity charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="daily-chart">
+        <div className="lg:col-span-2 aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="daily-chart">
           <div className="flex items-center gap-2 mb-4">
             <ChartBar size={18} weight="duotone" className="text-[#7C35DC]" />
             <h2 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversations by Day</h2>
@@ -189,7 +189,7 @@ const Reports = () => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="touchpoint-pie">
+        <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="touchpoint-pie">
           <div className="flex items-center gap-2 mb-4">
             <ChartPie size={18} weight="duotone" className="text-[#7C35DC]" />
             <h2 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Touchpoints</h2>
@@ -211,7 +211,7 @@ const Reports = () => {
       </div>
 
       {/* Source performance */}
-      <div className="bg-white border border-[#E8E0F5] rounded-xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="source-table">
+      <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="source-table">
         <div className="p-5 border-b border-[#E8E0F5]">
           <div className="flex items-center gap-2">
             <ChartLineUp size={18} weight="duotone" className="text-[#7C35DC]" />

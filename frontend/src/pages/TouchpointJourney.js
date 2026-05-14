@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import api from '../config/api';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import JourneyStagesHero from '../components/JourneyStagesHero';
 import {
   ChatCircle, EnvelopeSimple, Phone, LinkedinLogo, Sparkle, CheckCircle,
   PencilSimple, Trash, Plus, ArrowsClockwise, Copy,
@@ -856,6 +857,9 @@ const TouchpointJourney = () => {
           </button>
         </div>
       </div>
+
+      {/* ─── 5-Stage explainer hero ─────────────────────────────────────── */}
+      <JourneyStagesHero draft={draft} />
 
       {/* ─── Journey score banner ─────────────────────────────────────────── */}
       <JourneyScoreBanner journey={scoring?.journey} onScoreAI={scoreWithAI} aiBusy={aiBusy} />

@@ -4,6 +4,7 @@ import api from '../config/api';
 import AriaConversationPanel from '../components/AriaConversationPanel';
 import AriaReadPanel from '../components/AriaReadPanel';
 import LeadJourneyTab from '../components/LeadJourneyTab';
+import TouchpointProgressCard from '../components/TouchpointProgressCard';
 import LeadOptInBanner from '../components/LeadOptInBanner';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import CrmSyncBadge from '../components/CrmSyncBadge';
@@ -344,6 +345,9 @@ const LeadDetail = () => {
 
           {/* ARIA's Read — conversation intelligence (additive) */}
           <AriaReadPanel leadId={lead.id} />
+
+          {/* Touchpoint Progress (X of 32) — pairs with the Journey tab in the main column */}
+          <TouchpointProgressCard leadId={lead.id} onOpenJourney={() => setActiveTab('journey')} />
 
 
           {/* Lead Magnet / Brochure */}

@@ -141,35 +141,34 @@ const Layout = ({ children }) => {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
+  // ── Founder-friendly 9-item navigation ─────────────────────────────────
+  // Consolidated per Aria UX spec — legacy items remain accessible via direct URL
+  // (Pipeline/Contacts open inside Lead Inbox tabs; AI Assistant → Conversations;
+  //  Sales Engagement + Touchpoint Mapping → 32-Touchpoint Journey; Plan & Billing → Settings).
   const navItems = [
-    { icon: House, label: 'Dashboard', path: '/' },
-    { icon: Tray, label: 'Lead Inbox', path: '/leads' },
-    { icon: ChartBar, label: 'Pipeline', path: '/pipeline' },
-    { icon: ListChecks, label: 'Follow-Ups', path: '/follow-ups' },
-    { icon: ChatCircle, label: 'Conversations', path: '/conversations' },
-    { icon: Robot, label: 'AI Assistant', path: '/ai-assistant' },
-    { icon: ChartLineUp, label: 'Reports', path: '/reports' },
-    { icon: MapTrifold, label: 'Touchpoint Mapping', path: '/touchpoint-journey' },
-    { icon: Plug, label: 'Integrations', path: '/integrations' },
-    { icon: Plug, label: 'Sales Engagement', path: '/sales-engagement' },
-    { icon: CreditCard, label: 'Plan & Billing', path: '/billing' },
-    { icon: AddressBook, label: 'Contacts', path: '/contacts' },
-    { icon: UsersThree, label: 'Settings', path: '/settings' },
-    { icon: Wrench, label: 'Troubleshooting', path: '/troubleshooting' },
-    { icon: GraduationCap, label: 'Tutorials', path: '/tutorials' },
+    { icon: House,         label: 'Command Center',       path: '/' },
+    { icon: Tray,          label: 'Lead Inbox',           path: '/leads' },
+    { icon: ChatCircle,    label: 'Conversations',        path: '/conversations' },
+    { icon: MapTrifold,    label: '32-Touchpoint Journey',path: '/touchpoint-journey' },
+    { icon: GraduationCap, label: 'Train Aria',           path: '/aria-agent/train' },
+    { icon: Plug,          label: 'Integrations',         path: '/integrations' },
+    { icon: CalendarCheck, label: 'Call Booking',         path: '/follow-ups' },
+    { icon: ChartLineUp,   label: 'Reports',              path: '/reports' },
+    { icon: UsersThree,    label: 'Settings',             path: '/settings' },
   ];
 
+  // ── Advanced Aria surfaces (kept available but collapsed under one group) ──
   const ariaAgentItems = [
-    { icon: GraduationCap, label: 'Train ARIA', path: '/aria-agent/train' },
-    { icon: BookOpen, label: 'Sales Playbooks', path: '/aria-agent/playbooks' },
-    { icon: MapTrifold, label: 'Sales Journeys', path: '/aria-agent/journeys' },
     { icon: FileText, label: 'Founder Briefs', path: '/aria-agent/briefs' },
     { icon: ShieldCheck, label: 'Human Handoff', path: '/aria-agent/handoff' },
     { icon: ArrowClockwise, label: 'Revival Engine', path: '/aria-agent/revival' },
     { icon: Stack, label: 'Sales Assets', path: '/aria-agent/assets' },
     { icon: Brain, label: 'ARIA Brain', path: '/aria-agent/brain' },
     { icon: Brain, label: 'ARIA Insights', path: '/aria-agent/insights' },
+    { icon: BookOpen, label: 'Sales Playbooks', path: '/aria-agent/playbooks' },
     { icon: CalendarCheck, label: 'Weekly Recap', path: '/aria-agent/weekly-recap' },
+    { icon: Wrench, label: 'Troubleshooting', path: '/troubleshooting' },
+    { icon: GraduationCap, label: 'Tutorials', path: '/tutorials' },
   ];
 
   const NavContent = ({ mobile = false }) => (
@@ -200,7 +199,7 @@ const Layout = ({ children }) => {
 
         <div className="mt-5 mb-2 px-3 flex items-center gap-2" data-testid="nav-section-aria-agent">
           <div className="h-px flex-1 bg-white/10" />
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[#C9B6FF]/70" style={{ fontFamily: 'Plus Jakarta Sans' }}>AI SALES AGENT</span>
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[#C9B6FF]/70" style={{ fontFamily: 'Plus Jakarta Sans' }}>ADVANCED · ARIA TOOLS</span>
           <div className="h-px flex-1 bg-white/10" />
         </div>
 

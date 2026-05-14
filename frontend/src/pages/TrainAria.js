@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Robot, CheckCircle, GraduationCap, Buildings, Target, ChatCircle, ShieldCheck, CalendarBlank } from '@phosphor-icons/react';
 import api from '../config/api';
 import PageHeader from '../components/PageHeader';
+import TrainingCompletionCard from '../components/TrainingCompletionCard';
 
 const TONE_OPTIONS = [
   { id: 'founder_like', label: 'Founder-like' },
@@ -74,6 +75,8 @@ const TrainAria = () => {
         title="Train Your AI Sales Agent"
         subtitle="Train ARIA the way you'd onboard a new sales hire. The more context you give, the more personalised every reply, follow-up, and brief becomes."
       />
+
+      <TrainingCompletionCard data={data} />
 
       {savedAt && (
         <div className="rounded-2xl px-5 py-4 flex items-center gap-3 border" style={{ background: 'linear-gradient(135deg, rgba(22,163,74,0.08) 0%, rgba(124,53,220,0.06) 100%)', borderColor: 'rgba(22,163,74,0.25)' }} data-testid="train-aria-success">

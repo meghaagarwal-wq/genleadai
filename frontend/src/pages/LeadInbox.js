@@ -26,6 +26,22 @@ const CHANNELS = ['whatsapp','email','linkedin','instagram','facebook','website_
 const STATUSES = ['new','contacted','qualified','unqualified','proposal_sent','negotiation','won','lost','nurture'];
 const TIERS = ['hot','warm','cold'];
 
+// Founder-friendly status pivots — each one maps to either a backend status filter
+// or a derived bucket. `key='all'` clears the filter. Order matters — leftmost = highest urgency.
+const LEAD_TABS = [
+  { key: 'all',           label: 'All Leads',          status: '',              tier: '' },
+  { key: 'new',           label: 'New Leads',          status: 'new',           tier: '' },
+  { key: 'high_intent',   label: 'High Intent',        status: '',              tier: 'hot' },
+  { key: 'warm',          label: 'Warm Leads',         status: '',              tier: 'warm' },
+  { key: 'contacted',     label: 'In Conversation',    status: 'contacted',     tier: '' },
+  { key: 'qualified',     label: 'Qualified',          status: 'qualified',     tier: '' },
+  { key: 'proposal_sent', label: 'Proposal Sent',      status: 'proposal_sent', tier: '' },
+  { key: 'negotiation',   label: 'Negotiating',        status: 'negotiation',   tier: '' },
+  { key: 'won',           label: 'Won',                status: 'won',           tier: '' },
+  { key: 'nurture',       label: 'Cold / Nurture',     status: 'nurture',       tier: '' },
+  { key: 'lost',          label: 'Lost',               status: 'lost',          tier: '' },
+];
+
 const LeadInbox = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
@@ -39,7 +55,39 @@ const LeadInbox = () => {
   const [showPushModal, setShowPushModal] = useState(false);
   const [page, setPage] = useState(0);
   const [engagementMap, setEngagementMap] = useState({});
+  const [activeTab, setActiveTab] = useState('all');
+  const [tabCounts, setTabCounts] = useState({});
   const limit = 20;
+
+  // Apply tab → filter shortcuts (preserves any orthogonal filters the user set manually).
+  const applyTab = (tab) => {
+    setActiveTab(tab.key);
+    setFilters((f) => ({ ...f, status: tab.status, icp_tier: tab.tier }));
+    setPage(0);
+  };
+
+  // Tab badge counts come from /api/analytics/dashboard (already tenant-scoped).
+  useEffect(() => {
+    api.get('/api/analytics/dashboard')
+      .then((r) => {
+        const sd = r.data?.status_distribution || {};
+        const td = r.data?.icp_distribution || {};
+        setTabCounts({
+          all: r.data?.total_leads ?? 0,
+          new: sd.new ?? 0,
+          high_intent: td.hot ?? 0,
+          warm: td.warm ?? 0,
+          contacted: sd.contacted ?? 0,
+          qualified: sd.qualified ?? 0,
+          proposal_sent: sd.proposal_sent ?? 0,
+          negotiation: sd.negotiation ?? 0,
+          won: sd.won ?? 0,
+          nurture: sd.nurture ?? 0,
+          lost: sd.lost ?? 0,
+        });
+      })
+      .catch(() => setTabCounts({}));
+  }, []);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -85,7 +133,7 @@ const LeadInbox = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily:'Plus Jakarta Sans' }}>Lead Inbox</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">{total} leads total</p>
+          <p className="text-sm text-[#5A4A7A] mt-1">Every prospect Aria is handling, sorted by intent and next action.</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowPushModal(true)} disabled={!leads.length} data-testid="push-to-sequence-btn"
@@ -99,6 +147,34 @@ const LeadInbox = () => {
         </div>
       </div>
 
+      {/* Status pivots — founder-friendly tabs that map to backend status/tier filters */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide" data-testid="lead-status-tabs">
+        {LEAD_TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          const count = tabCounts[tab.key];
+          return (
+            <button
+              key={tab.key}
+              onClick={() => applyTab(tab)}
+              data-testid={`lead-tab-${tab.key}`}
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                isActive
+                  ? 'text-white border-transparent shadow-[0_4px_12px_rgba(124,53,220,0.25)]'
+                  : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:border-[#7C35DC]/30 hover:text-[#7C35DC]'
+              }`}
+              style={isActive ? { background: 'var(--gradient-brand)', fontFamily: 'Plus Jakarta Sans' } : { fontFamily: 'Plus Jakarta Sans' }}
+            >
+              {tab.label}
+              {typeof count === 'number' && (
+                <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${
+                  isActive ? 'bg-white/25 text-white' : 'bg-[#F4F0FF] text-[#7C35DC]'
+                }`}>{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-lg">
           <MagnifyingGlass size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B8AB0]" />
@@ -106,7 +182,7 @@ const LeadInbox = () => {
         </div>
         <button onClick={() => setShowFilters(!showFilters)} data-testid="toggle-filters-btn"
           className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-all text-sm font-medium ${showFilters ? 'bg-[#F4F0FF] border-[#7C35DC]/30 text-[#7C35DC]' : 'bg-white border-[#E8E0F5] text-[#5A4A7A] hover:bg-[#F9F5FF] hover:text-[#7C35DC]'}`} style={{ fontFamily:'Plus Jakarta Sans' }}>
-          <Funnel size={16} /> Filters
+          <Funnel size={16} /> More filters
         </button>
       </div>
 
