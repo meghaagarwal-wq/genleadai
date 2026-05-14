@@ -14,6 +14,7 @@ Pattern:
 from __future__ import annotations
 import asyncio
 import hashlib
+import json
 import os
 import time
 import uuid
@@ -22,6 +23,7 @@ from typing import Any, Optional, List
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from deps import db, get_current_user
@@ -47,6 +49,9 @@ SUPPORTED_TYPES = {
     "instantly": {"category": "outreach", "label": "Instantly.ai", "direction": "inbound"},
     "google_ads": {"category": "lead_source", "label": "Google Ads Lead Form", "direction": "inbound"},
     "apollo": {"category": "lead_source", "label": "Apollo.io", "direction": "inbound"},
+    # Cold outreach (inbound webhooks + outbound pause-sequence helpers)
+    "saleshandy": {"category": "outreach", "label": "Saleshandy", "direction": "inbound"},
+    "lemlist":    {"category": "outreach", "label": "Lemlist",    "direction": "inbound"},
 }
 
 LIFECYCLE_EVENTS = [
@@ -480,6 +485,185 @@ async def instantly_webhook(tenant_id: str, request: Request):
         "utm_source": "instantly",
     }
     return await _normalize_and_capture(tenant_id, raw, "instantly", request)
+
+
+# ─── Saleshandy (cold email outreach) ───────────────────────────────────────
+def _saleshandy_event_type(body: dict) -> str:
+    """Map a raw Saleshandy webhook into our internal scoring event key.
+
+    Saleshandy fires a handful of named webhooks (opened / clicked / replied /
+    bounced). We collapse them into the same `saleshandy.*` event namespace
+    pietential.py already understands, so scoring + auto-pause fires for free.
+    """
+    raw = str(
+        body.get("event") or body.get("event_type") or body.get("type") or ""
+    ).lower().strip()
+    if "open" in raw:
+        return "saleshandy.email_opened"
+    if "click" in raw:
+        return "saleshandy.email_clicked"
+    # "positive_reply" / "interested" / "meeting_booked" → positive_reply
+    if any(k in raw for k in ("positive", "interested", "meeting", "booked", "replied")):
+        return "saleshandy.positive_reply"
+    return "saleshandy.email_opened"  # safe default
+
+
+def _verify_saleshandy_signature(request: Request, body_bytes: bytes, cfg: dict) -> bool:
+    """Optional HMAC verification. Saleshandy lets you set a signing secret
+    per webhook; if `cfg['webhook_secret']` is set, we enforce. Otherwise we
+    soft-allow so customers without a key configured can still receive events.
+    """
+    secret = (cfg or {}).get("webhook_secret") or os.getenv("SALESHANDY_WEBHOOK_SECRET")
+    if not secret:
+        return True
+    import hmac
+    import hashlib
+    sig_header = request.headers.get("x-saleshandy-signature") or request.headers.get("X-Webhook-Signature") or ""
+    if not sig_header:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig_header.strip().lower())
+
+
+@public_router.post("/saleshandy/webhook/{tenant_id}")
+async def saleshandy_webhook(tenant_id: str, request: Request):
+    raw_bytes = await request.body()
+    try:
+        body = json.loads(raw_bytes.decode("utf-8") or "{}")
+    except Exception:
+        body = {}
+
+    # Pull cfg to access the (optional) signing secret + sequence-to-Aria mapping
+    cfg_doc = configs_col.find_one({"tenant_id": tenant_id, "integration_type": "saleshandy"}, {"_id": 0}) or {}
+    cfg = cfg_doc.get("config") or {}
+    if not _verify_saleshandy_signature(request, raw_bytes, cfg):
+        return JSONResponse({"ok": False, "error": "bad_signature"}, status_code=401)
+
+    # 1. Lead identification — accept the most common Saleshandy field names.
+    raw_lead = {
+        "first_name": body.get("first_name") or body.get("firstName") or body.get("prospect_first_name"),
+        "last_name":  body.get("last_name")  or body.get("lastName")  or body.get("prospect_last_name"),
+        "email":      body.get("email")      or body.get("prospect_email") or body.get("recipient"),
+        "company":    body.get("company")    or body.get("organization"),
+        "message":    f"Saleshandy event · sequence: {body.get('sequence_name') or body.get('campaign_name') or '—'}",
+        "utm_source": "saleshandy",
+    }
+    res = await _normalize_and_capture(tenant_id, raw_lead, "saleshandy", request)
+
+    # 2. Score event via pietential — fire-and-forget so a failure there
+    #    doesn't block the lead capture.
+    try:
+        from routes.pietential import LeadEvent, log_event_internal  # type: ignore
+        event_type = _saleshandy_event_type(body)
+        ev = LeadEvent(
+            lead_email=raw_lead.get("email") or "",
+            event_type=event_type,
+            payload=body,
+        )
+        await log_event_internal(tenant_id, ev)
+    except Exception as e:
+        print(f"[saleshandy_webhook] scoring skipped: {e}")
+    return res
+
+
+# ─── Lemlist (LinkedIn + email outreach) ────────────────────────────────────
+def _lemlist_event_type(body: dict) -> str:
+    raw = str(body.get("type") or body.get("event") or body.get("eventType") or "").lower().strip()
+    if any(k in raw for k in ("connection", "invite_accepted", "invitation_accepted")):
+        return "lemlist.connection_accepted"
+    if any(k in raw for k in ("post_engagement", "linkedin_like", "linkedin_comment")):
+        return "lemlist.post_engagement"
+    # positive dm reply or any "replied"
+    if "reply" in raw or "interested" in raw or "meeting" in raw:
+        return "lemlist.dm_positive_reply"
+    return "lemlist.post_engagement"
+
+
+def _verify_lemlist_signature(request: Request, body_bytes: bytes, cfg: dict) -> bool:
+    secret = (cfg or {}).get("webhook_secret") or os.getenv("LEMLIST_WEBHOOK_SECRET")
+    if not secret:
+        return True
+    import hmac
+    import hashlib
+    sig_header = request.headers.get("x-lemlist-signature") or request.headers.get("X-Webhook-Signature") or ""
+    if not sig_header:
+        return False
+    expected = hmac.new(secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig_header.strip().lower())
+
+
+@public_router.post("/lemlist/webhook/{tenant_id}")
+async def lemlist_webhook(tenant_id: str, request: Request):
+    raw_bytes = await request.body()
+    try:
+        body = json.loads(raw_bytes.decode("utf-8") or "{}")
+    except Exception:
+        body = {}
+
+    cfg_doc = configs_col.find_one({"tenant_id": tenant_id, "integration_type": "lemlist"}, {"_id": 0}) or {}
+    cfg = cfg_doc.get("config") or {}
+    if not _verify_lemlist_signature(request, raw_bytes, cfg):
+        return JSONResponse({"ok": False, "error": "bad_signature"}, status_code=401)
+
+    raw_lead = {
+        "first_name": body.get("firstName") or body.get("first_name"),
+        "last_name":  body.get("lastName")  or body.get("last_name"),
+        "email":      body.get("email")     or body.get("lead_email"),
+        "company":    body.get("company")   or body.get("companyName"),
+        "linkedin":   body.get("linkedinUrl") or body.get("linkedin_url"),
+        "message":    f"Lemlist event · campaign: {body.get('campaignName') or body.get('campaign_name') or '—'}",
+        "utm_source": "lemlist",
+    }
+    res = await _normalize_and_capture(tenant_id, raw_lead, "lemlist", request)
+    try:
+        from routes.pietential import LeadEvent, log_event_internal  # type: ignore
+        event_type = _lemlist_event_type(body)
+        ev = LeadEvent(
+            lead_email=raw_lead.get("email") or "",
+            event_type=event_type,
+            payload=body,
+        )
+        await log_event_internal(tenant_id, ev)
+    except Exception as e:
+        print(f"[lemlist_webhook] scoring skipped: {e}")
+    return res
+
+
+# ─── Outbound helpers — pause a sequence when Aria takes over ────────────────
+async def pause_saleshandy_sequence(api_key: str, sequence_id: str, prospect_email: str) -> dict:
+    """Best-effort Saleshandy pause. Saleshandy's public REST API exposes
+    /v1/sequence/{id}/prospect/{email}/pause — we call it with a 6s budget.
+    Wrapper never raises so the orchestrator's main flow isn't blocked.
+    """
+    if not api_key or not sequence_id or not prospect_email:
+        return {"ok": False, "error": "missing_args"}
+    try:
+        import httpx
+        url = f"https://open-api.saleshandy.com/v1/sequence/{sequence_id}/prospect/{prospect_email}/pause"
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.post(url, headers={"Authorization": f"Bearer {api_key}"})
+            return {"ok": r.status_code in (200, 204), "status": r.status_code}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
+async def pause_lemlist_campaign(api_key: str, campaign_id: str, prospect_email: str) -> dict:
+    """Best-effort Lemlist pause. Lemlist API: PATCH /api/campaigns/{id}/leads/{email}
+    with body {paused: true}. Wrapper never raises.
+    """
+    if not api_key or not campaign_id or not prospect_email:
+        return {"ok": False, "error": "missing_args"}
+    try:
+        import httpx
+        import base64
+        # Lemlist uses Basic auth with `: <api_key>` (empty username)
+        auth = base64.b64encode(f":{api_key}".encode()).decode()
+        url = f"https://api.lemlist.com/api/campaigns/{campaign_id}/leads/{prospect_email}"
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.patch(url, json={"paused": True}, headers={"Authorization": f"Basic {auth}"})
+            return {"ok": r.status_code in (200, 204), "status": r.status_code}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
 
 
 @public_router.post("/google-ads/webhook/{tenant_id}")

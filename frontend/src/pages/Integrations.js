@@ -85,6 +85,42 @@ const INTEGRATION_META = {
     apolloImport: true,
     docs: 'https://docs.apollo.io/reference',
   },
+  saleshandy: {
+    name: 'Saleshandy',
+    blurb: 'When a Saleshandy prospect opens, clicks, or replies positively, the lead lands in Aria and the sequence auto-pauses on a hot reply.',
+    inbound: true,
+    webhook_path: '/api/integrations/saleshandy/webhook/{tenant_id}',
+    fields: [
+      { key: 'api_key', label: 'Saleshandy API Key', placeholder: 'Paste your Saleshandy Open API key', required: true, secret: true },
+      { key: 'default_sequence_id', label: 'Default Sequence ID (optional)', placeholder: 'e.g. 6512a...  — used by Aria to auto-pause when a lead replies' },
+      { key: 'webhook_secret', label: 'Webhook signing secret (optional)', placeholder: 'Aria verifies HMAC-SHA256 if you set one', secret: true },
+    ],
+    setup_steps: [
+      'Saleshandy → Settings → API → "Generate token" → copy the Open API key (paste it above as the API Key).',
+      'Saleshandy → Settings → Webhooks → Add Webhook → paste the inbound URL shown below, select events: email_opened · email_clicked · positive_reply.',
+      '(Recommended) Generate a signing secret in Saleshandy and paste it in "Webhook signing secret" above — Aria will then enforce HMAC verification.',
+      'Click Save here. Aria will start capturing every reply / open / click as a lead-side event and auto-pause sequences on a hot reply.',
+    ],
+    docs: 'https://open-api.saleshandy.com/docs',
+  },
+  lemlist: {
+    name: 'Lemlist',
+    blurb: 'Capture every Lemlist reply + LinkedIn connection acceptance as a lead in Aria. Aria pauses the campaign automatically when a prospect goes hot.',
+    inbound: true,
+    webhook_path: '/api/integrations/lemlist/webhook/{tenant_id}',
+    fields: [
+      { key: 'api_key', label: 'Lemlist API Key', placeholder: 'Paste your Lemlist API key', required: true, secret: true },
+      { key: 'default_campaign_id', label: 'Default Campaign ID (optional)', placeholder: 'e.g. cam_abc...  — Aria pauses this campaign on a hot reply' },
+      { key: 'webhook_secret', label: 'Webhook signing secret (optional)', placeholder: 'Aria verifies HMAC-SHA256 if you set one', secret: true },
+    ],
+    setup_steps: [
+      'Lemlist → Settings → Integrations → API → copy your API key (paste it above as the API Key).',
+      'Lemlist → Campaign → Settings → Webhooks → Add → paste the inbound URL shown below, enable events: reply · linkedinInvitationAccepted · positivelyReplied.',
+      '(Recommended) Generate a signing secret in Lemlist and paste it in "Webhook signing secret" above — Aria will then enforce HMAC verification.',
+      'Click Save here. Aria captures every event, scores the lead, and auto-pauses the campaign on a positive reply so the prospect doesn\'t get another cold touch.',
+    ],
+    docs: 'https://developer.lemlist.com/',
+  },
 };
 
 const Integrations = () => {
@@ -299,6 +335,24 @@ const ConfigModal = ({ item, onClose, onSaved }) => {
             <a href={meta.docs} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-[#7C35DC] hover:text-[#6B28C8] inline-flex items-center gap-1">
               <BookOpen size={11} weight="bold" /> {meta.name} documentation
             </a>
+          )}
+
+          {/* In-app setup guide — numbered step list under the config fields */}
+          {Array.isArray(meta.setup_steps) && meta.setup_steps.length > 0 && (
+            <div className="mt-2 p-4 rounded-xl border border-[#E0D4F7] bg-gradient-to-br from-white to-[#FAF7FF]" data-testid="setup-guide">
+              <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#7C35DC] mb-2">
+                <BookOpen size={11} weight="bold" /> Setup guide
+              </div>
+              <ol className="space-y-2 text-xs text-[#1A0A2E] leading-relaxed list-none">
+                {meta.setup_steps.map((step, i) => (
+                  <li key={i} className="flex items-start gap-2" data-testid={`setup-step-${i + 1}`}>
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-extrabold text-white flex items-center justify-center mt-0.5"
+                      style={{ background: 'var(--gradient-brand)', fontFamily: 'Plus Jakarta Sans' }}>{i + 1}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
         </div>
 
