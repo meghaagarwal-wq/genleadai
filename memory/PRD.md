@@ -1,3 +1,33 @@
+## Iter 51 — Launch-readiness sweep + friendly 404 catch-all (Feb 2026)
+
+**User intent:** "no new feature, just complete this so that the app is ready to launch."
+
+**Verdict:** 🟢 **LAUNCH READY** — Backend 16/16 pytest PASS, Frontend 98% across every critical surface, zero console errors, zero 4xx/5xx, all 3 public widget JS assets serve 200, all 3 login modes (password / email-code / forgot) work, Master Admin 7 tabs render, Lead Inbox URL persistence, AriaCommandRoom, Touchpoint Journey, Integrations Hub (incl. Saleshandy + Lemlist), Settings (10 sub-tabs), Legal pages (/privacy /terms /dpa) all green.
+
+**Single polish item shipped this iter:**
+- New `/app/frontend/src/pages/NotFound.js` — brand-aligned "page not found" with `data-testid="not-found-page"`, gradient Compass icon, "Aria couldn't find that" eyebrow, "Back to dashboard" + "Go back" CTAs.
+- `App.js` adds `<Route path="*" element={<NotFound />} />` as the last child of the protected `<Routes>` so unknown authenticated paths now render the friendly 404 instead of a blank Layout shell. Screenshot-verified working at `/this-does-not-exist`.
+
+**Pre-launch checklist for the founder** (no code change — operational):
+1. **Resend domain verification** — go to resend.com/domains → add `genleadai.com` → paste DKIM + Return-Path + DMARC records at DNS registrar. `email_delivery.py` auto-detects once verified; test-mode forwards stop.
+2. **360dialog WhatsApp creds** — paste API key in Settings → Integrations for each tenant that wants live WA. Webhook URL is already exposed in the Hub UI.
+3. **Stripe / Razorpay** — DEFERRED. Plans are currently metadata-only. When ready to charge, wire `/api/plans/select` to a Stripe Checkout session (test key already in pod env).
+4. **Master Admin email** — confirmed as `meghaagarwaljain2015@gmail.com` (CONTACT_FORWARD_EMAIL + MASTER_ADMIN_EMAIL in backend/.env).
+5. **Save to GitHub** — use the chat-input "Save to Github" button before redeploying to `app.genleadai.com`.
+
+**Verified (testing_agent_v3_fork iter51):**
+- Public LandingPage renders at `/` for unauthenticated visitors ✅
+- Authenticated dashboard at `/` shows AriaCommandRoom hero ✅
+- `/dashboard` redirects to `/` (no blank screen) ✅
+- 3-mode Login (password / email-code / forgot) all work, test-mode toast renders the spec-exact copy ✅
+- Master Admin 7 tabs (Revenue · Workspaces · Trials · Health · Platform Stats · Audit Log · Contact Inbox) all populated ✅
+- 3 public widget JS files (`/aria-widget.js`, `/aria-wa-widget.js`, `/aria-form-widget.js`) all serve 200 ✅
+- Zero console errors, zero broken images, zero 4xx/5xx across the sweep ✅
+
+---
+
+
+
 ## Iter 50 — Profile pictures: upload, change, remove (Feb 2026)
 
 **User intent:** "Give me the option of changing or adding profile pictures of workspace owner and team members." One-shot final feature before pause.

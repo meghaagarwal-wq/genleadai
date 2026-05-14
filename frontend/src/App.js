@@ -50,6 +50,7 @@ import SalesEngagement from './pages/SalesEngagement';
 import AdminFeedback from './pages/AdminFeedback';
 import MasterAdmin from './pages/MasterAdmin';
 import TouchpointJourney from './pages/TouchpointJourney';
+import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
 
 // Pietential workspace
@@ -252,6 +253,7 @@ function App() {
                         <Route path="/admin/feedback" element={<AdminFeedback />} />
                         <Route path="/master-admin" element={<MasterAdmin />} />
                         <Route path="/touchpoint-journey" element={<TouchpointJourney />} />
+                        <Route path="*" element={<NotFound />} />
                       </Routes>
                       <UpgradeModal />
                     </Layout>
