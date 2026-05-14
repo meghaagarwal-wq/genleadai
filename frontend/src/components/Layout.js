@@ -403,7 +403,6 @@ const Layout = ({ children }) => {
         </header>
         <main className="flex-1 overflow-auto"><TrialBanner /><div className="p-4 md:p-6">{children}</div></main>
       </div>
-      <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
       <AriaToastWatcher />
       <AriaTourModal />
     </div>

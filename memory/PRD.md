@@ -1,3 +1,34 @@
+## Iter 47 — Market-ready: bulletproof email delivery + public LandingPage (Feb 2026)
+
+**User intent:** "Tried sending the code but couldn't" + "make this app market ready, like any other in-market app". Root cause: Resend free dev plan can only deliver mail to the verified owner address — every other recipient was rejected.
+
+**New `/app/backend/email_delivery.py`** — single chokepoint for all outbound mail with three guarantees:
+- **Test-mode forward**: if Resend rejects with `testing emails / verify a domain`, the wrapper rewrites `To:` to `CONTACT_FORWARD_EMAIL` (or `MASTER_ADMIN_EMAIL`) and prefixes the subject with `[for: <original_to>]`. Founder still receives the message + can manually relay until their domain is verified.
+- **Structured DeliveryResult**: `delivered`, `delivery_status` (`sent` / `test_mode_forwarded` / `failed` / `skipped` / `rate_limited`), `forwarded_to`, `detail`. Endpoints surface this back to the UI.
+- **`email_delivery_log` Mongo collection**: every send + outcome persisted so master-admin can audit health (`samples`, `by_status`, `is_test_mode`).
+
+**Wired in:**
+- `routes/auth_extras.py` — `_send_code_email()` rebuilt around the wrapper; `password/forgot` + `email-code/request` now include `delivery_status` + `forwarded_to` in their response body.
+- `routes/contact.py` — `_notify_owner()` rebuilt around the wrapper. Contact form leads land in the founder's verified inbox with the prospect's email as `reply_to`.
+- `backend/.env` — added `CONTACT_FORWARD_EMAIL` and `MASTER_ADMIN_EMAIL` (both point to the verified `meghaagarwaljain2015@gmail.com`).
+
+**Frontend test-mode UX (`pages/Login.js`):**
+- `requestForgot` + `requestEmailCode` read `delivery_status` from the response and show a friendly info toast: *"Resend is in test mode — reset code forwarded to your admin inbox. Verify a domain at resend.com to send to any address."*
+- Falls back to the normal "Check your inbox" toast once a domain is verified (no code change needed at that point — the wrapper auto-detects).
+
+**Public LandingPage (`pages/LandingPage.js`, new):**
+- Compact marketing surface — sticky navbar, hero with "Turn scattered leads into **booked calls**" headline, 5 feature chips, Problem→ARIA→Result card, "How Aria works" 4-step strip (Connect → Train → Run journey → Close calls), Plans strip (Starter / Growth / Custom), Final CTA strip + tiny footer.
+- Same brand language as the Signup page; reuses PlanCard + Plans/Contact modals.
+
+**Routing (`App.js`):**
+- `useLocation` imported. `ProtectedRoute` now special-cases the root path: unauthenticated visitors at `/` get rendered the `LandingPage` instead of being redirected to `/login`. Any other path still bounces to `/login`.
+- `Toaster` hoisted from `Layout.js` → `App.js` root so toasts work on public routes (Login, LandingPage, Signup) too.
+
+**Verified (iter47 testing_agent_v3_fork)**: Backend 13/13 PASS — wrapper happy path, test-mode forward path, contact endpoint, all 9 auth-extras tests still green, `email_delivery_log` persistence. Frontend 100% PASS after Toaster fix (manual visual confirmation: forgot-password toast renders "Resend is in test mode — reset code forwarded to your admin inbox. Verify a domain at resend.com to send to any address."). Zero regressions.
+
+---
+
+
 ## Iter 46 — Market-readiness: Auth-extras (Forgot Password + Email Code Login) + Aria Spotlights + Restart Tour (Feb 2026)
 
 **User intent:** Execute next-action-items + future-backlog + the iter45 enhancement + "make the app market ready" + add Forgot Password and Email Code login flows.

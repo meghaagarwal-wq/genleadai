@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Signup from './pages/Signup';
@@ -258,6 +259,8 @@ function App() {
                 }
               />
             </Routes>
+            {/* Mounted at root so toasts work on public routes (Login, LandingPage, Signup) too */}
+            <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
           </Router>
           </WorkspaceProvider>
         </PlanProvider>
