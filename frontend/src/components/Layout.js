@@ -17,6 +17,7 @@ import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
 import TrialBanner from './TrialBanner';
 import AriaModeChip from './AriaModeChip';
+import AriaTourModal from './AriaTourModal';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
@@ -404,6 +405,7 @@ const Layout = ({ children }) => {
       </div>
       <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
       <AriaToastWatcher />
+      <AriaTourModal />
     </div>
   );
 };

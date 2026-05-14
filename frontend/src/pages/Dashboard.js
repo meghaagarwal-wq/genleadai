@@ -9,6 +9,7 @@ import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
 import SyncActivityDigest from '../components/SyncActivityDigest';
 import AriaCommandRoom from '../components/AriaCommandRoom';
 import AriaStories from '../components/AriaStories';
+import SetupChecklist from '../components/SetupChecklist';
 import LeadFeed from '../components/LeadFeed';
 import PipelineMoodCard from '../components/PipelineMoodCard';
 import EmptyDashboard from '../components/EmptyDashboard';
@@ -118,6 +119,9 @@ const Dashboard = () => {
     <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto aria-fade-up">
       {/* ━━━ AriaCommandRoom — the premium AI-first hero (welcome · status · today's pipeline · personality panel · quick actions) ━━━ */}
       <AriaCommandRoom userName={user?.full_name} />
+
+      {/* Setup Checklist — guided onboarding for new / under-configured tenants. Auto-hides at 100% or when dismissed. */}
+      <SetupChecklist />
 
       {/* ARIA Stories — leads that need attention now */}
       <div className="aria-fade-up aria-fade-up-1">

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../config/api';
 import { ListChecks, Clock, Check, ArrowRight, Sparkle, Phone, EnvelopeSimple, WhatsappLogo, CalendarBlank } from '@phosphor-icons/react';
 import { usePlan } from '../context/PlanContext';
@@ -11,11 +11,21 @@ const TYPE_ICONS = { call: Phone, email: EnvelopeSimple, whatsapp: WhatsappLogo,
 
 const FollowUps = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { hasFeature } = usePlan();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [bucket, setBucket] = useState('today');
+  const [bucket, setBucket] = useState(searchParams.get('tab') || 'today');
   const [busyId, setBusyId] = useState(null);
+
+  const applyBucket = (id) => {
+    setBucket(id);
+    setSearchParams((sp) => {
+      const next = new URLSearchParams(sp);
+      if (!id || id === 'today') next.delete('tab'); else next.set('tab', id);
+      return next;
+    }, { replace: true });
+  };
 
   useEffect(() => {
     api.get('/api/leads?limit=200').then(res => setLeads(res.data?.leads || [])).catch(() => {}).finally(() => setLoading(false));
@@ -71,6 +81,27 @@ const FollowUps = () => {
 
   const visible = buckets[bucket] || [];
 
+  const ariaSays = useMemo(() => {
+    if (loading) return 'Pulling up your follow-up queue…';
+    if (bucket === 'overdue' && buckets.overdue.length > 0) {
+      return `${buckets.overdue.length} lead${buckets.overdue.length === 1 ? '' : 's'} are overdue. Hit these first — they're statistically most likely to go cold in the next 48 hours.`;
+    }
+    if (bucket === 'today' && buckets.today.length === 0 && buckets.overdue.length === 0) {
+      return 'Inbox zero on follow-ups today. Perfect window to bring in fresh leads or refine a touchpoint.';
+    }
+    if (bucket === 'today' && buckets.today.length > 0) {
+      return `${buckets.today.length} follow-up${buckets.today.length === 1 ? '' : 's'} due today. Aria has drafted the message — review, edit, or let her send.`;
+    }
+    if (bucket === 'upcoming' && buckets.upcoming.length > 0) {
+      return `${buckets.upcoming.length} follow-up${buckets.upcoming.length === 1 ? '' : 's'} scheduled. You can reschedule, fast-forward, or pause any of them.`;
+    }
+    if (bucket === 'completed' && buckets.completed.length > 0) {
+      return `${buckets.completed.length} lead${buckets.completed.length === 1 ? '' : 's'} marked won/lost. Worth a glance to spot patterns Aria can learn from.`;
+    }
+    return 'Nothing in this bucket right now.';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bucket, buckets.today.length, buckets.overdue.length, buckets.upcoming.length, buckets.completed.length, loading]);
+
   return (
     <div className="space-y-6" data-testid="follow-ups-page">
       <PageHeader
@@ -85,17 +116,26 @@ const FollowUps = () => {
           title="ARIA Priority Queue"
           message={`${buckets.overdue.length} ${buckets.overdue.length === 1 ? 'lead' : 'leads'} ${buckets.overdue.length === 1 ? 'is' : 'are'} most likely to go cold if not contacted today. Hit them first.`}
           ctaLabel="View Overdue Leads"
-          onCtaClick={() => setBucket('overdue')}
+          onCtaClick={() => applyBucket('overdue')}
           tone="urgent"
         />
       )}
+
+      {/* Aria-says contextual microcopy — varies with which bucket is selected */}
+      <div className="aria-card-lift rounded-2xl border border-[#E0D4F7] bg-gradient-to-r from-[#F4F0FF] to-[#FAFAFA] px-4 py-3 flex items-start gap-2.5" data-testid="follow-ups-aria-says">
+        <Sparkle size={14} weight="fill" className="text-[#7C35DC] mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-[#1A0A2E] leading-relaxed">
+          <span className="font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Aria says: </span>
+          {ariaSays}
+        </p>
+      </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = bucket === t.id;
           return (
-            <button key={t.id} onClick={() => setBucket(t.id)} className={`bg-white border rounded-xl p-4 text-left transition-all ${active ? 'border-[#7C35DC] ring-2 ring-[#7C35DC]/20' : 'border-[#E8E0F5] hover:border-[#7C35DC]/30'}`} style={{ boxShadow: active ? 'var(--shadow-card)' : 'none' }} data-testid={`follow-bucket-${t.id}`}>
+            <button key={t.id} onClick={() => applyBucket(t.id)} className={`aria-card-lift bg-white border rounded-2xl p-4 text-left transition-all ${active ? 'border-[#7C35DC] ring-2 ring-[#7C35DC]/20' : 'border-[#E8E0F5] hover:border-[#7C35DC]/30'}`} style={{ boxShadow: active ? 'var(--shadow-card)' : 'none' }} data-testid={`follow-bucket-${t.id}`}>
               <div className="flex items-center gap-2 mb-2">
                 <Icon size={16} weight="fill" style={{ color: t.color }} />
                 <span className="text-xs font-bold uppercase tracking-wider text-[#5A4A7A]">{t.label}</span>

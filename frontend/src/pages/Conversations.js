@@ -5,7 +5,7 @@
  * Each row → Lead Inbox for takeover/reply.
  */
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../config/api';
 import { ChatCircle, Warning, Fire, Heart, Smiley, Question, MagnifyingGlass, Sparkle } from '@phosphor-icons/react';
 
@@ -27,10 +27,11 @@ const fmtRel = (iso) => {
 
 const Conversations = () => {
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('');  // sentiment filter
+  const [filter, setFilter] = useState(searchParams.get('tab') || '');  // sentiment filter
 
   const load = async () => {
     setLoading(true);
@@ -45,11 +46,32 @@ const Conversations = () => {
 
   useEffect(() => { load(); }, [filter]);  // eslint-disable-line
 
+  // URL persistence helper.
+  const applyFilter = (key) => {
+    setFilter(key);
+    setSearchParams((sp) => {
+      const next = new URLSearchParams(sp);
+      if (!key) next.delete('tab'); else next.set('tab', key);
+      return next;
+    }, { replace: true });
+  };
+
   const counts = useMemo(() => {
     const c = { all: threads.length, urgent: 0, negative: 0, positive: 0, neutral: 0 };
     threads.forEach((t) => { const s = (t.latest_sentiment || 'neutral').toLowerCase(); if (c[s] !== undefined) c[s]++; });
     return c;
   }, [threads]);
+
+  // Aria-says microcopy — adaptive based on what's in the queue.
+  const ariaSays = useMemo(() => {
+    if (loading) return null;
+    if (counts.urgent > 0) return `${counts.urgent} urgent thread${counts.urgent === 1 ? '' : 's'} need your reply now. Aria has paused her replies on these and is waiting for you.`;
+    if (counts.negative > 0) return `${counts.negative} lead${counts.negative === 1 ? ' is' : 's are'} showing negative signals. Open them first so the conversation doesn't slip further.`;
+    if (counts.positive > 0) return `${counts.positive} thread${counts.positive === 1 ? '' : 's'} are warming up. Great time to send a soft nudge or share a case study.`;
+    if (counts.all === 0) return 'No conversations yet. Connect your WhatsApp or website widget so Aria can start chatting with new leads.';
+    return 'Pipeline is calm. Aria is keeping every thread alive in the background.';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [counts, loading]);
 
   return (
     <div className="space-y-5 max-w-[1100px] mx-auto" data-testid="conversations-page">
@@ -72,21 +94,31 @@ const Conversations = () => {
       </div>
 
       {/* Sentiment filter pills */}
-      <div className="flex items-center gap-2 flex-wrap" data-testid="sentiment-filters">
-        {[
+      <div className="flex items-center gap-2 flex-wrap" data-testid="sentiment-filters">        {[
           { key: '', label: `All (${counts.all})`, color: '#7C35DC' },
           { key: 'urgent', label: `Urgent (${counts.urgent})`, color: '#DC2626' },
           { key: 'negative', label: `Negative (${counts.negative})`, color: '#D97706' },
           { key: 'positive', label: `Positive (${counts.positive})`, color: '#16A34A' },
           { key: 'neutral', label: `Neutral (${counts.neutral})`, color: '#5A4A7A' },
         ].map((p) => (
-          <button key={p.key} onClick={() => setFilter(p.key)} data-testid={`filter-${p.key || 'all'}`}
+          <button key={p.key} onClick={() => applyFilter(p.key)} data-testid={`filter-${p.key || 'all'}`}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${filter === p.key ? 'text-white' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:bg-[#F9F5FF]'}`}
             style={filter === p.key ? { background: p.color, borderColor: p.color } : {}}>
             {p.label}
           </button>
         ))}
       </div>
+
+      {/* Aria-says microcopy */}
+      {ariaSays && (
+        <div className="aria-card-lift rounded-2xl border border-[#E0D4F7] bg-gradient-to-r from-[#F4F0FF] to-[#FAFAFA] px-4 py-3 flex items-start gap-2.5" data-testid="conversations-aria-says">
+          <Sparkle size={14} weight="fill" className="text-[#7C35DC] mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-[#1A0A2E] leading-relaxed">
+            <span className="font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Aria says: </span>
+            {ariaSays}
+          </p>
+        </div>
+      )}
 
       {/* Threads list */}
       {loading ? (
