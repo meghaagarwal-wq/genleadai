@@ -1,3 +1,34 @@
+## Iter 45 — Backlog cleared + Aria Tour enhancement (Feb 2026)
+
+**User intent:** Execute remaining backlog items (Aria-says microcopy on Conversations + FollowUps, `?tab=` URL persistence on those pages, SetupChecklist on dashboard) and ship the iter44 potential enhancement — a 30-second first-login Aria Tour.
+
+**Conversations (`pages/Conversations.js`):**
+- `useSearchParams` wiring + `applyFilter()` helper so sentiment filter pills now drive `?tab=urgent|negative|positive|neutral`. Deep-links restore prior filter.
+- Adaptive `ariaSays` microcopy useMemo — copy switches by what's in the queue: urgent threads / negative signals / warming positive / empty pipeline / calm state.
+- New `conversations-aria-says` card with Sparkle icon, gradient lavender→cream surface, "Aria says:" label + body text.
+
+**Follow-Ups (`pages/FollowUps.js`):**
+- Same `useSearchParams` + `applyBucket()` pattern; bucket pills now persist into `?tab=overdue|upcoming|completed` (today is the default, no param).
+- Bucket-aware `ariaSays` useMemo — copy adapts to which bucket the user is viewing.
+- `follow-ups-aria-says` card. Bucket tab cards also bumped to `rounded-2xl` + `aria-card-lift` to match the rest of the workspace rhythm.
+
+**Setup Checklist (`components/SetupChecklist.js`, new):**
+- 5-step onboarding card on the dashboard, computed from real backend signals (no fake data): Train Aria fields ≥ 3, ≥ 1 connected integration, touchpoint map ≥ 4 steps, calendar_link set, ≥ 1 lead in workspace.
+- Hits `/api/aria-agent/training`, `/api/touchpoints/map`, `/api/integrations/hub`, `/api/leads?limit=1` in parallel on mount.
+- Auto-hides at 100% or when dismissed via localStorage (`aria.setup_checklist.dismissed`). Each step is a clickable nav link to the relevant page.
+- Mounted in `Dashboard.js` directly under AriaCommandRoom — high-impact placement for new tenants, but auto-hidden so it doesn't nag established ones.
+
+**Aria Tour Modal (`components/AriaTourModal.js`, new):**
+- 5-step first-login walkthrough mounted at `Layout.js` root. Triggers automatically once per user (`aria.tour.completed.v1` localStorage flag) OR on demand via `?tour=1` query param.
+- Steps: Welcome → Command Center → 32-Touchpoint Journey → Train Aria → Integrations. Each step has an eyebrow, headline, body copy, dynamic icon in a gradient hero band with sparkly grain texture.
+- Step pips at the bottom — clickable to jump directly to any step. Back/Skip/Next controls. Final step's "Next" becomes the destination CTA ("Open Integrations") and routes there + sets the dismissal flag.
+- Body scroll locked while open. `?tour=1` query param is stripped from URL once modal opens to prevent re-trigger on refresh.
+
+**Verified (iter45 testing_agent_v3_fork)**: Frontend 97% (28/29). Zero functional bugs. The single non-pass was a spec-wording artifact — I claimed admin@demo.com was "fully configured so SetupChecklist auto-hides," but the seed data actually has it at 40% setup; the component correctly renders at 40% and only hides at 100%. Two pre-existing 404s in console noted (likely favicon source-map or unmounted /api call) — not introduced this iter.
+
+---
+
+
 ## Iter 44 — Aria Dashboard UX Optimization: Phases 2-5 + 1 batched (Feb 2026)
 
 **User intent:** Comprehensive UX overhaul prompt — make Aria feel like a polished, founder-friendly AI sales workspace. Explicit constraints: do not change backend logic, integrations, AI logic, touchpoints, or data structure; only optimize UI/UX, sectioning, navigation, copy, animations. User chose phased execution starting 2→3→4→5→1, consolidate sidebar to 9-item spec merging legacy items, skip design agent.
