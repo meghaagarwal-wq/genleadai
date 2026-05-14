@@ -1,3 +1,36 @@
+## Iter 44 — Aria Dashboard UX Optimization: Phases 2-5 + 1 batched (Feb 2026)
+
+**User intent:** Comprehensive UX overhaul prompt — make Aria feel like a polished, founder-friendly AI sales workspace. Explicit constraints: do not change backend logic, integrations, AI logic, touchpoints, or data structure; only optimize UI/UX, sectioning, navigation, copy, animations. User chose phased execution starting 2→3→4→5→1, consolidate sidebar to 9-item spec merging legacy items, skip design agent.
+
+**Phase 2 — Lead Inbox + Lead Profile:**
+- `pages/LeadInbox.js` — new `LEAD_TABS` ribbon of 11 status pivots (All / New / High Intent / Warm / In Conversation / Qualified / Proposal Sent / Negotiating / Won / Cold / Lost) with live count badges sourced from `/api/analytics/dashboard`. Each tab maps to backend `status` + `icp_tier` filter pairs. URL state persistence via `useSearchParams` — `/leads?tab=high_intent` is now a shareable deep-link; clicking "All Leads" drops the param.
+- `components/TouchpointProgressCard.js` (new) — left-column visual on Lead Profile showing "X of N" via a gradient SVG ring + sent / scheduled / remaining sub-stats + an "Aria says" line that changes copy based on journey state + a button that switches the right-column tab to journey. Empty state when the lead has no scheduled touchpoints. Hits `/api/touchpoints/lead/{id}/journey`.
+- `pages/LeadDetail.js` — `TouchpointProgressCard` mounted between `AriaReadPanel` and the rest of the left column.
+
+**Phase 3 — 32-Touchpoint Journey hero:**
+- `components/JourneyStagesHero.js` (new) — explainer banner at the top of `/touchpoint-journey`. 5 stage cards (First Contact 1-4, Education 5-10, Nurture 11-18, Conversion 19-26, Revival 27-32) each with icon, sub-copy, range pill, and a configured-vs-recommended count chip computed from the live `draft` array.
+- `pages/TouchpointJourney.js` — `JourneyStagesHero` mounted just above the existing `JourneyScoreBanner`.
+
+**Phase 4 — Train Aria completion:**
+- `components/TrainingCompletionCard.js` (new) — sticky completion %, gradient progress bar, 6 section chips (Business Context / ICP / Qualification / Brand Voice / Objections / Booking) each showing `filled/total` field counts and a contextual "Aria says" nudge that points to the first incomplete section.
+- `pages/TrainAria.js` — card mounted under `PageHeader`.
+
+**Phase 5 — Reports polish:**
+- `pages/Reports.js` — all chart cards (funnel-chart, daily-chart, touchpoint-pie, source-table) upgraded to `rounded-2xl` + `aria-card-lift` hover.
+
+**Phase 1 — Sidebar consolidation:**
+- `components/Layout.js` — `navItems` collapsed to the user's 9-item founder spec in this exact order: Command Center · Lead Inbox · Conversations · 32-Touchpoint Journey · Train Aria · Integrations · Call Booking · Reports · Settings. "Call Booking" routes to `/follow-ups`. Legacy items (Pipeline / Follow-Ups / AI Assistant / Sales Engagement / Plan & Billing / Contacts / standalone Touchpoint Mapping) hidden from primary nav per user direction "merge legacy items". Train Aria promoted from the secondary group into primary nav.
+- The secondary group (now labelled `ADVANCED · ARIA TOOLS`) houses: Founder Briefs · Human Handoff · Revival Engine · Sales Assets · ARIA Brain · ARIA Insights · Sales Playbooks · Weekly Recap · Troubleshooting · Tutorials. All legacy routes still resolve (kept as `Route` entries in App.js) so deep links and Command Room quick actions keep working.
+
+**Verified (iter44 testing_agent_v3_fork)**: Frontend 95% — all phases verified. Two LOW issues called out:
+1. Section chip testid slugs don't match an arbitrary spec contract (mine use icp/qual/voice; labels render correctly — functional pass).
+2. Recurring `<span>` inside `<option>` hydration warning on Contacts.js — pre-existing, confirmed false-positive across iter39/42/44; deferred.
+
+URL persistence for Lead Inbox tabs added post-test based on the test agent's recommendation — verified working: `?tab=new` / `?tab=high_intent` deep-link correctly, browser-back restores prior tab.
+
+---
+
+
 ## Iter 43 — Notification gate wired into emitters + Click-to-WhatsApp config UI (Feb 2026)
 
 **User intent:** "Work on next action items and backlog and give me my dashboard credentials." Two remaining items from iter42's roadmap completed.

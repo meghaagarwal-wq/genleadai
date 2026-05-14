@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Papa from 'papaparse';
 import { toast } from 'sonner';
 import api from '../config/api';
@@ -44,6 +44,7 @@ const LEAD_TABS = [
 
 const LeadInbox = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [confidenceMap, setConfidenceMap] = useState({});
   const [total, setTotal] = useState(0);
@@ -55,7 +56,7 @@ const LeadInbox = () => {
   const [showPushModal, setShowPushModal] = useState(false);
   const [page, setPage] = useState(0);
   const [engagementMap, setEngagementMap] = useState({});
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'all');
   const [tabCounts, setTabCounts] = useState({});
   const limit = 20;
 
@@ -64,7 +65,25 @@ const LeadInbox = () => {
     setActiveTab(tab.key);
     setFilters((f) => ({ ...f, status: tab.status, icp_tier: tab.tier }));
     setPage(0);
+    // Persist into URL so the filter is shareable + browser-back works.
+    setSearchParams((sp) => {
+      const next = new URLSearchParams(sp);
+      if (tab.key === 'all') next.delete('tab'); else next.set('tab', tab.key);
+      return next;
+    }, { replace: true });
   };
+
+  // On mount: if a tab was deep-linked, apply it once so filters hydrate.
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (!t || t === activeTab) return;
+    const found = LEAD_TABS.find((x) => x.key === t);
+    if (found) {
+      setActiveTab(found.key);
+      setFilters((f) => ({ ...f, status: found.status, icp_tier: found.tier }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Tab badge counts come from /api/analytics/dashboard (already tenant-scoped).
   useEffect(() => {
