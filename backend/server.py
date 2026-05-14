@@ -37,7 +37,7 @@ from deps import (
 # Modular routers
 from routes.auth import router as auth_router
 from routes.auth_extras import router as auth_extras_router
-from routes.contact import router as contact_router
+from routes.contact import router as contact_router, admin_router as contact_admin_router
 from routes.meta import router as meta_router
 from routes.campaigns import router as campaigns_router
 from routes.ai import router as ai_router
@@ -91,6 +91,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(auth_extras_router)
 app.include_router(contact_router)
+app.include_router(contact_admin_router)
 app.include_router(meta_router)
 app.include_router(campaigns_router)
 app.include_router(ai_router)

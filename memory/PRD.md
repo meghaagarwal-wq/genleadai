@@ -1,3 +1,27 @@
+## Iter 48 — Inbound CRM: Contact Requests Inbox + real Resend health (Feb 2026)
+
+**User intent:** Ship the iter47 backlog (Resend status pill on Master Admin Health Monitor) + the potential enhancement (`/admin/contact-requests` tab with sortable inbox). Final session — user paused for credits.
+
+**Backend:**
+- `routes/contact.py` — added a uuid `id` to every persisted contact request + a master-admin sub-router with two endpoints:
+  - `GET /api/admin/contact-requests?status=<x>` — paginated list with per-status counts for tab badges.
+  - `PATCH /api/admin/contact-requests/{id}/status` — owner-only update with optional admin_note.
+- `routes/audit_log.py` — Resend service in `/api/admin/workspaces/health/services` now reads `email_health_summary()` from `email_delivery.py` and reports real send health: `sent N, forwarded N, failed N (last 50)`. Test-mode is flagged as `unconfigured` with the verify-domain hint.
+- `server.py` includes the new `contact_admin_router`.
+
+**Frontend:**
+- New `components/admin/ContactRequestsTab.js` — 6-pivot ribbon (All / New / Contacted / Qualified / Closed / Spam) with live count badges, expandable rows showing message + 5 status-change pills + Reply mailto link + admin-note display.
+- `pages/MasterAdmin.js` — TABS array extended with `contact-requests` (icon Users, label "Contact Inbox").
+- HealthMonitorTab keeps its existing UI — Resend service card auto-picks up the real data from the backend.
+
+**Verified end-to-end** (curl + screenshot):
+- Seeded 2 fresh contact requests → admin GET returns total=8, counts={new:8, all:8}.
+- PATCH `/{id}/status` → 200, lead now shows `Contacted` pill in the UI.
+- Resend health card: `8 delivered, 32 forwarded, 0 failed (last 50)` — real numbers from `email_delivery_log`.
+
+---
+
+
 ## Iter 47 — Market-ready: bulletproof email delivery + public LandingPage (Feb 2026)
 
 **User intent:** "Tried sending the code but couldn't" + "make this app market ready, like any other in-market app". Root cause: Resend free dev plan can only deliver mail to the verified owner address — every other recipient was rejected.

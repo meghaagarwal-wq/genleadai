@@ -92,6 +92,7 @@ def contact_request(payload: ContactPayload, request: Request):
         return {"ok": True}
 
     doc = {
+        "id": __import__('uuid').uuid4().hex,
         "name": payload.name.strip(),
         "email": email,
         "company": (payload.company or "").strip() or None,
@@ -106,4 +107,67 @@ def contact_request(payload: ContactPayload, request: Request):
     requests_col.insert_one(doc)
     _record_request(email)
     _notify_owner(payload)
+    return {"ok": True}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Admin: list / update inbound contact requests
+# ──────────────────────────────────────────────────────────────────────────
+from fastapi import Depends
+from pydantic import BaseModel as _BaseModel
+from deps import get_current_user
+from routes.audit_log import _require_master_admin
+
+admin_router = APIRouter(prefix="/api/admin/contact-requests", tags=["admin-contact"])
+
+VALID_STATUSES = ["new", "contacted", "qualified", "closed", "spam"]
+
+
+class StatusUpdate(_BaseModel):
+    status: str
+    note: Optional[str] = None
+
+
+@admin_router.get("")
+def list_contact_requests(
+    status: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    current_user: dict = Depends(get_current_user),
+):
+    """Master-admin inbound CRM — paginated, filter by status."""
+    _require_master_admin(current_user)
+    q = {}
+    if status and status in VALID_STATUSES:
+        q["status"] = status
+    cursor = requests_col.find(q, {"_id": 0}).sort("created_at", -1).skip(max(0, skip)).limit(max(1, min(200, limit)))
+    items = list(cursor)
+    # Backfill missing id for legacy docs
+    for it in items:
+        if not it.get("id"):
+            it["id"] = it.get("email", "") + "-" + (it.get("created_at").isoformat() if it.get("created_at") else "")
+        if isinstance(it.get("created_at"), datetime):
+            it["created_at"] = it["created_at"].isoformat()
+    total = requests_col.count_documents(q)
+    # Counts per status for tab badges
+    pipe = list(requests_col.aggregate([{"$group": {"_id": "$status", "n": {"$sum": 1}}}]))
+    counts = {p["_id"] or "new": p["n"] for p in pipe}
+    counts["all"] = requests_col.count_documents({})
+    return {"items": items, "total": total, "counts": counts}
+
+
+@admin_router.patch("/{request_id}/status")
+def update_status(request_id: str, payload: StatusUpdate, current_user: dict = Depends(get_current_user)):
+    _require_master_admin(current_user)
+    if payload.status not in VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"status must be one of {VALID_STATUSES}")
+    update = {"status": payload.status, "status_updated_at": _now()}
+    if payload.note is not None:
+        update["admin_note"] = payload.note.strip()[:2000]
+    res = requests_col.update_one({"id": request_id}, {"$set": update})
+    if res.matched_count == 0:
+        # Fallback for legacy docs that don't have an id field
+        res = requests_col.update_one({"email": request_id}, {"$set": update}, upsert=False)
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Contact request not found")
     return {"ok": True}

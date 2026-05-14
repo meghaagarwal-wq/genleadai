@@ -6,6 +6,7 @@ import WorkspacesTab from '../components/admin/WorkspacesTab';
 import HealthMonitorTab from '../components/admin/HealthMonitorTab';
 import TrialExpiriesTab from '../components/admin/TrialExpiriesTab';
 import PlatformStatsTab from '../components/admin/PlatformStatsTab';
+import ContactRequestsTab from '../components/admin/ContactRequestsTab';
 
 const TABS = [
   { key: 'revenue', label: 'Revenue', icon: ChartLineUp, component: RevenueTab },
@@ -13,6 +14,7 @@ const TABS = [
   { key: 'trials', label: 'Trial Expiries', icon: Clock, component: TrialExpiriesTab },
   { key: 'health', label: 'Health Monitor', icon: Heartbeat, component: HealthMonitorTab },
   { key: 'platform-stats', label: 'Platform Stats', icon: ChartLineUp, component: PlatformStatsTab },
+  { key: 'contact-requests', label: 'Contact Inbox', icon: Users, component: ContactRequestsTab },
 ];
 
 const MasterAdmin = () => {

@@ -385,12 +385,44 @@ async def health_services(current_user: dict = Depends(get_current_user)):
         "latency_ms": None,
     })
 
-    # Resend
-    services.append({
-        "name": "Resend (email)",
-        "status": "ok" if os.environ.get("RESEND_API_KEY") else "unconfigured",
-        "latency_ms": None,
-    })
+    # Resend — uses the actual email_delivery_log to surface real send health.
+    try:
+        from email_delivery import email_health_summary
+        eh = email_health_summary(limit=50)
+        sender = eh.get("sender") or "unconfigured"
+        by_status = eh.get("by_status") or {}
+        sent_n = int(by_status.get("sent", 0))
+        forwarded_n = int(by_status.get("test_mode_forwarded", 0))
+        failed_n = int(by_status.get("failed", 0))
+        # Health rules:
+        #   no api key  → unconfigured
+        #   any failures in last 50 → down
+        #   only forwards, never a direct send → ok-but-test-mode (yellow)
+        #   at least one direct send and no recent failures → ok
+        if not os.environ.get("RESEND_API_KEY"):
+            r_status, r_note = "unconfigured", "RESEND_API_KEY missing"
+        elif failed_n > 0 and (sent_n + forwarded_n) == 0:
+            r_status, r_note = "down", f"{failed_n} recent send failures"
+        elif forwarded_n > 0 and sent_n == 0:
+            r_status, r_note = "unconfigured", "Test mode — verify a domain at resend.com to send to any address"
+        elif (sent_n + forwarded_n) == 0:
+            r_status, r_note = "idle", "No emails sent in the last 50 attempts"
+        else:
+            r_status, r_note = "ok", f"{sent_n} delivered, {forwarded_n} forwarded, {failed_n} failed (last 50)"
+        services.append({
+            "name": "Resend (email)",
+            "status": r_status,
+            "latency_ms": None,
+            "note": r_note,
+            "sender": sender,
+            "by_status": by_status,
+        })
+    except Exception as e:
+        services.append({
+            "name": "Resend (email)",
+            "status": "ok" if os.environ.get("RESEND_API_KEY") else "unconfigured",
+            "error": str(e)[:80],
+        })
 
     # WhatsApp / 360dialog — count configured tenants
     wa_configured = tenants_col.count_documents({"$or": [
