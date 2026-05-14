@@ -37,15 +37,15 @@ const SetupChecklist = () => {
         const [t, m, h, l] = await Promise.all([
           api.get('/api/aria-agent/training').catch(() => ({ data: {} })),
           api.get('/api/touchpoints/map').catch(() => ({ data: null })),
-          api.get('/api/integrations/hub').catch(() => ({ data: { items: [] } })),
+          api.get('/api/integrations/list').catch(() => ({ data: { integrations: [] } })),
           api.get('/api/leads?limit=1').catch(() => ({ data: { leads: [] } })),
         ]);
         if (!alive) return;
         const training = t.data || {};
         const fieldsFilled = ['what_you_sell','who_you_sell_to','problem_you_solve','differentiator','target_industries']
           .filter((k) => training[k] && String(training[k]).trim().length > 0).length;
-        const connectedCount = (h.data?.items || []).filter((i) => i.status === 'connected').length;
-        const tpCount = (m.data?.touchpoints || []).length;
+        const connectedCount = (h.data?.integrations || []).filter((i) => i.status === 'connected').length;
+        const tpCount = (m.data?.map?.touchpoints || []).length;
         const leadsCount = (l.data?.leads || l.data || []).length;
         setSignals({
           trained: fieldsFilled >= 3,

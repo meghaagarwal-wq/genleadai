@@ -851,6 +851,25 @@ const Settings = () => {
           <DemoVideoSection />
           <WhatsAppProviderSection />
 
+          {/* Replay the first-login Aria Tour walkthrough on demand */}
+          <div className="bg-white border border-[#E8E0F5] rounded-2xl p-4 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="restart-aria-tour-card">
+            <div>
+              <div className="text-sm font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Replay the Aria onboarding tour</div>
+              <div className="text-xs text-[#5A4A7A]">30-second walkthrough of the 4 pillars — handy when you bring a teammate into the workspace.</div>
+            </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem('aria.tour.completed.v1');
+                window.location.href = '/?tour=1';
+              }}
+              data-testid="restart-aria-tour-btn"
+              className="px-4 py-2 btn-gradient rounded-lg text-xs font-extrabold inline-flex items-center gap-1.5"
+              style={{ fontFamily: 'Plus Jakarta Sans' }}
+            >
+              Restart tour
+            </button>
+          </div>
+
           <div className="bg-[#141414] border border-[#262626] rounded-lg p-4 flex items-center justify-between" data-testid="limits-link">
             <div>
               <div className="text-sm font-semibold text-white">Plan limits & scope</div>

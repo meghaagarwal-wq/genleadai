@@ -6,6 +6,7 @@ import api from '../config/api';
 import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv, CheckCircle, Warning, DownloadSimple, PaperPlaneTilt } from '@phosphor-icons/react';
 import PushToSequenceModal from '../components/PushToSequenceModal';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
+import AriaSpotlight from '../components/AriaSpotlight';
 
 const NEXT_BEST_ACTION = (lead) => {
   const s = lead.status;
@@ -149,6 +150,13 @@ const LeadInbox = () => {
 
   return (
     <div data-testid="lead-inbox-page" className="space-y-6">
+      <AriaSpotlight
+        id="lead-inbox-tabs-v1"
+        anchorSelector='[data-testid="lead-status-tabs"]'
+        placement="bottom"
+        title="Filter by stage"
+        body="Tap any pivot to focus on a single bucket — Hot, New, In Conversation, etc. The URL updates so you can bookmark or share it."
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-extrabold text-[#1A0A2E] tracking-tight" style={{ fontFamily:'Plus Jakarta Sans' }}>Lead Inbox</h1>

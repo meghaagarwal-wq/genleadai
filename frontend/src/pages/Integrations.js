@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../config/api';
 import { toast } from 'sonner';
+import AriaSpotlight from '../components/AriaSpotlight';
 import {
   ChartLineUp, Lightning, Globe, Plug, CheckCircle, Warning, Copy, X,
   LinkSimple, ArrowsClockwise, TestTube, BookOpen,
@@ -103,6 +104,13 @@ const Integrations = () => {
 
   return (
     <div className="space-y-5 max-w-[1300px] mx-auto" data-testid="integrations-hub-page">
+      <AriaSpotlight
+        id="integrations-whatsapp-v1"
+        anchorSelector='[data-testid="cat-all"]'
+        placement="bottom"
+        title="Connect your channels"
+        body="Pick a category to see the integrations Aria can plug into. Start with WhatsApp or your website form — that's where most leads come from."
+      />
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>

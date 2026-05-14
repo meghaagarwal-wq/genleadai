@@ -13,6 +13,7 @@ import api from '../config/api';
 import { toast } from 'sonner';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import JourneyStagesHero from '../components/JourneyStagesHero';
+import AriaSpotlight from '../components/AriaSpotlight';
 import {
   ChatCircle, EnvelopeSimple, Phone, LinkedinLogo, Sparkle, CheckCircle,
   PencilSimple, Trash, Plus, ArrowsClockwise, Copy,
@@ -826,6 +827,13 @@ const TouchpointJourney = () => {
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto pb-10" data-testid="touchpoint-journey-page">
+      <AriaSpotlight
+        id="touchpoint-journey-drag-v1"
+        anchorSelector='[data-testid="drag-0"]'
+        placement="right"
+        title="Drag to reorder"
+        body="Aria fires touchpoints in the exact order you set here. Drag any card up or down to change the sequence."
+      />
       {/* ─── Header ───────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>

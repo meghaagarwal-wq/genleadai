@@ -60,8 +60,18 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Used by passwordless flows (email-code login + password reset) — the
+  // caller already has the {token, user} payload from the backend; we just
+  // need to mirror it into localStorage + state.
+  const setSession = ({ token, user }) => {
+    if (!token || !user) return;
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+    setUser(user);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, signup, logout, setSession }}>
       {children}
     </AuthContext.Provider>
   );
