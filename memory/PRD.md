@@ -1,3 +1,68 @@
+## Iter 52 — Multi-ICP Architecture + Conditional Touchpoint Logic (Feb 2026)
+
+**User intent:** Build Deliverables 7 & 8 from the master prompt (originally written for Node.js/Supabase/BullMQ). Implemented natively in FastAPI/MongoDB so they run on the live `app.genleadai.com` stack — same functional spec, same JSON shapes, same error codes.
+
+### Deliverable 7 — Multi-ICP (new `routes/icps.py`)
+
+- New `icps` MongoDB collection (tenant-scoped). Fields: `id`, `tenant_id`, `label`, `title_targets[]`, `industry`, `company_size`, `pain_point`, `value_prop`, `tone` (professional/casual/bold), `deal_size`, `created_at`, `updated_at`.
+- **5 endpoints** at `/api/icps/*`:
+  - `POST /create` → 201 with full ICP; 403 `tier_limit_reached` when plan cap hit; 400 `invalid_tone`.
+  - `GET /list` → `{icps, count, limit, can_create_more}`.
+  - `PUT /{icp_id}` → partial updates; 404 `icp_not_found`.
+  - `DELETE /{icp_id}` → 409 `icp_in_use` with counts when tagged records exist; passes `?force=true` to untag + delete (sets `icp_id=null` on `leads`, `workspace_assets`, `aria_conversations`).
+  - `POST /assign-contact` → tag/untag a lead with an ICP; 404 `contact_not_found` / `icp_not_found`.
+- **Tier gating** (mapped to current plan IDs): `trial`/`diy`/`starter`/`free` → max 2 ICPs · `dwy`/`dfy`/`growth`/`pro`/`scale` → unlimited.
+- **Helpers** `fetch_icp()` and `fetch_icp_for_lead()` exposed so other modules can resolve ICP context.
+
+### Claude prompt injection (Multi-ICP context)
+- `routes/touchpoint_engine.py::_render_with_claude` now looks up the lead's `icp_id` and, when present, injects a structured `Lead's ICP profile` block into the user message — Persona, Likely title(s), Industry, Company size, Pain point, Value prop. ICP `tone` overrides the workspace default tone.
+- Existing webhook path also calls `outreach_handle_reply()` (see below) which uses ICP for token rendering.
+
+### Deliverable 8 — Conditional Touchpoint Logic (new `routes/outreach.py`)
+
+- **4 new collections**: `outreach_campaigns`, `outreach_touchpoints`, `contact_campaign_status`, `outreach_campaign_logs`. Prefix `/api/outreach` to avoid colliding with the legacy marketing `/api/campaigns` module.
+- **Endpoints**:
+  - `POST /campaigns` — create draft campaign.
+  - `GET /campaigns` — list.
+  - `POST /campaigns/{id}/touchpoints` — upsert (step_number unique per campaign).
+  - `GET /campaigns/{id}/map` — full ordered touchpoint array (what the visual map UI consumes).
+  - `DELETE /campaigns/{id}/touchpoints/{step}` — drop a step.
+  - `POST /campaigns/{id}/enroll` — idempotent enrolment; returns `{enrolled, skipped, missing}`. 400 `no_touchpoint_step_1` when campaign has no step 1.
+  - `POST /campaigns/{id}/pause` / `/resume` — cascade across all active enrollments.
+  - `GET /campaigns/{id}/analytics` — per-step funnel + step-over-step conversion + status breakdown.
+- **Conditions schema** (validated by `validate_conditions()`): `on_reply`, `on_keyword_match`, `on_negative_keyword`, `on_no_reply` — each with `action` ∈ {`move_to_step`, `notify_user`, `tag_contact`, `stop`} (no_reply only allows `move_to_step` or `stop`). 400 on unknown keys / bad target_step / empty keyword list / missing tag.
+- **`render_template(template, contact, icp)`** — pure function with tokens `{first_name}`, `{last_name}`, `{full_name}`, `{company}`, `{email}`, `{phone}`, `{pain_point}`, `{value_prop}`, `{tone}`, `{industry}`, `{company_size}`. Missing values → empty string. Malformed `{token` left literal.
+- **`handle_inbound_reply(tenant_id, contact_id, body)`** — public helper called from the existing 360dialog/Meta webhook in `server.py::whatsapp_webhook_receive`. For every active enrollment for the contact: cancels pending no_reply timers, evaluates branches in priority order (negative_keyword → keyword_match → on_reply), inserts log rows, applies status patch.
+- **`outreach_engine_loop()`** — background asyncio loop (30s tick, started on app startup alongside the existing touchpoint engine). Each tick: (a) fires due `next_due_at` sends through `_send_one()` which calls existing `whatsapp_dispatch.send_whatsapp_text` + compliance gate + `render_template` with resolved ICP; (b) applies expired `no_reply_due_at` transitions (`move_to_step` advances current_step + reschedules, `stop` completes the enrolment).
+
+### Wiring changes
+- `server.py`:
+  - New imports: `routes.icps.router`, `routes.outreach.router`, `outreach_engine_loop`, `outreach_handle_reply`.
+  - Both routers registered.
+  - `_start_outreach_engine_loop` startup hook added (30s tick).
+  - Inside `whatsapp_webhook_receive` lead-path: after `pause_lead()`, calls `outreach_handle_reply(tenant_id, lead_id, body)` so condition branches fire on every inbound message.
+
+### Verified — `/app/backend/tests/test_iter52_multi_icp_outreach.py`
+- **23/23 pytest PASS** covering:
+  - Deliverable 7: create+list, invalid tone (400), tier limit (DIY=2 → 403 on 3rd), unlimited on DWY, partial update, delete clean, delete blocked when tagged (409), delete with `?force=true` untags + deletes, assign-contact happy path + clear, assign-contact 404.
+  - Deliverable 8: campaign CRUD, touchpoint upsert (uniqueness check), conditions schema validation (positive + 3 negative cases — unknown key, missing tag, bad after_hours), `/map` endpoint, enroll idempotency + missing-contact detection + `no_touchpoint_step_1` error, pause/resume cascade (3 enrollments transitioned), 4 pure-function tests for `render_template` (all tokens / missing / none / malformed), `validate_conditions` accepts the full 4-branch shape, `handle_inbound_reply` with positive keyword → tags `hot_lead` + log row inserted, `handle_inbound_reply` with negative keyword → status flips to `completed`, analytics endpoint returns the expected shape.
+- Backend boots cleanly: `[outreach-engine] started (30s tick)` visible in supervisor logs alongside the existing `[touchpoint-engine] started (60s tick)`.
+
+### What's intentionally NOT in this iter
+- **No frontend UI** yet. The spec is API-first. A campaign builder UI (visual map editor) and an ICP manager UI can be a separate iter — the existing Train Aria page already covers single-ICP UX; multi-ICP needs a dedicated list/edit page + ICP picker on the Lead Detail screen.
+- **No BullMQ** — we use a Python asyncio background loop instead, with the same "30s tick → fire due rows" semantics. Persistence and idempotency live in MongoDB (`contact_campaign_status.next_due_at` + `no_reply_due_at`).
+- **No SQL migrations** — MongoDB collections are schemaless; existing rows simply lack `icp_id` and read as None, which all code paths handle.
+
+### Test credentials & how to re-run
+```
+cd /app/backend && python -m pytest tests/test_iter52_multi_icp_outreach.py -v
+```
+Uses `admin@demo.com / Demo1234!` (must stay valid in `users` collection).
+
+---
+
+
+
 ## Iter 51 — Launch-readiness sweep + friendly 404 catch-all (Feb 2026)
 
 **User intent:** "no new feature, just complete this so that the app is ready to launch."

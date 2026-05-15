@@ -64,6 +64,8 @@ from routes.lead_capture import router as lead_capture_router, public_router as 
 from routes.integrations_hub import router as integrations_hub_router, public_router as integrations_hub_public_router, fire_lifecycle_event
 from routes.conversations import router as conversations_router
 from routes.notifications import router as notifications_router
+from routes.icps import router as icps_router
+from routes.outreach import router as outreach_router, outreach_engine_loop, handle_inbound_reply as outreach_handle_reply
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -126,6 +128,8 @@ app.include_router(integrations_hub_router)
 app.include_router(integrations_hub_public_router)
 app.include_router(conversations_router)
 app.include_router(notifications_router)
+app.include_router(icps_router)
+app.include_router(outreach_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
@@ -3851,6 +3855,11 @@ async def whatsapp_webhook_receive(request: Request):
                                 lead_id = candidate.get("id") or str(candidate.get("_id"))
                                 # Pause pending touchpoints (lead is engaging)
                                 pause_lead(tenant_id, lead_id)
+                                # Outreach campaigns — evaluate conditions, cancel no_reply timers
+                                try:
+                                    outreach_handle_reply(tenant_id, lead_id, body)
+                                except Exception as _e:
+                                    print(f"[whatsapp] outreach_handle_reply error: {_e}")
                                 # Lightweight sentiment classification (graceful, never raises)
                                 sentiment = "neutral"
                                 try:
@@ -4375,6 +4384,11 @@ async def _start_daily_call_plan_loop():
 @app.on_event("startup")
 async def _start_touchpoint_engine_loop():
     asyncio.create_task(engine_loop())
+
+
+@app.on_event("startup")
+async def _start_outreach_engine_loop():
+    asyncio.create_task(outreach_engine_loop())
 
 
 @app.on_event("startup")

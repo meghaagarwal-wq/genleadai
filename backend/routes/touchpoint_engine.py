@@ -138,14 +138,36 @@ async def _render_with_claude(tenant: dict, lead: dict, tp_row: dict) -> Optiona
         first_name = (lead.get("name") or "").split()[0] if lead.get("name") else "there"
         product = ((tenant.get("settings") or {}).get("sales_process") or {}).get("product_description") or "our offering"
 
+        # Resolve ICP for this lead (Deliverable 7 — Multi-ICP context injection)
+        icp_block = ""
+        try:
+            from routes.icps import fetch_icp_for_lead
+            icp = fetch_icp_for_lead(tenant.get("id"), lead)
+            if icp:
+                # ICP-specific tone overrides workspace default
+                if icp.get("tone"):
+                    tone = icp["tone"]
+                titles = ", ".join(icp.get("title_targets") or []) or "key decision-makers"
+                icp_block = (
+                    f"\nLead's ICP profile (use this to tailor the message):\n"
+                    f"- Persona: {icp.get('label')}\n"
+                    f"- Likely title(s): {titles}\n"
+                    f"- Industry: {icp.get('industry') or 'n/a'} · Company size: {icp.get('company_size') or 'n/a'}\n"
+                    f"- Pain point: {icp.get('pain_point') or 'n/a'}\n"
+                    f"- Value prop to lean into: {icp.get('value_prop') or 'n/a'}\n"
+                )
+        except Exception as _e:
+            print(f"[engine] icp context fetch failed: {_e}")
+
         system = (
             f"You are {aria_name}, AI sales assistant for {biz_name} ({industry}). Tone: {tone}. "
             "Output ONLY the message body. No preamble, markdown, quotes."
         )
         user_msg = (
             f"Lead first name: {first_name}\nProduct/service: {product}\n"
-            f"Channel: {tp_row.get('channel')}\nTouchpoint intent: {tp_row.get('message_type')}\n"
-            f"Base template (rewrite using lead's name + the product specifics):\n{tp_row.get('message_template')}\n\n"
+            f"Channel: {tp_row.get('channel')}\nTouchpoint intent: {tp_row.get('message_type')}"
+            f"{icp_block}"
+            f"\nBase template (rewrite using lead's name + the product specifics):\n{tp_row.get('message_template')}\n\n"
             "1-3 sentences max, end with one open question."
         )
         chat = LlmChat(api_key=api_key, session_id=f"send-{tp_row['id']}", system_message=system).with_model("anthropic", "claude-sonnet-4-5-20250929")
