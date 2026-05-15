@@ -50,6 +50,8 @@ import SalesEngagement from './pages/SalesEngagement';
 import AdminFeedback from './pages/AdminFeedback';
 import MasterAdmin from './pages/MasterAdmin';
 import TouchpointJourney from './pages/TouchpointJourney';
+import ICPManager from './pages/ICPManager';
+import OutreachCampaigns from './pages/OutreachCampaigns';
 import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
 
@@ -253,6 +255,9 @@ function App() {
                         <Route path="/admin/feedback" element={<AdminFeedback />} />
                         <Route path="/master-admin" element={<MasterAdmin />} />
                         <Route path="/touchpoint-journey" element={<TouchpointJourney />} />
+                        <Route path="/icps" element={<ICPManager />} />
+                        <Route path="/outreach" element={<OutreachCampaigns />} />
+                        <Route path="/outreach/:campaignId" element={<OutreachCampaigns />} />
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                       <UpgradeModal />

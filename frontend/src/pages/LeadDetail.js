@@ -6,6 +6,7 @@ import AriaReadPanel from '../components/AriaReadPanel';
 import LeadJourneyTab from '../components/LeadJourneyTab';
 import TouchpointProgressCard from '../components/TouchpointProgressCard';
 import LeadOptInBanner from '../components/LeadOptInBanner';
+import IcpPickerForLead from '../components/IcpPickerForLead';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import CrmSyncBadge from '../components/CrmSyncBadge';
 import DpdpDeleteButton from '../components/DpdpDeleteButton';
@@ -348,6 +349,9 @@ const LeadDetail = () => {
 
           {/* Touchpoint Progress (X of 32) — pairs with the Journey tab in the main column */}
           <TouchpointProgressCard leadId={lead.id} onOpenJourney={() => setActiveTab('journey')} />
+
+          {/* ICP picker — Multi-ICP support */}
+          <IcpPickerForLead leadId={lead.id} currentIcpId={lead.icp_id} onAssigned={fetchLead} />
 
 
           {/* Lead Magnet / Brochure */}

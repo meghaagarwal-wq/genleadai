@@ -1,3 +1,64 @@
+## Iter 53 — Multi-ICP + Outreach Campaign Builder UI (Feb 2026)
+
+**User intent:** "Build the campaign builder UI (visual map editor with drag-to-reorder steps and a conditions JSON inspector) — backend is fully API-ready. Build an ICP manager UI (list / create / edit / assign-to-lead picker on Lead Detail)."
+
+**Verdict:** 🟢 **DONE.** Both UIs render, login flows hit them, sidebar nav surfaces them.
+
+### 1. ICP Manager (`/icps` — new `pages/ICPManager.js`)
+- Grid of `icp-card-{id}` tiles showing label + tone pill + industry/company_size chips + title_target chips + truncated pain/value lines.
+- Tier meter (`icp-tier-meter`) shows `X / N` (or `∞`) ICPs in use; amber upgrade banner (`icp-tier-limit-banner`) appears once cap is reached.
+- "New ICP" button → centered modal (`icp-modal`) with all fields: label (required), title_targets (enter-to-add chips, with X to remove), industry, company_size, pain_point, value_prop, tone (3-button selector: Professional / Casual / Bold with active-state ring), deal_size.
+- Empty state (`icp-empty-state`) with brand-aligned Target icon + CTA.
+- Hover-reveal edit/delete buttons on every card.
+- Delete handles the 409 `icp_in_use` response — surfaces a confirm dialog with per-type counts (contacts / assets / conversations) and only then sends `?force=true` to untag + delete.
+- All toast messages route the backend `tier_limit_reached` / `invalid_tone` etc. error strings to user-friendly copy.
+
+### 2. ICP picker on Lead Detail (`components/IcpPickerForLead.js` — new)
+- Mounted between TouchpointProgressCard and Lead Magnet card in `LeadDetail.js`.
+- Compact card (`icp-picker-card`) with dropdown trigger (`icp-picker-trigger`) → menu (`icp-picker-menu`) listing all ICPs + a "Clear ICP" row + a "Manage ICPs" link.
+- POSTs to `/api/icps/assign-contact`, dispatches `onAssigned` to refetch the lead.
+- Shows pain_point under the dropdown when an ICP is assigned (so the operator instantly sees what Aria will lean into).
+- Empty-tenant fallback prompts user to create their first ICP with an inline link.
+
+### 3. Outreach Campaign Builder (`/outreach` + `/outreach/:campaignId` — new `pages/OutreachCampaigns.js`)
+
+**List view (`outreach-list-page`):**
+- Card grid of campaigns with status pills (Draft / Active / Paused / Archived) + linked ICP label.
+- Inline create form: name + optional ICP picker → POSTs to `/api/outreach/campaigns` → routes to the new campaign's detail.
+- Brand-aligned empty state with Megaphone icon.
+
+**Detail / builder view (`outreach-detail-page`):**
+- Header with back link, campaign name, status pill, and a single Pause/Resume button (`outreach-toggle-status-btn`).
+- Two tabs (`outreach-tab-builder` / `outreach-tab-analytics`).
+- **Builder layout** — 2-column on desktop:
+  - **Left: vertical timeline (`outreach-timeline`)** — dashed connector line behind step cards. Each step card has step-number bubble, channel chip (WhatsApp / Email / LinkedIn / SMS with color-coded icon), `+Xh` delay pill, condition count badge, message preview, hover-revealed delete. Drag-to-reorder via react-beautiful-dnd. Reorder is committed via delete-all-then-reinsert pattern (avoids unique-step collisions in the upsert path). Optimistic UI + reload-on-error.
+  - **Right: step editor (`outreach-editor`)** — channel selector, delay-hours input, message template textarea with token-chip insert bar (6 chips: `{first_name}`, `{last_name}`, `{company}`, `{pain_point}`, `{value_prop}`, `{industry}`), dirty/Save state, raw JSON toggle (`outreach-conditions-json`).
+- **Conditions Inspector** (4 branch toggles, mirrors backend `validate_conditions` schema):
+  - 🔵 `on_reply` — When lead replies.
+  - 🟢 `on_keyword_match` — Keyword list + then action (move_to_step / notify_user / tag_contact / stop).
+  - 🟥 `on_negative_keyword` — Keyword list + restricted actions (stop / tag_contact).
+  - 🟡 `on_no_reply` — After-hours input + restricted actions (move_to_step / stop).
+  - Each branch has its own colored card, a toggle pill, and form fields that appear when enabled. Saved as a clean JSON object matching the backend validator.
+- **Analytics tab (`outreach-analytics-panel`)** — 4 KPI tiles (Enrolled / Active / Hot leads / Completed) + Per-Step Funnel table (Step · Sent · Replied · Reply % · Stopped · Conversion-to-next %).
+
+### Routing & nav
+- `App.js` — new routes `/icps`, `/outreach`, `/outreach/:campaignId` mounted inside the protected Routes (above the 404 catch-all).
+- `Layout.js` — primary sidebar nav extended with **ICPs** (Target icon) and **Outreach Campaigns** (Megaphone icon) between Conversations and 32-Touchpoint Journey. Final nav order: Command Center · Lead Inbox · Conversations · ICPs · Outreach Campaigns · 32-Touchpoint Journey · Train Aria · Integrations · Call Booking · Reports · Settings.
+
+### Verified (smoke screenshots)
+- `/icps` renders with header + tier meter + create button. Clicking "New ICP" opens the full form modal with all 7 fields. Tone selector active state shows. ✅
+- `/outreach` renders list view → "New campaign" → creates a campaign → routes to detail view → "Add step" creates step 1 → editor populates → toggling `on_keyword_match` opens the keyword/action/tag fields → Save Changes button enables. Toast "Step 1 added" fires correctly. ✅
+- Lead Detail for "Priya" shows the new ICP picker card mounted in the left column. `icp-picker-card` test-id verified. ✅
+- Zero lint errors on all 3 new files. Zero console errors during smoke navigation.
+
+### Files added/modified
+- ADDED: `/app/frontend/src/pages/ICPManager.js`, `/app/frontend/src/pages/OutreachCampaigns.js`, `/app/frontend/src/components/IcpPickerForLead.js`.
+- MODIFIED: `/app/frontend/src/App.js` (3 new routes + 2 imports), `/app/frontend/src/components/Layout.js` (2 new sidebar items + Target/Megaphone icons), `/app/frontend/src/pages/LeadDetail.js` (IcpPickerForLead mounted).
+
+---
+
+
+
 ## Iter 52 — Multi-ICP Architecture + Conditional Touchpoint Logic (Feb 2026)
 
 **User intent:** Build Deliverables 7 & 8 from the master prompt (originally written for Node.js/Supabase/BullMQ). Implemented natively in FastAPI/MongoDB so they run on the live `app.genleadai.com` stack — same functional spec, same JSON shapes, same error codes.
