@@ -1,3 +1,35 @@
+## Iter 64 — Fix #2 for auto-mapper: switch to Claude Haiku 4.5 (Feb 2026)
+
+### Reported issue (after Iter 63 redeploy)
+User redeployed Iter 63 to production. The "Network error" toast was replaced by the new diagnostic toast: *"Aria's brain timed out reading your doc (>2 min). Try uploading a smaller / text-only version."* — meaning the frontend axios 120s timeout was firing.
+
+### Root cause
+Claude **Sonnet** 4.5 was being used for what is fundamentally structured JSON extraction. On production ingress (extra latency vs preview) with text near the 20k char cap, Sonnet was crossing the 60-120s mark. Sonnet is overkill for this task.
+
+### Fix — `routes/aria_auto_map.py`
+1. **Switched both Claude calls to Haiku 4.5** (`claude-haiku-4-5-20251001`):
+   - `_claude_analyze` (the `/analyze` endpoint).
+   - `improve` endpoint's Claude call (`/improve` for workflow gap suggestions).
+2. **Reduced `MAX_TEXT_CHARS` from 20k → 12k** (4-5 pages of dense text, still plenty for any GTM doc, keeps Haiku consistently < 30s).
+3. **Defensive double-cap** — `_claude_analyze` now also slices to `MAX_TEXT_CHARS` regardless of what the caller passed.
+4. Wrapped the `improve` endpoint's Claude call in try/except → returns `{"suggestions": []}` on failure instead of a 500 (was previously unprotected).
+
+### Verified end-to-end with real curl
+- POST `/api/aria/auto-map/analyze` with a 1KB GTM brief → HTTP 200 in **11.48s** (was 60s+ on Sonnet).
+- Result: **1 ICP, 6 touchpoints, 4 lead sources**, plus a coherent plain-English summary. Quality matches Sonnet for this task.
+
+### Testing
+- `test_iter55_auto_map.py` + `test_iter63_automap_errors.py` → **9/9 pass** (27s).
+- Existing prompt format unchanged → Haiku follows the same strict JSON schema reliably.
+
+### User-side action needed
+Same as before — redeploy from preview to push the Haiku switch to production. After redeploy:
+- Doc analysis should complete in **10-15s** instead of timing out.
+- If you upload a >12k-char doc, Aria will analyse the first 12k chars (truncation marker appended) — front-load the most important GTM content (ICP + sequence) and you're fine.
+
+---
+
+
 ## Iter 63 — Bug fix: "Network error" on doc upload (Feb 2026)
 
 ### Reported issue

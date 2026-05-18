@@ -103,9 +103,10 @@ def _extract_text(filename: str, content: bytes) -> str:
 
 
 # Max text sent to Claude. Beyond this we truncate to keep the LLM call under
-# the proxy's connection timeout (~60s). 20k chars ≈ 5-7 pages of dense text,
-# more than enough to extract ICPs + touchpoints from a GTM doc.
-MAX_TEXT_CHARS = 20000
+# the proxy's connection timeout (~60s in production). 12k chars ≈ 4-5 pages
+# of dense text — plenty to extract ICPs + touchpoints from a GTM doc, and
+# fast enough on Haiku to consistently come back in < 30s.
+MAX_TEXT_CHARS = 12000
 
 
 # ─── Claude prompt ──────────────────────────────────────────────────────────
@@ -175,18 +176,22 @@ async def _claude_analyze(text: str) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail="Aria's brain is offline (EMERGENT_LLM_KEY missing)")
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract any text from the document")
-    # Truncate to keep within token budget
-    excerpt = text[:18000]
+    # Truncate to keep within token budget (caller already truncates to MAX_TEXT_CHARS;
+    # this is a defensive second cap).
+    excerpt = text[:MAX_TEXT_CHARS]
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
     except ImportError:
         raise HTTPException(status_code=503, detail="LLM library not available")
 
+    # Use Haiku 4.5 — ~3-5x faster than Sonnet for structured JSON extraction
+    # and well within the 60s production-ingress budget. Sonnet was timing out
+    # on production for docs near MAX_TEXT_CHARS.
     chat = LlmChat(
         api_key=api_key,
         session_id=f"automap-{uuid.uuid4().hex[:10]}",
         system_message=SYSTEM_PROMPT,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+    ).with_model("anthropic", "claude-haiku-4-5-20251001")
 
     user_msg = f"Here is the document content. Build the workflow JSON:\n\n---DOC START---\n{excerpt}\n---DOC END---"
     try:
@@ -591,9 +596,13 @@ async def improve(payload: ImprovePayload, tenant: dict = Depends(get_active_ten
         api_key=api_key,
         session_id=f"improve-{uuid.uuid4().hex[:10]}",
         system_message=system,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+    ).with_model("anthropic", "claude-haiku-4-5-20251001")
 
-    raw = (await chat.send_message(UserMessage(text=user_msg)) or "").strip()
+    try:
+        raw = (await chat.send_message(UserMessage(text=user_msg)) or "").strip()
+    except Exception as e:
+        print(f"[auto-map/improve] Claude error: {e}")
+        return {"suggestions": []}
     if raw.startswith("```"):
         raw = raw.split("```", 2)[1] if raw.count("```") >= 2 else raw
         if raw.startswith("json"):
