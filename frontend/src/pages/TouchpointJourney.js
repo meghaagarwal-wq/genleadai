@@ -23,6 +23,17 @@ import {
 } from '@phosphor-icons/react';
 import ConditionsInspector from '../components/ConditionsInspector';
 import JourneyFlowchart from '../components/JourneyFlowchart';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
+
+// Touchpoint `channel` field uses internal slugs (e.g. `linkedin_nudge`) while
+// sales-channel prefs use top-level keys (`linkedin`). This map lets us ask
+// "is this touchpoint's channel allowed by the tenant's saved prefs?"
+const TP_CHANNEL_TO_PREF = {
+  whatsapp: 'whatsapp',
+  email: 'email',
+  linkedin_nudge: 'linkedin',
+  call_reminder: 'phone',
+};
 
 const MAX_TOUCHPOINTS = 32;
 
@@ -207,7 +218,7 @@ const ScoreBar = ({ label, value, max = 10, color = '#7C35DC' }) => (
   </div>
 );
 
-const DetailDrawer = ({ tp, scoring, ai, onChange, onDelete, onDuplicate, onClose, isFirst, isLast, onMove, total }) => {
+const DetailDrawer = ({ tp, scoring, ai, onChange, onDelete, onDuplicate, onClose, isFirst, isLast, onMove, total, isEnabledFn }) => {
   const [tab, setTab] = useState('details');
   if (!tp) return null;
   const meta = CHANNEL_META[tp.channel] || CHANNEL_META.whatsapp;
@@ -274,7 +285,16 @@ const DetailDrawer = ({ tp, scoring, ai, onChange, onDelete, onDuplicate, onClos
                 <label className="text-[9px] font-bold uppercase tracking-wider text-[#9B8AB0]">Channel</label>
                 <select value={tp.channel} onChange={(e) => onChange({ ...tp, channel: e.target.value })} data-testid="drawer-channel"
                   className="w-full bg-white border border-[#E8E0F5] px-3 py-2 rounded-md text-sm mt-1">
-                  {Object.entries(CHANNEL_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  {Object.entries(CHANNEL_META)
+                    .filter(([k]) => {
+                      if (!isEnabledFn) return true;
+                      const prefKey = TP_CHANNEL_TO_PREF[k];
+                      // Always include the current value so the dropdown reflects
+                      // what's saved even if the tenant later disabled that channel.
+                      if (k === tp.channel) return true;
+                      return !prefKey || isEnabledFn(prefKey);
+                    })
+                    .map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
               </div>
               <div>
@@ -707,6 +727,8 @@ const TouchpointJourney = () => {
   const [ai, setAi] = useState(null);             // { items: [...] }
   const [aiBusy, setAiBusy] = useState(false);
 
+  const { isEnabled: isChannelEnabled } = useChannelEnabled();
+
   const load = async () => {
     const r = await api.get('/api/touchpoints/map');
     const m = r.data?.map;
@@ -1011,6 +1033,7 @@ const TouchpointJourney = () => {
               onDuplicate={() => duplicateRow(selectedIdx)}
               onMove={moveRow}
               onClose={() => setSelectedIdx(null)}
+              isEnabledFn={isChannelEnabled}
             />
           ) : (
             <div className="bg-white border border-[#E8E0F5] rounded-2xl p-8 text-center sticky top-4" data-testid="drawer-empty">

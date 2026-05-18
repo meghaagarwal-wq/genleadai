@@ -7,6 +7,19 @@ import {
   WhatsappLogo, EnvelopeSimple, LinkedinLogo, Phone, ChatCircle,
   Clock, Lightning, ChatTeardropDots, Sparkle, Warning, StopCircle, FlagBanner, Bell, Tag, ArrowRight,
 } from '@phosphor-icons/react';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
+
+// Touchpoint `channel` slug → top-level sales-channel preference key.
+// Used to flag nodes whose channel the tenant hasn't actually enabled.
+const TP_CHANNEL_TO_PREF = {
+  whatsapp: 'whatsapp',
+  email: 'email',
+  linkedin_nudge: 'linkedin',
+  linkedin: 'linkedin',
+  call_reminder: 'phone',
+  call: 'phone',
+  sms: 'sms',
+};
 
 /**
  * JourneyFlowchart — Expandi-style visual flowchart of the 32-touchpoint journey.
@@ -42,7 +55,7 @@ function MessageNode({ data }) {
   return (
     <div
       data-testid={`flow-node-step-${data.step}`}
-      className="bg-white border-2 rounded-xl shadow-sm w-[260px] hover:shadow-md transition-shadow"
+      className={`bg-white border-2 rounded-xl shadow-sm w-[260px] hover:shadow-md transition-shadow ${data.channelDisabled ? 'opacity-60' : ''}`}
       style={{ borderColor: ch.color + '40' }}
     >
       <Handle type="target" position={Position.Top} style={{ background: ch.color, width: 8, height: 8 }} />
@@ -62,6 +75,15 @@ function MessageNode({ data }) {
         {data.role === 'alert_human' && (
           <div className="mt-1.5 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
             <Bell size={9} /> Alert me
+          </div>
+        )}
+        {data.channelDisabled && (
+          <div
+            className="mt-1.5 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded"
+            data-testid={`flow-node-disabled-${data.step}`}
+            title="This channel is not in your saved Sales Channel Preferences"
+          >
+            <Warning size={9} weight="fill" /> Channel off
           </div>
         )}
       </div>
@@ -154,7 +176,7 @@ const BRANCH_LABEL = {
   on_no_reply: 'If no reply',
 };
 
-function buildGraph(touchpoints) {
+function buildGraph(touchpoints, isEnabledFn) {
   const nodes = [];
   const edges = [];
 
@@ -175,6 +197,9 @@ function buildGraph(touchpoints) {
     const y = STEP_Y_GAP * (i + 1);
     stepYByIndex[stepNum] = y;
 
+    const prefKey = TP_CHANNEL_TO_PREF[tp.channel];
+    const channelDisabled = !!(isEnabledFn && prefKey && !isEnabledFn(prefKey));
+
     nodes.push({
       id: `step-${stepNum}`,
       type: 'message',
@@ -187,6 +212,7 @@ function buildGraph(touchpoints) {
         hour: tp.hour,
         message: tp.message_template,
         role: tp.aria_role,
+        channelDisabled,
       },
     });
 
@@ -290,7 +316,13 @@ function buildGraph(touchpoints) {
 
 // ─── Main exported component ────────────────────────────────────────────────
 export default function JourneyFlowchart({ touchpoints }) {
-  const { nodes, edges } = useMemo(() => buildGraph(touchpoints || []), [touchpoints]);
+  const { isEnabled } = useChannelEnabled();
+  const { nodes, edges } = useMemo(
+    () => buildGraph(touchpoints || [], isEnabled),
+    // isEnabled is stable per cache load; touchpoints drives rebuild
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [touchpoints, isEnabled],
+  );
 
   return (
     <div

@@ -5,6 +5,24 @@ import {
   Plus, FileArrowUp, PlayCircle, Sparkle, Lightning, Target,
   ChartLineUp, Users, ChatTeardropDots, Robot, ArrowRight,
 } from '@phosphor-icons/react';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
+
+// Pretty-print enabled channels in welcome copy so an Email/LinkedIn-only
+// tenant doesn't see "engages over WhatsApp" hardcoded everywhere.
+const CHANNEL_LABEL = {
+  whatsapp: 'WhatsApp',
+  email: 'email',
+  linkedin: 'LinkedIn',
+  sms: 'SMS',
+  phone: 'phone',
+  website_chat: 'website chat',
+};
+const joinLabels = (labels) => {
+  if (labels.length === 0) return '';
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+};
 
 /**
  * EmptyDashboard — shown when a fresh tenant has zero leads.
@@ -17,6 +35,17 @@ const EmptyDashboard = ({ workspaceName, founderName }) => {
   const navigate = useNavigate();
   const [showDemoVideo, setShowDemoVideo] = useState(false);
   const [demoVideoUrl, setDemoVideoUrl] = useState('');
+  const { isEnabled, selected, hasPrefs } = useChannelEnabled();
+
+  // Build channel-aware copy. If no prefs saved yet, fall back to the
+  // multi-channel default copy so fresh tenants still see something useful.
+  const enabledLabels = hasPrefs
+    ? selected.map((k) => CHANNEL_LABEL[k]).filter(Boolean)
+    : ['WhatsApp', 'email'];
+  const captureChannels = hasPrefs
+    ? joinLabels(['website forms', ...selected.filter((k) => ['whatsapp', 'email', 'linkedin'].includes(k)).map((k) => CHANNEL_LABEL[k])])
+    : 'website forms, WhatsApp, and email';
+  const qualifyChannel = enabledLabels[0] || 'your channels';
 
   // Fetch tenant settings for optional demo_video_url
   useEffect(() => {
@@ -136,7 +165,7 @@ const EmptyDashboard = ({ workspaceName, founderName }) => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <FeaturePill icon={ChartLineUp} label="Live KPI cards" />
           <FeaturePill icon={Sparkle} label="Daily Aria brief" />
-          <FeaturePill icon={ChatTeardropDots} label="Conversation feed" />
+          {isEnabled('whatsapp') && <FeaturePill icon={ChatTeardropDots} label="Conversation feed" />}
           <FeaturePill icon={Target} label="Pipeline mood" />
         </div>
       </div>
