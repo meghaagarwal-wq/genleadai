@@ -1,3 +1,47 @@
+## Iter 62 — "Simulate inbound lead" walkthrough modal (Feb 2026)
+
+**User intent:** Make the Integration Hub a tangible "see Aria work" demo for first-time users. Build a modal that walks a hypothetical lead through Aria's 5-stage intelligence loop without writing anything to the leads collection.
+
+### Backend — `/app/backend/routes/simulate_inbound.py` (new, ~210 LoC)
+- `GET /api/integrations/simulate-inbound/sources` — returns the 8 source presets (Meta Lead Ad, Google Ads, Typeform, Website Form, LinkedIn Lead Gen, Saleshandy reply, Lemlist reply, Manual) + the channel catalog from `sales_channels`.
+- `POST /api/integrations/simulate-inbound` — runs the 5-step walkthrough and returns an ordered `steps[]` array. **Importantly `lead_persisted: false`** — never inserts into the leads collection.
+  - **Step 1 (captured):** records source + UTM + form answers + timestamp.
+  - **Step 2 (enriched):** parses the email domain, flags consumer vs business email (gmail/yahoo/etc. → consumer).
+  - **Step 3 (icp_scored):** rules-based 0-100 scorer with reasoning trail: +30 business email, +25 source high-intent, +10 source very-high-intent, +15 buying-intent words ("budget", "demo", "pricing", "evaluate", …), +10 attributable UTM, +10 company filled. Tiers: 80+ Hot, 60+ Warm, 40+ Cold, else Poor fit. Returns recommended next step per tier.
+  - **Step 4 (channel_chosen):** reads `tenants.settings.sales_channels` — uses primary_channel + priority_order + selected_preset to explain the choice ("Starting with Email because your USA B2B SaaS preset says email → linkedin"). Falls back to Email if no prefs.
+  - **Step 5 (message_drafted):** reuses the existing `_claude_render` + `_heuristic_render` from `routes/touchpoint_preview.py` to draft a real first-touch message with the lead's name substituted. AI badge if Claude succeeded, heuristic fallback if not.
+
+### Frontend — `components/integrations/SimulateInboundModal.js` (new)
+- Two-pane modal: left = form (source dropdown, name/email/phone/company, UTM, form answers textarea), right = animated 5-step output.
+- Source dropdown driven by `/api/integrations/simulate-inbound/sources` so adding new presets is backend-only.
+- Steps reveal **one at a time with 380ms stagger** (CSS opacity/translate transition) — feels like Aria is actually thinking through the lead.
+- ICP-scored card renders the tier as a colored pill (Hot=rose, Warm=amber, Cold=sky, Poor fit=slate) + bulleted reasoning.
+- Channel-chosen card shows the channel icon (Envelope/ChatTeardropDots/LinkedinLogo/etc.) + primary channel uppercase + fallback chain.
+- Message-drafted card uses a violet-fuchsia gradient with an **AI** badge when Claude succeeded.
+- Final "That's Aria, end-to-end." green banner reveals after step 5.
+- Mounted from a new "Simulate inbound lead" button in the existing "Test your lead flow" block (sits next to "Send test lead"). Doesn't break existing test-lead flow.
+
+### Testing — `tests/test_iter62_simulate_inbound.py`
+6/6 tests pass (~19s, including real Claude calls):
+1. `/sources` returns expected source + channel metadata.
+2. POST returns 5 ordered steps + `lead_persisted=false` + leads collection unchanged.
+3. Saleshandy reply + business email + buying words + UTM + company → **Hot tier, 90/100**.
+4. Consumer gmail + manual source + "just browsing" → Cold/Poor fit.
+5. Saving USA B2B SaaS preset → simulator picks **email** as primary channel + mentions the preset in the reason.
+6. Drafted message contains the actual first name (no raw `{{first_name}}` tokens leaking).
+
+### Frontend smoke (Playwright)
+- "Simulate inbound lead" button visible on Integration Hub.
+- Modal opens with all expected testids (`simulate-inbound-modal`, `sim-form`, `sim-output`, `sim-run-btn`).
+- Running the default Meta Lead Ad scenario renders all 5 `sim-step-*` cards + the green `sim-complete-banner`.
+- Screenshot confirmed: ICP scored HOT 90/100, channel = Email (USA B2B SaaS preset), AI-drafted Claude message: *"Hi Priya, this is Aria from GenLeadAI Demo. I noticed you expressed interest in our platform — I'm curious, what's driving your team to explore AI-powered lead generation right now?"*
+
+### Full regression
+**97/97 tests pass** across iters 51-62 (~93s — slower because Iter 62 makes real Claude calls). Zero regressions.
+
+---
+
+
 ## Iter 61 — "Why this channel?" explainer chip on every Lead Inbox row (Feb 2026)
 
 **User intent:** Ship the "Wire workflow_rule into Lead Inbox cards" backlog item AND the "auditable copilot" potential improvement in one go — they overlap by design.

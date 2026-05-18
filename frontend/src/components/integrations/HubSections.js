@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   ChartLineUp, Lightning, Globe, Plug, CheckCircle, Warning, ArrowRight,
-  PaperPlaneTilt, Heartbeat, ArrowsClockwise, CaretRight, Receipt,
+  PaperPlaneTilt, Heartbeat, ArrowsClockwise, CaretRight, Receipt, MagicWand,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import api from '../../config/api';
+import SimulateInboundModal from './SimulateInboundModal';
 
 /**
  * The four stat cards at the top of the Integration Hub.
@@ -220,6 +221,7 @@ export function IntegrationHealthTable() {
 export function SendTestLeadButton() {
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState(null);
+  const [showSim, setShowSim] = useState(false);
 
   const send = async () => {
     setBusy(true);
@@ -246,18 +248,27 @@ export function SendTestLeadButton() {
           <div>
             <h3 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Test your lead flow</h3>
             <p className="text-xs text-[#5A4A7A] mt-0.5 max-w-md">
-              Fire a clearly-labeled test lead through every connected outbound integration. It will <b>not</b> appear in your Lead Inbox — just downstream in Zapier/GA4/CRM.
+              Fire a clearly-labeled test lead through every connected outbound integration, or simulate a brand-new inbound lead end-to-end inside Aria.
             </p>
           </div>
         </div>
-        <button
-          data-testid="send-test-lead-btn"
-          onClick={send}
-          disabled={busy}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-violet-700 disabled:opacity-50"
-        >
-          {busy ? 'Firing…' : <>Send test lead <ArrowRight size={11} weight="bold" /></>}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            data-testid="simulate-inbound-btn"
+            onClick={() => setShowSim(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-violet-300 bg-white text-violet-700 text-xs font-bold uppercase tracking-wider hover:bg-violet-50"
+          >
+            <MagicWand size={14} weight="duotone" /> Simulate inbound lead
+          </button>
+          <button
+            data-testid="send-test-lead-btn"
+            onClick={send}
+            disabled={busy}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-bold uppercase tracking-wider hover:bg-violet-700 disabled:opacity-50"
+          >
+            {busy ? 'Firing…' : <>Send test lead <ArrowRight size={11} weight="bold" /></>}
+          </button>
+        </div>
       </div>
       {last && (
         <div data-testid="test-lead-results" className="mt-4 p-3 rounded-xl bg-white border border-violet-100">
@@ -278,6 +289,7 @@ export function SendTestLeadButton() {
           )}
         </div>
       )}
+      {showSim && <SimulateInboundModal onClose={() => setShowSim(false)} />}
     </div>
   );
 }
