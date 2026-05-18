@@ -371,8 +371,28 @@ const ConfigModal = ({ item, onClose, onSaved }) => {
   const [apolloRaw, setApolloRaw] = useState('');
 
   const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
-  const tenantId = item.config?.tenant_id || (window.localStorage.getItem('active_tenant_id') || '');
-  const webhookFull = meta.webhook_path ? `${backendUrl}${meta.webhook_path}`.replace('{tenant_id}', tenantId || '<your-tenant-id>') : '';
+  // The active tenant is stored as a JSON blob under "active_tenant" by AuthContext.
+  // Earlier code looked up the wrong key ("active_tenant_id") which left the
+  // webhook URL stuck at the literal "<your-tenant-id>" placeholder.
+  let tenantId = item.config?.tenant_id || '';
+  if (!tenantId) {
+    try {
+      const raw = window.localStorage.getItem('active_tenant');
+      if (raw) tenantId = (JSON.parse(raw) || {}).id || '';
+    } catch (_e) { /* ignore */ }
+  }
+  if (!tenantId) {
+    try {
+      const raw = window.localStorage.getItem('user');
+      if (raw) {
+        const u = JSON.parse(raw) || {};
+        tenantId = (u.tenants || [{}])[0]?.id || u.tenant_id || '';
+      }
+    } catch (_e) { /* ignore */ }
+  }
+  const webhookFull = meta.webhook_path
+    ? `${backendUrl}${meta.webhook_path}`.replace('{tenant_id}', tenantId || '<your-tenant-id>')
+    : '';
 
   const save = async () => {
     setBusy(true);
