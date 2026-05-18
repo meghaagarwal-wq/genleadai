@@ -7,6 +7,7 @@ import { MagnifyingGlass, Plus, Funnel, X, Fire, Sparkle, UploadSimple, FileCsv,
 import PushToSequenceModal from '../components/PushToSequenceModal';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import AriaSpotlight from '../components/AriaSpotlight';
+import { ChannelHintChip, useChannelRecommendations } from '../components/ChannelHintChip';
 
 const NEXT_BEST_ACTION = (lead) => {
   const s = lead.status;
@@ -46,6 +47,7 @@ const LEAD_TABS = [
 const LeadInbox = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { recs: channelRecs, preset: channelPreset } = useChannelRecommendations();
   const [leads, setLeads] = useState([]);
   const [confidenceMap, setConfidenceMap] = useState({});
   const [total, setTotal] = useState(0);
@@ -354,11 +356,14 @@ const LeadInbox = () => {
                   </td>
                   <td className="px-6 py-4 text-[#5A4A7A] text-xs">{lead.source_channel?.replace('_',' ')}</td>
                   <td className="px-6 py-4">
-                    {(() => {
-                      const nba = NEXT_BEST_ACTION(lead);
-                      const cls = nba.tone === 'urgent' ? 'text-[#DC2626] bg-[#FEE2E2] border-[#DC2626]/20' : nba.tone === 'soft' ? 'text-[#9B8AB0] bg-[#F4F0FF] border-[#E0D4F7]' : 'text-[#7C35DC] bg-[#F4F0FF] border-[#7C35DC]/20';
-                      return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${cls}`} data-testid={`nba-${lead.id}`}><Sparkle size={9} weight="fill" /> {nba.label}</span>;
-                    })()}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(() => {
+                        const nba = NEXT_BEST_ACTION(lead);
+                        const cls = nba.tone === 'urgent' ? 'text-[#DC2626] bg-[#FEE2E2] border-[#DC2626]/20' : nba.tone === 'soft' ? 'text-[#9B8AB0] bg-[#F4F0FF] border-[#E0D4F7]' : 'text-[#7C35DC] bg-[#F4F0FF] border-[#7C35DC]/20';
+                        return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${cls}`} data-testid={`nba-${lead.id}`}><Sparkle size={9} weight="fill" /> {nba.label}</span>;
+                      })()}
+                      <ChannelHintChip recs={channelRecs} preset={channelPreset} leadId={lead.id} />
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-[#9B8AB0] text-xs font-mono">{new Date(lead.created_at).toLocaleDateString()}</td>
                 </tr>

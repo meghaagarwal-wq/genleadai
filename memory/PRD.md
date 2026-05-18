@@ -1,3 +1,36 @@
+## Iter 61 — "Why this channel?" explainer chip on every Lead Inbox row (Feb 2026)
+
+**User intent:** Ship the "Wire workflow_rule into Lead Inbox cards" backlog item AND the "auditable copilot" potential improvement in one go — they overlap by design.
+
+### Frontend
+- `components/ChannelHintChip.js` (new) — exports `useChannelRecommendations()` hook + `<ChannelHintChip />` component.
+  - Hook fetches `/api/tenant/sales-channels/recommendations` + saved preset ONCE at page-mount and shares the result across all rows (zero extra requests per lead).
+  - Chip renders the primary channel icon (Envelope for Email, ChatTeardropDots for WhatsApp, LinkedinLogo for LinkedIn, etc.) + label "Email first / WhatsApp first / LinkedIn first".
+  - Hover/click toggles a positioned popover with **3 zones**:
+    - **Why:** *"Aria starts with Email because your USA B2B SaaS preset says Email → LinkedIn → Phone."*
+    - **Aria's first move:** Highlighted card with the workflow_rule's primary_action (e.g. "Send email intro").
+    - **Fallback chain:** Compact text rendering of the fallback chain (`Send LinkedIn touch → …`).
+    - **Edit in Settings →** deep-link to the Sales Channels tab.
+  - Empty-state: If no preferences saved yet, chip shows `Set channel` (slate, with Sparkle icon) and clicks navigate to `/settings` so onboarding deviations have a recovery path.
+- `pages/LeadInbox.js` — calls `useChannelRecommendations()` once, renders `<ChannelHintChip>` next to the existing NBA chip in the "Next Best Action" cell. Wrapped the cell in a flex container so both chips wrap nicely.
+
+### Testing — `tests/test_iter61_channel_chip.py`
+3/3 pass:
+1. Saving USA B2B SaaS preset → recommendations endpoint returns `primary_channel=email` + `primary_action="Send email intro"` + correct `priority_order` → chip says "Email first".
+2. Saving India Founder-Led preset → `primary_channel=whatsapp` + `primary_action="Send WhatsApp intro message"` → chip says "WhatsApp first".
+3. Sales rep with no prefs → endpoint returns 200 with empty values → chip renders "Set channel" CTA (no crash).
+
+### Frontend smoke (Playwright)
+- Lead Inbox renders **20 channel-hint chips** on the test tenant.
+- Hovering the first chip shows the popover with "Why Email first?" + Aria's first move + "Edit in Settings →" link.
+- Screenshot confirms green/violet chip styling next to each NBA chip.
+
+### Full regression
+**91/91 tests pass** across iters 51-61 (~74s). Zero regressions.
+
+---
+
+
 ## Iter 60 — Sales Channel Preferences + Hot Integrations Leaderboard (Feb 2026)
 
 **User intent:** Stop assuming WhatsApp is everyone's first channel. Let founders pick their preferred sales channels during onboarding (and later in Settings), drag-reorder priority, choose a conversation style, and have Aria recommend the right integrations + first-touch workflow rule for each market (India founder-led, USA B2B SaaS, UAE high-ticket, D2C, enterprise, webinar funnel, outbound). Plus build the "Hot integrations" leaderboard requested as the previous improvement.
