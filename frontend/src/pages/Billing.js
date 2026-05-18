@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../config/api';
 import { toast } from 'sonner';
-import { CheckCircle, X as XIcon, Crown, Sparkle, ArrowRight, Star } from '@phosphor-icons/react';
+import { CheckCircle, X as XIcon, Crown, Sparkle, ArrowRight, Star, Receipt } from '@phosphor-icons/react';
 import PageHeader from '../components/PageHeader';
 
 /**
@@ -51,14 +52,23 @@ const Billing = () => {
         title="Choose your sales operating layer"
         subtitle="Pick the plan that fits your team's growth stage. Every plan begins with a 14-day free trial."
         actions={
-          status && (
-            <div
-              data-testid="current-plan-pill"
-              className="px-3 py-1.5 rounded-lg border border-[#7C35DC]/30 bg-[#F4F0FF] text-[#7C35DC] text-xs font-bold uppercase tracking-wider"
+          <div className="flex items-center gap-2">
+            <Link
+              to="/billing/invoices"
+              data-testid="view-invoices-link"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold uppercase tracking-wider hover:bg-slate-50 hover:border-slate-300 transition-colors"
             >
-              {status.plan === 'trial' ? `Trial · ${status.trial_days_left ?? 0}d left` : `You're on ${status.plan_meta?.name || status.plan}`}
-            </div>
-          )
+              <Receipt size={12} weight="duotone" /> Tax invoices
+            </Link>
+            {status && (
+              <div
+                data-testid="current-plan-pill"
+                className="px-3 py-1.5 rounded-lg border border-[#7C35DC]/30 bg-[#F4F0FF] text-[#7C35DC] text-xs font-bold uppercase tracking-wider"
+              >
+                {status.plan === 'trial' ? `Trial · ${status.trial_days_left ?? 0}d left` : `You're on ${status.plan_meta?.name || status.plan}`}
+              </div>
+            )}
+          </div>
         }
       />
 

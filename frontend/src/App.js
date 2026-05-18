@@ -29,6 +29,7 @@ import SleepingLeads from './pages/SleepingLeads';
 import AuditLog from './pages/AuditLog';
 import OnboardingWizard from './pages/OnboardingWizard';
 import Billing from './pages/Billing';
+import Invoices from './pages/Invoices';
 import Troubleshooting from './pages/Troubleshooting';
 import Tutorials from './pages/Tutorials';
 import Limits from './pages/Limits';
@@ -239,6 +240,7 @@ function App() {
                         <Route path="/aria/analytics" element={<AriaAnalytics />} />
                         <Route path="/audit-log" element={<AuditLog />} />
                         <Route path="/billing" element={<Billing />} />
+                        <Route path="/billing/invoices" element={<Invoices />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/troubleshooting" element={<Troubleshooting />} />
                         <Route path="/tutorials" element={<Tutorials />} />

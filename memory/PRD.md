@@ -1,3 +1,44 @@
+## Iter 57 — GST Invoice Auto-Generation + Invoices Page Wiring (Feb 2026)
+
+**User intent:** Wrap the Stripe upgrade loop with compliant Indian B2B billing — every successful payment must produce a GST-compliant PDF invoice, persist it, email it to the buyer, and expose a downloadable history. Then make sure the page is actually reachable.
+
+### Backend — `/app/backend/invoicing.py` (already in place, now tested)
+- `_split_gst(total, is_inter_state)` — reverse-calculates base + GST from an inclusive total at 18% (IGST inter-state OR CGST 9% + SGST 9% intra-state). Sum invariants verified by tests.
+- `_next_invoice_number()` — produces `GLA/YYYY-YY/####` per Indian fiscal year, increments via `seq` lookup on the `invoices` collection (atomic enough for our volume; uses `sort=[("seq", -1)]` find).
+- `_build_pdf(invoice)` — ReportLab A4 PDF with seller/buyer/meta header block, line-item table (HSN 998314 for SaaS), totals with conditional IGST vs CGST+SGST rows, and footer disclaimer.
+- `issue_invoice_for_transaction(tx)` — idempotent by `session_id`; persists to `invoices`, emails the PDF as attachment via the existing `email_delivery.send_email_safe` (so test-mode forwarding to admin still works), swallows ALL errors so plan-upgrade flow is never blocked. Seller info (name/GSTIN/address/state) reads from env so GST registration can be added without redeploy.
+
+### Backend — `/app/backend/routes/billing_upgrade.py`
+- `_apply_plan_change(tx)` invokes `issue_invoice_for_transaction` AFTER the plan flip — failures only log, never raise.
+- `GET /api/billing/invoices` — tenant-scoped list, Owner/Admin only, returns `invoices` rows sorted by `issued_at desc` (limit 200, `_id` excluded).
+- `GET /api/billing/invoices/{id}/pdf` — streams the PDF (re-renders from stored data so Mongo footprint stays small), Owner/Admin only, sets `Content-Disposition` to the safe-filename invoice number.
+
+### Frontend — wired the orphan Invoices page (Iter 57 fix)
+- `App.js` — imported `pages/Invoices` and added `/billing/invoices` protected route.
+- `pages/Billing.js` — header now exposes a **"Tax invoices"** secondary action (`view-invoices-link`) so users can find their invoice archive in one click from the plans page.
+- `pages/Invoices.js` (already existed) — Tax invoice list with row-level PDF download, empty state, GST split breakdown (IGST vs CGST+SGST), violet glass-morphism styling consistent with the rest of the app. Test-ids: `invoices-page`, `invoices-empty`, `invoice-row-{id}`, `invoice-download-{id}`.
+
+### Testing — `tests/test_iter57_invoicing.py`
+8/8 tests pass. Coverage:
+1. IGST split sums to total.
+2. CGST + SGST + base sums to total (intra-state).
+3. Invoice number format + per-FY increment.
+4. PDF bytes start with `%PDF-` and exceed 1.5KB.
+5. `issue_invoice_for_transaction` persists the row to `invoices`.
+6. Idempotency — calling twice with same session_id yields one invoice.
+7. Generation failures return `None` (never raise, never block plan upgrade).
+8. End-to-end through FastAPI TestClient — login → list `/api/billing/invoices` → download `/api/billing/invoices/{id}/pdf` (verifies headers + PDF magic bytes).
+
+### Full regression
+**63/63 tests pass** across iters 51, 52, 54, 55, 56, 57 (~71s). No regressions.
+
+### What's NOT in scope (intentional)
+- GST_SELLER_GSTIN is still empty in env — invoices render without it but flag "— not registered —". User will fill once GST registration arrives, no redeploy needed.
+- Buyer state is read from `tenant.settings.billing_state`. If absent, defaults to IGST. A future tweak could add a "Billing address" form on `Settings → Billing` so intra-state CGST+SGST kicks in for Karnataka buyers.
+
+---
+
+
 ## Iter 56 — Backlog clearance: Stripe upgrade + 32-journey live branches + bulk-enroll + doc diff (Feb 2026)
 
 **User intent:** Ship the full P1+P2 backlog in one go (option `a` — skipped only the server.py refactor): Stripe DIY→DWY upgrade, wire 32-journey conditions to fire on real replies, bulk enroll from Lead Inbox, "Enroll all High-Intent" one-click, and doc-version diff on the AI Setup Assistant.
