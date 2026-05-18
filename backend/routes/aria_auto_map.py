@@ -63,34 +63,49 @@ def _scrub(doc: Optional[dict]) -> Optional[dict]:
 
 # ─── Document → text extraction ─────────────────────────────────────────────
 def _extract_text(filename: str, content: bytes) -> str:
+    """Best-effort text extraction. Returns "" on any failure — caller decides
+    what to do with empty output. Logs the failure cause for ops debugging."""
     name = (filename or "").lower()
-    if name.endswith(".pdf"):
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            from PyPDF2 import PdfReader  # type: ignore
-        reader = PdfReader(io.BytesIO(content))
-        return "\n".join((p.extract_text() or "") for p in reader.pages)
-    if name.endswith(".docx"):
-        from docx import Document
-        doc = Document(io.BytesIO(content))
-        return "\n".join(p.text for p in doc.paragraphs if p.text)
-    if name.endswith(".xlsx") or name.endswith(".xls"):
-        from openpyxl import load_workbook
-        wb = load_workbook(io.BytesIO(content), data_only=True)
-        chunks = []
-        for sheet in wb.sheetnames:
-            ws = wb[sheet]
-            for row in ws.iter_rows(values_only=True):
-                line = " | ".join(str(c) for c in row if c is not None)
-                if line.strip():
-                    chunks.append(line)
-        return "\n".join(chunks)
-    # txt / csv / unknown → decode best effort
     try:
+        if name.endswith(".pdf"):
+            try:
+                from pypdf import PdfReader
+            except ImportError:
+                from PyPDF2 import PdfReader  # type: ignore
+            reader = PdfReader(io.BytesIO(content))
+            if getattr(reader, "is_encrypted", False):
+                try:
+                    reader.decrypt("")  # try empty password
+                except Exception:
+                    print(f"[auto-map] PDF encrypted, cannot read: {filename}")
+                    return ""
+            return "\n".join((p.extract_text() or "") for p in reader.pages)
+        if name.endswith(".docx"):
+            from docx import Document
+            doc = Document(io.BytesIO(content))
+            return "\n".join(p.text for p in doc.paragraphs if p.text)
+        if name.endswith(".xlsx") or name.endswith(".xls"):
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(content), data_only=True)
+            chunks = []
+            for sheet in wb.sheetnames:
+                ws = wb[sheet]
+                for row in ws.iter_rows(values_only=True):
+                    line = " | ".join(str(c) for c in row if c is not None)
+                    if line.strip():
+                        chunks.append(line)
+            return "\n".join(chunks)
+        # txt / csv / unknown → decode best effort
         return content.decode("utf-8", errors="ignore")
-    except Exception:
+    except Exception as e:
+        print(f"[auto-map] text extraction failed for {filename}: {e}")
         return ""
+
+
+# Max text sent to Claude. Beyond this we truncate to keep the LLM call under
+# the proxy's connection timeout (~60s). 20k chars ≈ 5-7 pages of dense text,
+# more than enough to extract ICPs + touchpoints from a GTM doc.
+MAX_TEXT_CHARS = 20000
 
 
 # ─── Claude prompt ──────────────────────────────────────────────────────────
@@ -174,7 +189,14 @@ async def _claude_analyze(text: str) -> Dict[str, Any]:
     ).with_model("anthropic", "claude-sonnet-4-5-20250929")
 
     user_msg = f"Here is the document content. Build the workflow JSON:\n\n---DOC START---\n{excerpt}\n---DOC END---"
-    raw = await chat.send_message(UserMessage(text=user_msg))
+    try:
+        raw = await chat.send_message(UserMessage(text=user_msg))
+    except Exception as e:
+        print(f"[auto-map] Claude error: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Aria's brain took too long to respond. Try uploading a shorter document or retry in a moment.",
+        )
     raw = (raw or "").strip()
     if raw.startswith("```"):
         # Strip code fence if Claude wraps anyway
@@ -288,8 +310,33 @@ async def analyze(
         raise HTTPException(status_code=400, detail="Unsupported file format. Use PDF, DOCX, XLSX, TXT, or CSV.")
 
     text = _extract_text(file.filename, content)
-    if len(text.strip()) < 50:
-        raise HTTPException(status_code=400, detail="Document looks empty or unreadable. Try a different file.")
+    char_count = len(text.strip())
+    if char_count < 50:
+        # Helpful per-format guidance — most common cause is scanned PDFs
+        name = file.filename.lower()
+        if name.endswith(".pdf"):
+            hint = (
+                "Aria couldn't read any text from this PDF. It looks like a scanned image or password-protected file. "
+                "Try one of: (1) export your doc as DOCX or TXT, (2) copy-paste the content into a .txt file, "
+                "or (3) run OCR on the PDF first."
+            )
+        elif name.endswith(".docx") or name.endswith(".xlsx") or name.endswith(".xls"):
+            hint = (
+                f"Aria couldn't read text from this {name.rsplit('.', 1)[-1].upper()} — only "
+                f"{char_count} chars extracted. The file may be empty or use unusual formatting. "
+                "Try saving it as plain text (.txt) and re-uploading."
+            )
+        else:
+            hint = (
+                f"Aria only found {char_count} chars in this file. Make sure it contains GTM/sales content — "
+                "ICPs, lead sources, follow-up sequences."
+            )
+        raise HTTPException(status_code=400, detail=hint)
+
+    # Cap to keep Claude under the 60s proxy budget. Take the head — GTM docs
+    # usually lead with the most important content.
+    if len(text) > MAX_TEXT_CHARS:
+        text = text[:MAX_TEXT_CHARS] + "\n\n[...truncated for length...]"
 
     parsed = await _claude_analyze(text)
 
@@ -299,6 +346,19 @@ async def analyze(
     qualification = parsed.get("qualification") or {}
     handoff = parsed.get("handoff") or {}
     summary = (parsed.get("summary") or "").strip()
+
+    # If Claude found nothing actionable, surface that clearly instead of returning
+    # a hollow success that confuses the user. (Resolves: "Aria is not able to map
+    # the touchpoints".)
+    if not touchpoints and not icps:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Aria read the document but couldn't find any sales touchpoints or ICPs to map. "
+                "Make sure the doc describes your buyer (titles/industry/pain) and a follow-up sequence "
+                "(channels, days, message types). A short bulleted GTM brief usually works best."
+            ),
+        )
 
     return {
         "source_filename": file.filename,

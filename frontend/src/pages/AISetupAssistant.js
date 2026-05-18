@@ -40,6 +40,7 @@ export default function AISetupAssistant() {
       form.append('file', file);
       const r = await api.post('/api/aria/auto-map/analyze', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,  // Claude can take up to ~60-90s on bigger docs
       });
       setExtracted(r.data?.extracted || null);
       setStage('review');
@@ -54,8 +55,20 @@ export default function AISetupAssistant() {
         setDiff(d.data);
       } catch (_e) { /* diff is optional */ }
     } catch (e) {
+      // Build a useful, specific message instead of axios's generic "Network Error".
       const d = e?.response?.data?.detail;
-      const msg = typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg).join('; ') : (e?.message || 'Aria could not analyze the document');
+      let msg;
+      if (typeof d === 'string') {
+        msg = d;
+      } else if (Array.isArray(d)) {
+        msg = d.map((x) => x?.msg).filter(Boolean).join('; ');
+      } else if (e?.code === 'ECONNABORTED' || (e?.message || '').toLowerCase().includes('timeout')) {
+        msg = "Aria's brain timed out reading your doc (>2 min). Try uploading a smaller / text-only version.";
+      } else if (!e?.response) {
+        msg = 'Could not reach Aria. If your network is fine, your document may have been blocked by the upload proxy — try a smaller TXT/DOCX.';
+      } else {
+        msg = `Aria couldn't analyze the document (HTTP ${e?.response?.status || '???'}). Try a cleaner doc.`;
+      }
       toast.error(msg);
       setStage('upload');
     }

@@ -1,3 +1,56 @@
+## Iter 63 — Bug fix: "Network error" on doc upload (Feb 2026)
+
+### Reported issue
+> "Now I can upload the document but Aria is not able to map the touchpoints. It's showing network issue when the network is perfectly fine."
+
+### Root cause
+Two compounding problems made every failure look like a network error:
+
+1. **Backend** — `_extract_text` raised raw library exceptions on edge-case PDFs (scanned/encrypted/malformed), returning `500 Internal Server Error` or `400 "Document looks empty"` — but for scanned PDFs this generic message was confusing and didn't tell users what to do.
+2. **Frontend** — the AISetupAssistant catch block fell back to `e.message` (axios's `"Network Error"`) whenever `response.data.detail` wasn't a string or array — happens for backend 5xx with empty body or for genuine proxy timeouts on long Claude calls.
+3. **No timeout** on the axios call → 60s proxy connection drop surfaced as a generic Network Error.
+4. **Silent empty success** — if Claude returned 0 ICPs and 0 touchpoints, the endpoint still returned 200, the user saw "mapped 0 touchpoints", and the next step (Publish) had nothing to do.
+
+### Fix
+**Backend (`routes/aria_auto_map.py`)**
+- `_extract_text` now wrapped in try/except; explicit handling for encrypted PDFs (attempts empty-password decrypt). Always returns "" on any failure with a `[auto-map]` log line for ops debugging.
+- New `MAX_TEXT_CHARS = 20000` cap. If extracted text exceeds it, truncate the tail and append `[...truncated...]` marker before sending to Claude. Prevents 60s+ Claude calls that the ingress would otherwise drop.
+- `_claude_analyze` now wraps `chat.send_message()` in try/except → returns a clean 502 with the message *"Aria's brain took too long to respond. Try uploading a shorter document or retry in a moment."*
+- The < 50-chars guard now returns **format-specific** error messages:
+  - PDF: *"Aria couldn't read any text from this PDF. It looks like a scanned image or password-protected file. Try one of: (1) export as DOCX/TXT, (2) copy-paste content into a .txt file, or (3) run OCR on the PDF first."*
+  - DOCX/XLSX: *"Aria couldn't read text from this {format} — only {n} chars extracted. Try saving as .txt and re-uploading."*
+  - Other: *"Aria only found {n} chars. Make sure it contains GTM/sales content — ICPs, lead sources, follow-up sequences."*
+- New 422 response when Claude returns empty ICPs AND empty touchpoints → "Aria read the document but couldn't find any sales touchpoints or ICPs to map. Make sure the doc describes your buyer (titles/industry/pain) and a follow-up sequence."
+
+**Frontend (`pages/AISetupAssistant.js`)**
+- `axios.post('/api/aria/auto-map/analyze', form, { timeout: 120000 })` — explicit 120s timeout (Claude can take 60-90s on bigger docs).
+- New catch logic distinguishes:
+  - String detail from backend → display as-is.
+  - Pydantic array detail → join the `.msg` fields.
+  - `ECONNABORTED` / timeout → *"Aria's brain timed out reading your doc (>2 min). Try uploading a smaller / text-only version."*
+  - No response at all → *"Could not reach Aria. If your network is fine, your document may have been blocked by the upload proxy — try a smaller TXT/DOCX."*
+  - Other HTTP errors → include the status code.
+
+### Testing — `tests/test_iter63_automap_errors.py`
+5/5 pass:
+1. Tiny TXT (`"hi"`) → 400 with **string** detail mentioning char count.
+2. Garbage `.pdf` → 400 with the scanned-PDF / OCR hint string.
+3. Wrong extension (`.png`) → 400 with string detail mentioning supported formats.
+4. Very long TXT → extraction passes, content is truncated to `MAX_TEXT_CHARS + 200` chars before Claude (verified via monkeypatched `_claude_analyze`).
+5. Claude returning empty ICPs + empty touchpoints → 422 with string detail.
+
+Critically — **every error path now returns `detail` as a string**, so the frontend always shows a useful, actionable toast instead of falling through to axios's `"Network Error"`.
+
+### Curl smoke verified
+- Tiny txt → toast: *"Aria only found 2 chars in this file. Make sure it contains GTM/sales content — ICPs, lead sources, follow-up sequences."*
+- All paths return `str` for `detail`.
+
+### Full regression
+**102/102 tests pass** across iters 51-63 (~97s).
+
+---
+
+
 ## Iter 62 — "Simulate inbound lead" walkthrough modal (Feb 2026)
 
 **User intent:** Make the Integration Hub a tangible "see Aria work" demo for first-time users. Build a modal that walks a hypothetical lead through Aria's 5-stage intelligence loop without writing anything to the leads collection.
