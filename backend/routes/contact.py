@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -92,7 +93,7 @@ def contact_request(payload: ContactPayload, request: Request):
         return {"ok": True}
 
     doc = {
-        "id": __import__('uuid').uuid4().hex,
+        "id": uuid.uuid4().hex,
         "name": payload.name.strip(),
         "email": email,
         "company": (payload.company or "").strip() or None,

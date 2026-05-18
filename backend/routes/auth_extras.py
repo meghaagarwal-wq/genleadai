@@ -19,7 +19,7 @@ Email delivery reuses the existing Resend sender configured in server.py.
 from __future__ import annotations
 
 import os
-import random
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -79,7 +79,8 @@ def _now() -> datetime:
 
 
 def _generate_code() -> str:
-    return f"{random.randint(0, 999999):06d}"
+    # Cryptographically-secure 6-digit code (was random.randint — security review iter70).
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def _rate_limited(email: str) -> bool:
