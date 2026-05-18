@@ -4942,7 +4942,11 @@ async def founder_command_center(current_user: dict = Depends(get_current_user))
     now = datetime.now(timezone.utc)
     cutoff_overdue = now - timedelta(days=2)
 
-    leads = list(leads_collection.find({}, {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "email": 1, "phone": 1, "owner_id": 1, "owner_name": 1, "icp_score": 1, "status": 1, "next_followup_at": 1, "last_contacted_at": 1, "deal_value": 1, "source_channel": 1, "lost_reason": 1, "created_at": 1, "industry": 1, "metadata": 1}))
+    # CRITICAL: scope by tenant so a fresh signup doesn't see another
+    # workspace's leads bleeding into their command-center stats.
+    tenant_id = current_user.get("tenant_id")
+    lead_query = {"tenant_id": tenant_id} if tenant_id else {}
+    leads = list(leads_collection.find(lead_query, {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "email": 1, "phone": 1, "owner_id": 1, "owner_name": 1, "icp_score": 1, "status": 1, "next_followup_at": 1, "last_contacted_at": 1, "deal_value": 1, "source_channel": 1, "lost_reason": 1, "created_at": 1, "industry": 1, "metadata": 1}))
     if not leads:
         return _demo_command_center_fallback()
 
@@ -5121,68 +5125,62 @@ async def founder_command_center(current_user: dict = Depends(get_current_user))
 
 
 def _demo_money_at_risk_rows():
+    # Single illustrative sample so a brand-new dashboard still demonstrates
+    # what this card looks like, without flooding the UI with fake leads.
     return [
-        {"lead_id": None, "name": "Priya Sharma",  "deal_value": 150000, "reason": "No follow-up in 3 days",        "owner": "Rohan",   "action": "Rescue Lead"},
-        {"lead_id": None, "name": "Arjun Mehta",   "deal_value":  90000, "reason": "Proposal sent, no follow-up",   "owner": "Simran",  "action": "Send Follow-Up"},
-        {"lead_id": None, "name": "Kavya Rao",     "deal_value": 120000, "reason": "Hot lead not contacted",        "owner": "Aman",    "action": "Call Now"},
-        {"lead_id": None, "name": "Dev Malhotra",  "deal_value": 120000, "reason": "Call booked, no reminder sent", "owner": "Rohan",   "action": "Send Reminder"},
+        {"lead_id": None, "name": "Priya Sharma",  "deal_value": 150000, "reason": "No follow-up in 3 days", "owner": "Unassigned", "action": "Rescue Lead"},
     ]
 
 
 def _demo_hot_untouched_rows():
     return [
-        {"lead_id": None, "name": "Aanya Kapoor",   "source": "Webinar",  "score": 92, "owner": "Unassigned", "hours_since": 4},
-        {"lead_id": None, "name": "Vikram Iyer",    "source": "LinkedIn", "score": 88, "owner": "Unassigned", "hours_since": 7},
-        {"lead_id": None, "name": "Meera Nair",     "source": "Referral", "score": 91, "owner": "Rohan",      "hours_since": 2},
-        {"lead_id": None, "name": "Karan Bhatia",   "source": "Website",  "score": 85, "owner": "Unassigned", "hours_since": 9},
-        {"lead_id": None, "name": "Tara Subramanian","source": "Webinar", "score": 87, "owner": "Aman",       "hours_since": 3},
+        {"lead_id": None, "name": "Aanya Kapoor", "source": "Webinar", "score": 92, "owner": "Unassigned", "hours_since": 4},
     ]
 
 
 def _demo_proposal_graveyard_rows():
-    return [
-        {"lead_id": None, "name": "Bluemoon Realty", "value": 250000, "value_label": "₹2.5L", "days_since": 8, "owner": "Rohan",  "action": "Follow up today"},
-        {"lead_id": None, "name": "TechNova Systems","value": 120000, "value_label": "₹1.2L", "days_since": 5, "owner": "Simran", "action": "Send objection handler"},
-        {"lead_id": None, "name": "EduBridge",       "value":  85000, "value_label": "₹85K",  "days_since": 6, "owner": "Aman",   "action": "Book decision call"},
-    ]
+    # Intentionally empty for fresh tenants — the dashboard card hides itself
+    # when rows = [] so the user isn't shown a fake proposal graveyard.
+    return []
 
 
 def _demo_source_quality_rows():
+    # Single source so the chart renders without inventing a fake multi-channel
+    # pipeline on a brand-new workspace.
     return [
-        {"source": "LinkedIn", "total": 38, "hot": 12, "calls_booked": 7, "pipeline": 980000,  "pipeline_label": "₹9.8L"},
-        {"source": "Website",  "total": 24, "hot":  9, "calls_booked": 5, "pipeline": 630000,  "pipeline_label": "₹6.3L"},
-        {"source": "Meta Ads", "total": 71, "hot":  8, "calls_booked": 4, "pipeline": 310000,  "pipeline_label": "₹3.1L"},
-        {"source": "Webinar",  "total": 46, "hot": 15, "calls_booked": 9, "pipeline": 1240000, "pipeline_label": "₹12.4L"},
-        {"source": "Referral", "total": 12, "hot":  7, "calls_booked": 5, "pipeline": 750000,  "pipeline_label": "₹7.5L"},
+        {"source": "Sample", "total": 1, "hot": 1, "calls_booked": 0, "pipeline": 150000, "pipeline_label": "₹1.5L"},
     ]
 
 
 def _demo_command_center_fallback():
-    """All-demo payload when workspace has no leads yet."""
+    """All-demo payload when workspace has no leads yet.
+
+    Intentionally minimal — keeps 1-2 sample leads + small numbers so a fresh
+    tenant sees what the dashboard *looks* like without us inventing a fake
+    populated workspace. As soon as the user adds even one real lead, the
+    real-data branch above takes over.
+    """
     return {
         "computed_from_real_data": False,
         "revenue_leakage": {
-            "score_pct": 37,
-            "headline": "37% of your active pipeline is at risk.",
-            "subhead": "Delayed follow-ups, stuck proposals, and unassigned leads are leaking deals out the back door.",
+            "score_pct": 12,
+            "headline": "Your dashboard is ready — add leads to see real insights.",
+            "subhead": "These cards will populate with your live pipeline as soon as you add or import leads.",
             "breakdown": [
-                {"label": "12 overdue follow-ups", "count": 12, "key": "overdue"},
-                {"label": "5 hot leads untouched", "count": 5, "key": "hot_untouched"},
-                {"label": "₹8.2L stuck in proposal stage", "count": 6, "key": "proposal_stuck"},
-                {"label": "4 unassigned leads", "count": 4, "key": "unassigned"},
-                {"label": "14 lost leads without reason", "count": 14, "key": "lost_no_reason"},
+                {"label": "1 overdue follow-up (sample)", "count": 1, "key": "overdue"},
+                {"label": "1 hot lead untouched (sample)", "count": 1, "key": "hot_untouched"},
             ],
-            "cta": "Show Me Where We're Leaking",
+            "cta": "Add your first lead",
         },
-        "money_at_risk": {"total_inr": 480000, "total_label": "₹4.8L", "rows": _demo_money_at_risk_rows(), "cta": "Rescue These Leads"},
-        "daily_brief": {"greeting": "Good morning", "lines": ["Your team captured 42 new leads yesterday.", "13 are hot.", "7 follow-ups are overdue.", "₹4.8L pipeline is at risk today.", "Rohan has the highest pending follow-up load.", "3 leads should be contacted before 12 PM."], "cta": "Generate Today's Sales Brief"},
-        "hot_leads_untouched": {"count": 5, "rows": _demo_hot_untouched_rows()},
-        "first_response": {"avg_hours": 9.4, "best_rep": {"name": "Simran", "minutes": 22}, "slowest_rep": {"name": "Rohan", "minutes": 840}, "target_minutes": 30, "pending_first_response": 8, "insight": "Your team's current first response time is too slow. Prioritise new hot leads before they go cold."},
-        "proposal_graveyard": {"count": 3, "rows": _demo_proposal_graveyard_rows()},
-        "source_quality": {"rows": _demo_source_quality_rows(), "insight": "Webinar and LinkedIn are producing the highest-quality pipeline this week."},
-        "lost_reasons": {"rows": [{"reason": "No Follow Up", "count": 12, "insight": "Process issue"}, {"reason": "Budget Mismatch", "count": 8, "insight": "Targeting issue"}, {"reason": "No Response", "count": 17, "insight": "Nurture issue"}, {"reason": "Chose Competitor", "count": 4, "insight": "Sales enablement issue"}, {"reason": "Not Qualified", "count": 11, "insight": "Lead source quality issue"}], "insight": "ARIA helps you separate marketing problems from sales process problems."},
-        "pipeline_value": 4500000,
-        "pipeline_value_label": "₹45L",
+        "money_at_risk": {"total_inr": 150000, "total_label": "₹1.5L", "rows": _demo_money_at_risk_rows(), "cta": "Rescue These Leads"},
+        "daily_brief": {"greeting": "Good morning", "lines": ["This is a preview of your daily brief.", "Add leads and Aria will surface real insights here every morning."], "cta": "Generate Today's Sales Brief"},
+        "hot_leads_untouched": {"count": 1, "rows": _demo_hot_untouched_rows()},
+        "first_response": {"avg_hours": 0, "best_rep": None, "slowest_rep": None, "target_minutes": 30, "pending_first_response": 0, "insight": "Aria will track your first-response time the moment you connect a lead source."},
+        "proposal_graveyard": {"count": 0, "rows": _demo_proposal_graveyard_rows()},
+        "source_quality": {"rows": _demo_source_quality_rows(), "insight": "Connect a channel — Aria will show you which sources produce the highest-quality pipeline."},
+        "lost_reasons": {"rows": [], "insight": "ARIA helps you separate marketing problems from sales process problems once you've logged some lost leads."},
+        "pipeline_value": 150000,
+        "pipeline_value_label": "₹1.5L",
     }
 
 
