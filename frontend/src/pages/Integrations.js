@@ -28,6 +28,7 @@ import {
   HubStatCards, SetupProgress, DataFlowPreview, IntegrationHealthTable, SendTestLeadButton,
 } from '../components/integrations/HubSections';
 import { WaitlistModal, CustomRequestForm } from '../components/integrations/WaitlistAndRequest';
+import CampaignsImportPanel from '../components/integrations/CampaignsImportPanel';
 
 // ────────────────────────────────────────────────────────────────────────────
 //  Per-integration metadata for the LIVE connectors. Drives the ConfigModal.
@@ -495,6 +496,13 @@ const ConfigModal = ({ item, onClose, onSaved }) => {
             <a href={meta.docs} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-[#7C35DC] hover:text-[#6B28C8] inline-flex items-center gap-1">
               <BookOpen size={11} weight="bold" /> {meta.name} documentation
             </a>
+          )}
+
+          {/* Pull-based import panel for Saleshandy + Lemlist (campaign list + import + logs). */}
+          {(item.type === 'saleshandy' || item.type === 'lemlist') && (
+            <div className="pt-4 border-t border-[#F0ECF9]">
+              <CampaignsImportPanel tool={item.type} isConnected={item.status === 'connected'} />
+            </div>
           )}
         </div>
 

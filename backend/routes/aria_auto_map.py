@@ -129,6 +129,8 @@ OUTPUT FORMAT — return ONLY this JSON, nothing else:
     }
   ],
   "lead_sources": ["Website Form", "Meta Ads", "LinkedIn", "..."],
+  "recommended_integrations": ["saleshandy", "lemlist", "zoho_crm", "calendly", "..."],
+  "sales_channels": ["email", "linkedin", "whatsapp", "phone"],
   "touchpoints": [
     {
       "step": 1,
@@ -167,6 +169,8 @@ RULES:
 - channel must be one of: whatsapp, email, linkedin_nudge, call_reminder.
 - All message_template strings must use {{first_name}}, {{company}}, {{value_prop}}, {{pain_point}} tokens where natural.
 - Return AT MOST 3 ICPs. If only one buyer type is mentioned, return 1.
+- recommended_integrations — name specific tools you saw in the doc (saleshandy, lemlist, zoho_crm, hubspot, salesforce, calendly, slack, gmail, outlook, zoom, instantly, apollo, phantombuster). Use lowercase keys.
+- sales_channels — top-level channel preferences this team will use, from: email, linkedin, whatsapp, sms, phone, website_chat.
 - DO NOT wrap the JSON in ```json blocks. Output the raw JSON object directly."""
 
 
@@ -348,6 +352,12 @@ async def analyze(
     icps = _sanitize_icps(parsed.get("icps") or [])
     touchpoints = _sanitize_touchpoints(parsed.get("touchpoints") or [])
     lead_sources = [str(s).strip() for s in (parsed.get("lead_sources") or []) if str(s).strip()][:20]
+    # New (iter 69): integration & channel recommendations Aria infers from the doc.
+    recommended_integrations = [str(s).strip().lower() for s in (parsed.get("recommended_integrations") or []) if str(s).strip()][:15]
+    sales_channels = [str(s).strip().lower() for s in (parsed.get("sales_channels") or []) if str(s).strip()][:10]
+    # Whitelist to keys our /api/tenant/sales-channels endpoint understands.
+    valid_channel_keys = {"email", "linkedin", "whatsapp", "sms", "phone", "website_chat"}
+    sales_channels = [c for c in sales_channels if c in valid_channel_keys]
     qualification = parsed.get("qualification") or {}
     handoff = parsed.get("handoff") or {}
     summary = (parsed.get("summary") or "").strip()
@@ -370,6 +380,8 @@ async def analyze(
         "extracted": {
             "icps": icps,
             "lead_sources": lead_sources,
+            "recommended_integrations": recommended_integrations,
+            "sales_channels": sales_channels,
             "touchpoints": touchpoints,
             "qualification": qualification,
             "handoff": handoff,
@@ -383,10 +395,13 @@ class PublishPayload(BaseModel):
     icps: List[Dict[str, Any]] = []
     touchpoints: List[Dict[str, Any]] = []
     lead_sources: List[str] = []
+    recommended_integrations: List[str] = []
+    sales_channels: List[str] = []
     qualification: Optional[Dict[str, Any]] = None
     handoff: Optional[Dict[str, Any]] = None
     summary: Optional[str] = None
     overwrite_journey: bool = True   # if true, replaces the 32-touchpoint map
+    apply_sales_channels: bool = True  # if true, saves sales_channels to /tenant/sales-channels prefs
 
 
 @router.post("/publish")
@@ -483,6 +498,7 @@ async def publish(
         {"$set": {
             "settings.automap_summary": {
                 "lead_sources": payload.lead_sources or [],
+                "recommended_integrations": payload.recommended_integrations or [],
                 "qualification": payload.qualification or {},
                 "handoff": payload.handoff or {},
                 "summary": payload.summary or "",
@@ -492,6 +508,31 @@ async def publish(
         }},
     )
 
+    # 4. Optionally write Aria-inferred sales-channel preferences. Skips when the
+    # user opted out OR Aria didn't extract any channels. Stored on the same
+    # tenants.settings.sales_channels path the Settings UI reads.
+    saved_channels: List[str] = []
+    if payload.apply_sales_channels and payload.sales_channels:
+        from routes.sales_channels import CHANNELS as _CH
+        valid_keys = {c["key"] for c in _CH}
+        saved_channels = [c for c in payload.sales_channels if c in valid_keys]
+        if saved_channels:
+            prefs = {
+                "selected_channels": saved_channels,
+                "priority_order": saved_channels,
+                "primary_channel": saved_channels[0],
+                "fallback_channels": saved_channels[1:],
+                "conversation_style": None,
+                "selected_preset": None,
+                "disabled_channels": [k for k in valid_keys if k not in saved_channels],
+                "updated_at": _now_iso(),
+                "source": "automap",
+            }
+            db["tenants"].update_one(
+                {"id": tenant_id},
+                {"$set": {"settings.sales_channels": prefs}},
+            )
+
     return {
         "ok": True,
         "icps_created": len(created_icp_ids),
@@ -499,6 +540,8 @@ async def publish(
         "created_icp_ids": created_icp_ids,
         "touchpoints_saved": saved_touchpoint_count,
         "lead_sources_count": len(payload.lead_sources or []),
+        "recommended_integrations": payload.recommended_integrations or [],
+        "sales_channels_saved": saved_channels,
     }
 
 

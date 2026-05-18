@@ -82,6 +82,8 @@ export default function AISetupAssistant() {
         icps: extracted.icps || [],
         touchpoints: extracted.touchpoints || [],
         lead_sources: extracted.lead_sources || [],
+        recommended_integrations: extracted.recommended_integrations || [],
+        sales_channels: extracted.sales_channels || [],
         qualification: extracted.qualification || {},
         handoff: extracted.handoff || {},
         summary: extracted.summary || '',
@@ -89,7 +91,9 @@ export default function AISetupAssistant() {
       });
       setPublishResult(r.data);
       setStage('done');
-      toast.success(`Published — ${r.data.icps_created} ICP(s), ${r.data.touchpoints_saved} touchpoint(s)`);
+      const channelsBit = (r.data.sales_channels_saved || []).length > 0
+        ? `, ${(r.data.sales_channels_saved || []).length} sales channel(s)` : '';
+      toast.success(`Published — ${r.data.icps_created} ICP(s), ${r.data.touchpoints_saved} touchpoint(s)${channelsBit}`);
     } catch (e) {
       const d = e?.response?.data?.detail;
       toast.error(typeof d === 'string' ? d : 'Publish failed');
@@ -366,6 +370,60 @@ function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAr
         )}
       </Card>
 
+      {/* CARD 2b: Recommended integrations (iter 69 — Saleshandy/Lemlist/Zoho etc.) */}
+      <Card
+        testid="auto-map-card-integrations"
+        icon={<FunnelSimple size={16} weight="duotone" />}
+        title={`${(extracted.recommended_integrations || []).length} integration${(extracted.recommended_integrations || []).length === 1 ? '' : 's'} recommended`}
+        tint="indigo"
+      >
+        {(extracted.recommended_integrations || []).length === 0 ? (
+          <p className="text-xs text-slate-400">Aria didn't spot any specific tools (Saleshandy, Lemlist, Zoho, Calendly, etc.) in the document. You can connect any tool from the Integration Hub later.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {extracted.recommended_integrations.map((s, i) => (
+                <span
+                  key={i}
+                  data-testid={`auto-map-integration-${s}`}
+                  className="text-xs px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500">Head to <strong>Integration Hub</strong> after publishing to paste API keys + import campaigns/leads from these tools.</p>
+          </div>
+        )}
+      </Card>
+
+      {/* CARD 2c: Sales channel preferences inferred from the doc */}
+      <Card
+        testid="auto-map-card-sales-channels"
+        icon={<FunnelSimple size={16} weight="duotone" />}
+        title={`${(extracted.sales_channels || []).length} sales channel${(extracted.sales_channels || []).length === 1 ? '' : 's'} suggested`}
+        tint="violet"
+      >
+        {(extracted.sales_channels || []).length === 0 ? (
+          <p className="text-xs text-slate-400">Aria didn't infer specific channels (email / linkedin / whatsapp) from the document.</p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {extracted.sales_channels.map((s, i) => (
+                <span
+                  key={i}
+                  data-testid={`auto-map-sales-channel-${s}`}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-mono ${i === 0 ? 'bg-violet-100 text-violet-800 border-violet-300' : 'bg-violet-50 text-violet-700 border-violet-200'}`}
+                >
+                  {i === 0 ? '★ ' : ''}{s}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500">★ = primary channel. Publishing will save this to your Sales Channel Preferences (overrides any prior selection).</p>
+          </div>
+        )}
+      </Card>
+
       {/* CARD 3: Touchpoints */}
       <Card
         testid="auto-map-card-touchpoints"
@@ -521,10 +579,12 @@ function Card({ icon, title, tint = 'violet', testid, small = false, children })
     sky: 'border-sky-200 bg-sky-50/40',
     amber: 'border-amber-200 bg-amber-50/40',
     rose: 'border-rose-200 bg-rose-50/40',
+    indigo: 'border-indigo-200 bg-indigo-50/40',
   };
   const iconColor = {
     violet: 'text-violet-600', emerald: 'text-emerald-600',
     sky: 'text-sky-600', amber: 'text-amber-600', rose: 'text-rose-600',
+    indigo: 'text-indigo-600',
   };
   return (
     <div data-testid={testid} className={`bg-white border rounded-2xl p-5 ${tintMap[tint]}`}>

@@ -72,6 +72,7 @@ from routes.billing_profile import router as billing_profile_router
 from routes.integrations_catalog import router as integrations_catalog_router
 from routes.sales_channels import router as sales_channels_router
 from routes.simulate_inbound import router as simulate_inbound_router
+from routes.outreach_import import router as outreach_import_router
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -132,6 +133,7 @@ app.include_router(lead_capture_public_router)
 app.include_router(lead_capture_widget_public_router)
 app.include_router(integrations_hub_router)
 app.include_router(integrations_hub_public_router)
+app.include_router(outreach_import_router)
 app.include_router(conversations_router)
 app.include_router(notifications_router)
 app.include_router(icps_router)

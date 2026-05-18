@@ -354,7 +354,28 @@ const LeadInbox = () => {
                       );
                     })()}
                   </td>
-                  <td className="px-6 py-4 text-[#5A4A7A] text-xs">{lead.source_channel?.replace('_',' ')}</td>
+                  <td className="px-6 py-4 text-[#5A4A7A] text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span>{lead.source_channel?.replace('_',' ')}</span>
+                      {/* If the lead was pulled from Saleshandy / Lemlist, show a tiny
+                          source pill with the originating campaign name so the SDR
+                          knows where this contact came from at a glance. */}
+                      {(lead.external_source === 'saleshandy' || lead.external_source === 'lemlist') && (
+                        <span
+                          data-testid={`lead-source-pill-${lead.id}`}
+                          className={`inline-flex items-center gap-1 self-start text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                            lead.external_source === 'saleshandy'
+                              ? 'bg-orange-50 text-orange-700 border-orange-200'
+                              : 'bg-pink-50 text-pink-700 border-pink-200'
+                          }`}
+                          title={lead.external_campaign_name ? `Campaign: ${lead.external_campaign_name}` : ''}
+                        >
+                          {lead.external_source}
+                          {lead.external_campaign_name ? ` · ${String(lead.external_campaign_name).slice(0, 18)}` : ''}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(() => {
