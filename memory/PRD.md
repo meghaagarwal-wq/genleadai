@@ -1,3 +1,45 @@
+## Iter 66 — Outbound emails silently dropping in test mode (Feb 2026)
+
+### Reported issue
+> "Why can't I send emails?" — Production, outbound campaign / touchpoint sequence, toast says success but recipient never receives.
+
+### Root cause
+**Resend test-mode silent drop** — Resend only allows sending to your own admin email until a domain is verified at resend.com/domains. For any other recipient, Resend returns a `403 validation_error: "You can only send testing emails to your own email address"`.
+
+The codebase already has `email_delivery.send_email_safe()` which catches this exact rejection and **forwards the email to `CONTACT_FORWARD_EMAIL` / `MASTER_ADMIN_EMAIL`** so you can still see what would have gone out. But the **touchpoint engine** (`routes/touchpoint_engine.py:418`) was bypassing the wrapper and calling `resend.Emails.send` directly — so the rejection was caught by the outer try/except in `engine_tick`, marked as "failed" in the log, and the engine moved on. Lead never got emailed, but no error surfaced to the user.
+
+15+ other places in `server.py` also bypass the wrapper, but the touchpoint engine path is the one used by outbound campaigns (which is what the user reported).
+
+### Fix — `routes/touchpoint_engine.py`
+- Replaced the direct `resend.Emails.send` call with `email_delivery.send_email_safe(...)`.
+- Plain-text body now wrapped into the minimal HTML body the wrapper expects.
+- White-label fix applied to the subject line — uses `business_profile.business_name` first (consistent with Iter 65).
+- If `send_email_safe` returns `delivered=False`, we raise so the touchpoint logs `failed` with the actual reason (visible in delivery log) instead of silently succeeding.
+- ImportError fallback preserves legacy direct-send path for safety.
+
+### What happens now (with no Resend domain verified)
+- The touchpoint engine fires.
+- `send_email_safe` tries the real send → Resend rejects.
+- Wrapper detects the rejection ("testing emails" / "verify a domain" in the error) → re-sends with `to: [your admin email]` and subject prefixed with `[for: lead@example.com]` so you see who it was meant for.
+- Email lands in your master admin inbox.
+- `email_delivery_log` records `delivery_status: "test_mode_forwarded"` for every such send.
+- The Production Readiness panel in Master Admin → Billing config will reflect this (yellow light on "Email deliverability") and tell you exactly how many were forwarded.
+
+### Testing
+- **106/106 regression** across iters 51-66 (~62s). Zero regressions.
+
+### Real fix the user must do (no code possible)
+1. Go to **resend.com/domains** → add your domain (e.g. `genleadai.com` or your custom).
+2. Add the DNS records Resend gives you (DKIM/SPF/return-path) at your domain registrar.
+3. Wait for verification (usually < 1 hour).
+4. Set `SENDER_EMAIL=noreply@<your-verified-domain>` in production env.
+5. Redeploy.
+
+After that, the wrapper passes through to real sends and emails go to the actual recipient. Readiness panel flips to green automatically.
+
+---
+
+
 ## Iter 65 — White-label fix: Aria stops calling herself "GenLeadAI's agent" (Feb 2026)
 
 ### Reported issue

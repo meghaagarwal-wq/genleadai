@@ -421,17 +421,43 @@ async def _send_email(tenant: dict, to_email: str, name: str, body: str, row: di
     if not getattr(resend, "api_key", None):
         raise RuntimeError("resend_not_configured")
     subject_match = body.lower().startswith("subject:")
-    subject = "A quick note from " + (tenant.get("name") or "the team")
+    # White-label — prefer business_profile.business_name (Iter 65). Falls back
+    # through tenant name, never to "GenLeadAI".
+    biz_name = (
+        ((tenant.get("settings") or {}).get("business_profile") or {}).get("business_name")
+        or tenant.get("name") or "the team"
+    )
+    subject = f"A quick note from {biz_name}"
     if subject_match:
         first_line, _, rest = body.partition("\n")
         subject = first_line.replace("Subject:", "", 1).strip() or subject
         body = rest.strip() or body
-    await asyncio.to_thread(resend.Emails.send, {
-        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
-        "to": [to_email],
-        "subject": subject,
-        "text": body,
-    })
+
+    # Route through the safe wrapper so Resend test-mode (no verified domain)
+    # forwards to the admin inbox instead of silently 403-ing per-recipient.
+    # The wrapper also logs every send to `email_delivery_log` for ops.
+    try:
+        from email_delivery import send_email_safe
+        # Convert the plain-text body to a minimal HTML body the wrapper expects.
+        html_body = "<div style='font-family: -apple-system, sans-serif; max-width: 600px;'>" + \
+                    body.replace("\n", "<br>") + "</div>"
+        result = await asyncio.to_thread(
+            send_email_safe,
+            to_email=to_email,
+            subject=subject,
+            html=html_body,
+            purpose="touchpoint",
+        )
+        if not result.delivered:
+            raise RuntimeError(result.detail or "email_not_delivered")
+    except ImportError:
+        # Fallback to direct send if wrapper isn't available (legacy path).
+        await asyncio.to_thread(resend.Emails.send, {
+            "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
+            "to": [to_email],
+            "subject": subject,
+            "text": body,
+        })
 
 
 # ─── Background loop ────────────────────────────────────────────────────────
