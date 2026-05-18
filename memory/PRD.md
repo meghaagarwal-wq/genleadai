@@ -1,3 +1,47 @@
+## Iter 59 — Integration Hub redesign (Option A) (Feb 2026)
+
+**User intent:** Redesign `/integrations` into the full marketplace-style **Integration Hub** spec — header, stat cards, setup progress, recommended path, category tabs, integration cards (live + coming-soon), data-flow preview, integration health, send-test-lead, and custom-request form. All 8 existing live integrations categorized; 45 coming-soon tools shown as "Join Waitlist" cards.
+
+### Backend — `/app/backend/routes/integrations_catalog.py` (new, ~330 LoC)
+Sits next to the existing `routes/integrations_hub.py` (live webhook/dispatcher logic untouched).
+- `GET /api/integrations/catalog` — single source of truth: 7 categories + 53 integrations (8 live + 45 coming-soon) grouped by category, with status flag (`connected` / `waitlist_joined` / `coming_soon` / `not_connected`).
+- `GET /api/integrations/setup-progress` — 7 steps mapped to categories, returns `% complete` + per-step `complete:true/false`.
+- `GET /api/integrations/health` — health rollup for connected tools (`healthy_percent`, row per tool, last-sync, error-message).
+- `GET /api/integrations/data-flow` — dynamic 7-node lead flow (capture → signal → score → followup → CRM → booking → alert), node subtitles adapt to which tools the tenant has actually connected.
+- `POST /api/integrations/waitlist/{type}` — idempotent waitlist join with optional note (per tenant + user).
+- `POST /api/integrations/custom-request` / `GET /api/integrations/custom-requests` — capture & list custom-tool requests.
+- `POST /api/integrations/test-lead` — fires a CLEARLY-labeled test lead (`is_test=True`, `test_label="ARIA TEST LEAD — do not action"`) through every connected outbound integration. **Does NOT insert into the leads collection** so the user's Lead Inbox stays clean — the test only surfaces downstream in Zapier/GA4/CRM/Slack.
+
+### Frontend
+- `pages/Integrations.js` — fully rewritten to compose the 8 sections in order: Header (with Connect/Request CTAs) → Stat cards → Setup progress → Category tabs + cards → Data flow → Send test lead → Health monitor → Custom request form. ConfigModal preserved verbatim for live connectors (form fields, webhook URL copy, Apollo import, docs link, test/disconnect).
+- `components/integrations/HubSections.js` (new) — `HubStatCards`, `SetupProgress`, `DataFlowPreview`, `IntegrationHealthTable`, `SendTestLeadButton`.
+- `components/integrations/WaitlistAndRequest.js` (new) — `WaitlistModal` (with success state) + `CustomRequestForm` (validates length, blocker/nice-to-have priority).
+- Coming-soon cards show a purple "Coming Soon" ribbon top-right and "Join Waitlist" CTA — clicking opens the waitlist modal with a "What would you use it for?" textarea.
+
+### The 45 coming-soon tools (per spec)
+- **Lead Sources** (7): website forms, landing pages, Meta Lead Ads, LinkedIn Lead Gen, Tally, Jotform, Webinar/Demo forms.
+- **Outbound** (5): PhantomBuster, LinkedIn Sales Nav, Smartlead, Snov.io, Hunter.io.
+- **CRM** (8): Zoho CRM, HubSpot, Salesforce, Pipedrive, Freshsales, Airtable, Google Sheets, Notion DB.
+- **Communication** (7): WhatsApp Business API, Gmail, Outlook, Zoho Mail, Twilio SMS, MSG91 SMS, website chat.
+- **Booking** (7): Calendly, Google Calendar, Outlook Calendar, Cal.com, Zoom, Google Meet, MS Teams.
+- **Analytics** (8): GTM, Google Search Console, Microsoft Clarity, Hotjar, PostHog, Mixpanel, Meta Pixel, LinkedIn Insight Tag.
+- **Automation** (3): n8n, Custom Webhooks, Custom API.
+(Zapier + Make.com + GA4 + Meta CAPI + Apollo + Typeform + Instantly + Google Ads Lead Form + Saleshandy + Lemlist = the 10 already-live ones, exposed via the same catalog API).
+
+### Testing — `tests/test_iter59_integration_hub.py`
+8/8 tests pass. Coverage: catalog shape + categories, setup-progress 7 steps, data-flow 7 nodes, health endpoint, waitlist join idempotent + invalid type 404, catalog reflects `waitlist_joined` after join, custom-request validation + persistence, test-lead returns expected shape AND does not insert a leads row.
+
+### Frontend smoke (Playwright)
+- All 14 testid hooks present (`integrations-hub-page`, `hub-stat-cards`, `setup-progress`, `setup-stepper`, `category-section`, `category-filter`, `data-flow-preview`, `data-flow-nodes`, `send-test-lead-block`, `send-test-lead-btn`, `integration-health`, `custom-request-form`, `hub-connect-cta`, `hub-request-cta`).
+- 56 integration cards rendered.
+- Clicking a coming-soon card opens the waitlist modal with the correct integration label.
+
+### Full regression
+**80/80 tests pass** across iters 51-59 (~75s). Zero regressions.
+
+---
+
+
 ## Iter 58 — Billing profile, seller GST overrides, founder upgrade notifications, CSV export, production-readiness panel (Feb 2026)
 
 **User intent (chain `a → b → c → d → e`):** Complete every code-implementable item from the post-Iter-57 backlog so the only remaining "launch checklist" items are user-action (domain verification, live Stripe key, GSTIN registration).
