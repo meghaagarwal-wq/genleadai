@@ -1,3 +1,64 @@
+## Iter 55 — Flowchart view + AI Journey Auto Mapper (Feb 2026)
+
+**User intent:** Ship two big features back-to-back: (a) the 32-touchpoint journey should look like Expandi's branching flowchart, (b) full "AI Setup Assistant" that reads a GTM/ICP/strategy doc and auto-builds the whole workflow — ICPs, lead sources, touchpoints, conditional logic, qualification, handoff. User answered the planning question as `c, a, c` — ship both in one go, use React Flow, preview-then-publish.
+
+### Phase 1 — Flowchart visualization (Expandi-style)
+
+**New component:** `/app/frontend/src/components/JourneyFlowchart.js`
+- Uses **React Flow** (`yarn add reactflow` — added to deps).
+- 4 custom node types: `start` (violet "Start" pill), `message` (channel-colored card with day/hour + message preview + "Alert me" tag for human handoff), `condition` (dark slate diamond with keyword chips + "After Xh silence"), `terminal` (pink/amber/rose cards for stop / tag_contact / notify_user).
+- Layout algorithm: vertical linear path with side-branches that veer right for `move_to_step` jumps; terminal nodes parked further right when branch ends in stop/tag/notify.
+- Edges: solid `#94A3B8` for linear path, **animated emerald** for yes-paths (`move_to_step` outcomes), **rose** for stop/tag/notify outcomes. Labels render the action right on the edge ("yes →" / "stop" / "tag" / "alert").
+- Built-in MiniMap (top-right), Controls (bottom-right with zoom/fit), dotted Background. Drag-to-reposition enabled, drag-to-connect disabled (we want declarative wiring, not free-form drawing). Auto-fits to viewport on mount.
+- Legend overlaid top-left.
+
+**Wired into `TouchpointJourney.js`:**
+- New `viewMode` state (`'timeline' | 'flowchart'`), Toggle pill (`view-mode-toggle`) in the counter bar with `view-mode-timeline` / `view-mode-flowchart` test-ids.
+- When flowchart mode is active, the two-column timeline+drawer layout is hidden and `<JourneyFlowchart touchpoints={draft} />` renders full-width inside a white card.
+- Switching back to timeline preserves all edits (state is shared via `draft`).
+
+### Phase 2 — AI Journey Auto Mapper
+
+**Backend** (`/app/backend/routes/aria_auto_map.py` — NEW):
+- `POST /api/aria/auto-map/analyze` — upload PDF/DOCX/XLSX/TXT/CSV (<10MB). Extracts text via pypdf / python-docx / openpyxl / utf-8 decode. Sends to Claude Sonnet 4.5 (Anthropic via Emergent LLM Key) with a strict JSON-only system prompt. Returns `{extracted: {icps, lead_sources, touchpoints, qualification, handoff, summary}}`. Claude is instructed to generate 3–12 touchpoints with **at least 2 having meaningful conditions** (uses the same schema as `routes.outreach.validate_conditions`). Output is sanitized: channels clamped to {whatsapp/email/linkedin_nudge/call_reminder}, tones clamped to {professional/casual/bold}, ICPs capped at 3, malformed conditions silently dropped.
+- `POST /api/aria/auto-map/publish` — user confirms (possibly after editing). Creates ICPs that don't already exist (label match, case-insensitive — existing ones land in `icps_skipped`). When `overwrite_journey=true`, replaces the tenant's 32-touchpoint map with the new sequence (after running through `_validate_touchpoints`). Lead sources + qualification + handoff get stashed under `tenant.settings.automap_summary`.
+- `POST /api/aria/auto-map/improve` — sends the (preview or edited) workflow back to Claude with a gap-analysis system prompt; returns `{suggestions: [{type, message, fix_hint}]}` (types: missing_channel / missing_logic / missing_qualification / missing_handoff / missing_nurture / message_quality).
+- All three endpoints return **string detail** on errors (toast-safe — no Pydantic arrays).
+
+**Frontend** (`/app/frontend/src/pages/AISetupAssistant.js` — NEW):
+- Route: `/ai-setup`. Sidebar nav: "AI Setup Assistant" (Brain icon) between 32-Touchpoint Journey and Train Aria.
+- **4-step stepper** (`auto-map-stepper`) at top: Upload Document → Aria Extracts Data → Review Auto-Mapped Journey → Publish Workflow. Steps light up violet when complete; the connector line fills as you progress.
+- **Stage 1 — Upload Panel:** big drag-drop card with gradient violet icon, format hints, "Upload Document" button.
+- **Stage 2 — Extracting Panel:** animated brain icon, rotating status messages every 4.5s ("Aria is reading your document…" → "Mapping your ICP…" → "Building your touchpoint journey…" → "Creating conditional logic…" → "Almost ready to review…"), gradient progress bar.
+- **Stage 3 — Review Panel:** 5 editable cards:
+  - **Aria says** (gradient banner with the plain-English summary)
+  - **ICPs detected** (each row inline-editable: label, industry, company_size, geography, pain_point, value_prop, title_target chips)
+  - **Lead sources detected** (emerald chips)
+  - **Touchpoints mapped** (per-step card with channel/type/day/branch-count badges + editable message textarea)
+  - **Qualification + Handoff** (side-by-side, must-have / disqualifiers / qualifying questions / handoff trigger / alert channels / info passed)
+  - **Aria's improvement suggestions** (appears after clicking "Ask Aria to Improve")
+  - **Overwrite-journey toggle** (default ON) — user can publish ICPs only without replacing their existing 32-touchpoint map.
+  - **Sticky bottom action bar** with "Ask Aria to Improve This Journey" + "Cancel" + "Publish Workflow" CTAs.
+- **Stage 4 — Done Panel:** emerald success card with counts ("Aria created N new ICP(s), saved M touchpoints into your 32-touchpoint journey") + 3 CTAs (View Journey, View ICPs, Upload another).
+
+**Tests (`tests/test_iter55_auto_map.py`):** 4/4 PASS.
+- `test_analyze_rejects_unsupported_format_with_string_detail` — `.exe` rejected with string detail (toast-safe).
+- `test_analyze_with_real_docx_returns_structured_workflow` — real .docx with GTM strategy → Claude returns the right shape with ≥1 ICP, ≥3 touchpoints, ≥1 touchpoint with valid branching conditions. Conditions re-validated via `validate_conditions` (round-trip).
+- `test_publish_creates_icps_and_replaces_touchpoint_map` — synthetic preview persists 2 ICPs + 2 touchpoints; republish skips existing ICPs case-insensitively.
+- `test_improve_returns_suggestions_shape` — `/improve` returns `{suggestions: [...]}` (or empty if Claude finds nothing).
+
+**Smoke screenshot evidence:**
+- Flowchart view renders for the existing 3-touchpoint demo data with violet Start pill + STEP 1 WhatsApp Day 0 message node + Linear/Branch legend overlay.
+- AI Setup Assistant: dragged real .docx → 25s later the Review panel popped with "Aria found 1 ICP (CHRO at Mid-Market SaaS), 3 lead sources (LinkedIn, Meta ads, website), and 4 touchpoints across WhatsApp, email, and LinkedIn over 8 days" auto-filled into editable cards. Toast: "Aria mapped 4 touchpoints from your doc". Zero console errors.
+
+### Files added/modified
+- ADDED: `/app/frontend/src/components/JourneyFlowchart.js`, `/app/frontend/src/pages/AISetupAssistant.js`, `/app/backend/routes/aria_auto_map.py`, `/app/backend/tests/test_iter55_auto_map.py`
+- MODIFIED: `/app/frontend/package.json` (`reactflow` dep), `/app/frontend/src/pages/TouchpointJourney.js` (view-mode toggle + flowchart branch), `/app/frontend/src/App.js` (new `/ai-setup` route), `/app/frontend/src/components/Layout.js` (sidebar nav), `/app/backend/server.py` (auto-map router registered)
+
+---
+
+
+
 ## Iter 54 — Doc-import white-screen fix + unified ConditionsInspector across Journey & Outreach (Feb 2026)
 
 **User intent:** 🔴 "Aria is not accepting my touchpoint import doc — as soon as I upload, the app shows a plain white screen with nothing happening." 🟡 "Add the same 4-branch conditional logic into the existing 32-Touchpoint Journey editor so each of the 32 steps can branch."

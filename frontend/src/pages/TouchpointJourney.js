@@ -22,6 +22,7 @@ import {
   Fire, Snowflake, ThumbsUp, ThumbsDown, ArrowsCounterClockwise, Lightning,
 } from '@phosphor-icons/react';
 import ConditionsInspector from '../components/ConditionsInspector';
+import JourneyFlowchart from '../components/JourneyFlowchart';
 
 const MAX_TOUCHPOINTS = 32;
 
@@ -700,6 +701,7 @@ const TouchpointJourney = () => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [viewMode, setViewMode] = useState('timeline');   // 'timeline' | 'flowchart'
 
   const [scoring, setScoring] = useState(null);   // { items: [...], journey: {...} }
   const [ai, setAi] = useState(null);             // { items: [...] }
@@ -903,15 +905,44 @@ const TouchpointJourney = () => {
           <Sparkle size={16} weight="fill" className="text-[#7C35DC]" />
           <span><strong className={counterTone}>{draft.length}</strong> / {MAX_TOUCHPOINTS} touchpoints — drag to reorder, click any card to edit</span>
         </div>
-        {draft.length >= 28 && draft.length < MAX_TOUCHPOINTS && (
-          <span className="text-xs font-bold text-[#D97706] inline-flex items-center gap-1"><Warning size={12} weight="fill" /> Nearing the {MAX_TOUCHPOINTS}-touchpoint limit</span>
-        )}
-        {draft.length >= MAX_TOUCHPOINTS && (
-          <span className="text-xs font-bold text-[#DC2626] inline-flex items-center gap-1"><Warning size={12} weight="fill" /> Max {MAX_TOUCHPOINTS} reached</span>
-        )}
+        <div className="flex items-center gap-3">
+          {/* View mode toggle — Timeline / Flowchart */}
+          <div className="inline-flex bg-white border border-[#E0D4F7] rounded-lg p-0.5" data-testid="view-mode-toggle">
+            <button
+              type="button"
+              onClick={() => setViewMode('timeline')}
+              data-testid="view-mode-timeline"
+              className={`px-3 py-1.5 text-xs font-semibold rounded ${viewMode === 'timeline' ? 'bg-[#7C35DC] text-white shadow-sm' : 'text-[#5A4A7A] hover:bg-[#F4F0FF]'}`}
+            >
+              Timeline
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('flowchart')}
+              data-testid="view-mode-flowchart"
+              className={`px-3 py-1.5 text-xs font-semibold rounded ${viewMode === 'flowchart' ? 'bg-[#7C35DC] text-white shadow-sm' : 'text-[#5A4A7A] hover:bg-[#F4F0FF]'}`}
+            >
+              Flowchart
+            </button>
+          </div>
+          {draft.length >= 28 && draft.length < MAX_TOUCHPOINTS && (
+            <span className="text-xs font-bold text-[#D97706] inline-flex items-center gap-1"><Warning size={12} weight="fill" /> Nearing the {MAX_TOUCHPOINTS}-touchpoint limit</span>
+          )}
+          {draft.length >= MAX_TOUCHPOINTS && (
+            <span className="text-xs font-bold text-[#DC2626] inline-flex items-center gap-1"><Warning size={12} weight="fill" /> Max {MAX_TOUCHPOINTS} reached</span>
+          )}
+        </div>
       </div>
 
+      {/* ─── Flowchart view (Expandi-style branching) ────────────────────── */}
+      {viewMode === 'flowchart' && (
+        <div className="bg-white border border-[#E8E0F5] rounded-2xl p-3 relative">
+          <JourneyFlowchart touchpoints={draft} />
+        </div>
+      )}
+
       {/* ─── Two-column layout: vertical timeline + side detail drawer ────── */}
+      {viewMode === 'timeline' && (
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-5">
 
         {/* LEFT: Vertical timeline with drag-and-drop */}
@@ -989,6 +1020,7 @@ const TouchpointJourney = () => {
           )}
         </div>
       </div>
+      )}
 
       {showLibrary && <TemplateLibraryModal onClose={() => setShowLibrary(false)} onApply={applyTemplate} />}
       {showVersions && <VersionHistoryModal onClose={() => setShowVersions(false)} onRestored={() => { load(); loadScoring(); }} />}

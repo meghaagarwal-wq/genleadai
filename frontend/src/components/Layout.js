@@ -184,6 +184,7 @@ const Layout = ({ children }) => {
     { icon: Target,        label: 'ICPs',                 path: '/icps' },
     { icon: Megaphone,     label: 'Outreach Campaigns',   path: '/outreach' },
     { icon: MapTrifold,    label: '32-Touchpoint Journey',path: '/touchpoint-journey' },
+    { icon: Brain,         label: 'AI Setup Assistant',   path: '/ai-setup' },
     { icon: GraduationCap, label: 'Train Aria',           path: '/aria-agent/train' },
     { icon: Plug,          label: 'Integrations',         path: '/integrations' },
     { icon: CalendarCheck, label: 'Call Booking',         path: '/follow-ups' },

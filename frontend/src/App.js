@@ -52,6 +52,7 @@ import MasterAdmin from './pages/MasterAdmin';
 import TouchpointJourney from './pages/TouchpointJourney';
 import ICPManager from './pages/ICPManager';
 import OutreachCampaigns from './pages/OutreachCampaigns';
+import AISetupAssistant from './pages/AISetupAssistant';
 import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
 
@@ -260,6 +261,7 @@ function App() {
                         <Route path="/icps" element={<ICPManager />} />
                         <Route path="/outreach" element={<OutreachCampaigns />} />
                         <Route path="/outreach/:campaignId" element={<OutreachCampaigns />} />
+                        <Route path="/ai-setup" element={<AISetupAssistant />} />
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                       <UpgradeModal />

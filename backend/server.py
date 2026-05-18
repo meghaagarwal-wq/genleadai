@@ -66,6 +66,7 @@ from routes.conversations import router as conversations_router
 from routes.notifications import router as notifications_router
 from routes.icps import router as icps_router
 from routes.outreach import router as outreach_router, outreach_engine_loop, handle_inbound_reply as outreach_handle_reply
+from routes.aria_auto_map import router as aria_auto_map_router
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -130,6 +131,7 @@ app.include_router(conversations_router)
 app.include_router(notifications_router)
 app.include_router(icps_router)
 app.include_router(outreach_router)
+app.include_router(aria_auto_map_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
