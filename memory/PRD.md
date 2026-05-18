@@ -1,3 +1,59 @@
+## Iter 54 — Doc-import white-screen fix + unified ConditionsInspector across Journey & Outreach (Feb 2026)
+
+**User intent:** 🔴 "Aria is not accepting my touchpoint import doc — as soon as I upload, the app shows a plain white screen with nothing happening." 🟡 "Add the same 4-branch conditional logic into the existing 32-Touchpoint Journey editor so each of the 32 steps can branch."
+
+### 🔴 Bug — Doc-import white-screen — FIXED (root cause + 3-layer defence)
+
+**Root cause:** Two-step bug chain.
+1. The axios `api` instance has a default header `Content-Type: application/json`. When uploading FormData, this header was being sent instead of the auto-generated `multipart/form-data; boundary=…`, so FastAPI couldn't parse the file → returned `422` with `detail` = an **array of Pydantic error objects** (`[{type, loc, msg, input, url}, …]`).
+2. The frontend catch block did `toast.error(e.response.data.detail || 'Import failed')` — passing the **array** straight into Sonner, which tried to render the array as a React child → "Objects are not valid as a React child" → uncaught exception → **whole React tree blanked out** (because there was no `ErrorBoundary` anywhere in the codebase).
+
+**Fix shipped (3 layers, defense-in-depth):**
+1. **`TouchpointJourney.js::handleFile`** — sets `Content-Type: multipart/form-data` explicitly on the upload call; safely stringifies any error detail shape (string / array of Pydantic objects / object / fallback to `e.message`) before passing to toast.
+2. **New `components/ErrorBoundary.js`** — class component wrapping the entire `<App>` tree in `App.js`. Any future render crash now shows a friendly "Aria hit an unexpected error" card with Try-again / Back-to-dashboard buttons instead of a blank screen.
+3. **`routes/touchpoints.py::_validate_touchpoints`** — already returns string detail messages; iter54 reinforces this by validating new `conditions` field with the shared `validate_conditions` (which also returns string detail).
+
+**Verified:** Smoke screenshot shows .docx → Claude extracts 3 touchpoints → preview cards render with "Apply to my journey" button. Bad .txt upload → friendly toast "Unsupported file format. Use PDF, DOCX, or XLSX." (no crash). Pytest `test_import_document_rejects_unsupported_format_with_string_detail` asserts the detail is always a Python `str`.
+
+### 🟡 Feature — Unified ConditionsInspector across both surfaces
+
+**New shared component:** `/app/frontend/src/components/ConditionsInspector.js`
+- Extracted from the inline copy that lived in `OutreachCampaigns.js` so both pages share one source of truth.
+- 4-branch editor: `on_reply`, `on_keyword_match`, `on_negative_keyword`, `on_no_reply`. Each branch has a toggle, branch-specific fields (keywords / after_hours), and a "Then" action with restricted action dropdowns matching the backend `validate_conditions` schema.
+- **Plain-English summary** rendered live under each enabled branch — ships P2 backlog item as a free side effect. Example: *"→ If the reply contains 'interested', 'pricing', tag the contact 'hot_lead'."*  *"→ If no reply within 72 hours, jump to step 2."*
+- `data-testid="conditions-inspector"` so the same selectors work on both pages.
+
+**Wired into 32-Touchpoint Journey:**
+- `TouchpointJourney.js` Details tab now includes `<ConditionsInspector>` under the message-template + token-chips section.
+- `save()` sends `conditions: tp.conditions || {}` to `/api/touchpoints/map`.
+- Backend `routes/touchpoints.py`:
+  - `Touchpoint` Pydantic model gets `conditions: Optional[Dict[str, Any]] = None`.
+  - `_validate_touchpoints` lazily imports `routes.outreach.validate_conditions` and runs it on every touchpoint's conditions (raises 400 with string detail on schema violations).
+  - The persisted `touchpoints` array now carries `conditions: {}` per row.
+- `routes/touchpoint_engine.py::instantiate_for_lead` already carries the conditions onto each `lead_touchpoint_log` row so the live engine can read them when firing a step (groundwork for future per-step branch evaluation in the inbound webhook).
+
+**OutreachCampaigns.js refactor:** the inline `ConditionsInspector` + `BRANCH_DEFS` + `Inline` definitions were removed; the page now imports the shared component.
+
+### Tests (`tests/test_iter54_touchpoint_conditions.py`)
+- `test_save_map_with_conditions_persists` — POST a 3-touchpoint map with full 4-branch conditions on step 0, GET it back, assert `on_keyword_match.tag == 'hot_lead'` and `on_no_reply.after_hours == 72`.
+- `test_save_map_rejects_malformed_conditions` — unknown key `on_telepathy` → 400 with `unknown_condition_keys` (string detail).
+- `test_save_map_rejects_bad_tag_contact_branch` — `tag_contact` action without `tag` → 400 with string detail mentioning "tag".
+- `test_import_document_rejects_unsupported_format_with_string_detail` — locks in the toast-safe contract.
+- All 23 from iter52 still pass. **27/27 PASS.**
+
+### Files touched
+- ADDED: `/app/frontend/src/components/ConditionsInspector.js`, `/app/frontend/src/components/ErrorBoundary.js`, `/app/backend/tests/test_iter54_touchpoint_conditions.py`
+- MODIFIED: `/app/frontend/src/pages/TouchpointJourney.js` (import-safe handleFile + ConditionsInspector mount + conditions in save payload), `/app/frontend/src/pages/OutreachCampaigns.js` (replaced inline inspector with shared import), `/app/frontend/src/App.js` (ErrorBoundary wrap), `/app/backend/routes/touchpoints.py` (Touchpoint model gains conditions field + validator), `/app/backend/routes/touchpoint_engine.py` (carry conditions onto every scheduled lead_touchpoint_log row)
+
+### Smoke-screenshot evidence
+1. `/touchpoint-journey` → upload .txt → friendly toast, no crash, sidebar still present. ✅
+2. `/touchpoint-journey` → upload .docx → Claude parses 3 touchpoints → preview cards render. ✅
+3. `/touchpoint-journey` → click TP-01 drawer → scroll → `data-testid="conditions-inspector"` visible → toggle `on_keyword_match` → emerald glow, keywords input, action dropdown, "with tag" input → plain-English summary reads back the configuration correctly. ✅
+
+---
+
+
+
 ## Iter 53 — Multi-ICP + Outreach Campaign Builder UI (Feb 2026)
 
 **User intent:** "Build the campaign builder UI (visual map editor with drag-to-reorder steps and a conditions JSON inspector) — backend is fully API-ready. Build an ICP manager UI (list / create / edit / assign-to-lead picker on Lead Detail)."

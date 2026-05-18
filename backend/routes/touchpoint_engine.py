@@ -83,6 +83,7 @@ def instantiate_for_lead(tenant_id: str, lead: dict) -> int:
             "message_type": tp.get("message_type", "intro"),
             "aria_role": tp.get("aria_role", "autonomous"),
             "message_template": tp.get("message_template", ""),
+            "conditions": tp.get("conditions") or {},
             "scheduled_for": _scheduled_for(tp, start).isoformat(),
             "status": "pending",
             "fired_at": None,

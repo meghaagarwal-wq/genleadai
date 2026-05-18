@@ -14,7 +14,7 @@ import io
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -72,6 +72,10 @@ class Touchpoint(BaseModel):
     aria_role: str
     trigger: Optional[str] = ""
     message_template: str
+    # Iter 54 — branching logic shared with the Outreach Campaign builder.
+    # Validated against the same schema used by /api/outreach/* via
+    # routes.outreach.validate_conditions; stored verbatim alongside the touchpoint.
+    conditions: Optional[Dict[str, Any]] = None
 
 
 class SaveMapPayload(BaseModel):
@@ -85,6 +89,8 @@ def _validate_touchpoints(items: List[Touchpoint]) -> None:
         raise HTTPException(status_code=400, detail="At least one touchpoint required")
     if len(items) > MAX_TOUCHPOINTS:
         raise HTTPException(status_code=400, detail=f"Max {MAX_TOUCHPOINTS} touchpoints per map")
+    # Lazy import — avoids circular import at module load time.
+    from routes.outreach import validate_conditions
     for t in items:
         if t.channel not in ALLOWED_CHANNELS:
             raise HTTPException(status_code=400, detail=f"Invalid channel '{t.channel}'")
@@ -94,6 +100,9 @@ def _validate_touchpoints(items: List[Touchpoint]) -> None:
             raise HTTPException(status_code=400, detail=f"Invalid message_type '{t.message_type}'")
         if not t.message_template.strip():
             raise HTTPException(status_code=400, detail="message_template cannot be empty")
+        # Branching conditions — same schema as the Outreach builder
+        if t.conditions:
+            t.conditions = validate_conditions(t.conditions)
 
 
 def _snapshot_version(tenant_id: str, current_map: dict, saved_by: Optional[str]) -> None:
@@ -189,6 +198,7 @@ async def save_map(payload: SaveMapPayload, tenant: dict = Depends(get_active_te
             "aria_role": t.aria_role,
             "trigger": (t.trigger or "").strip(),
             "message_template": t.message_template.strip(),
+            "conditions": t.conditions or {},
         })
 
     template_id = payload.template_id or "tpl_standard"

@@ -21,6 +21,7 @@ import {
   FileArrowUp, ArrowLeft, DotsSixVertical, ChartLineUp, Target, Brain,
   Fire, Snowflake, ThumbsUp, ThumbsDown, ArrowsCounterClockwise, Lightning,
 } from '@phosphor-icons/react';
+import ConditionsInspector from '../components/ConditionsInspector';
 
 const MAX_TOUCHPOINTS = 32;
 
@@ -318,6 +319,16 @@ const DetailDrawer = ({ tp, scoring, ai, onChange, onDelete, onDuplicate, onClos
               </div>
             </div>
 
+            {/* Iter 54 — Per-touchpoint branching logic (shared with /outreach builder) */}
+            <div className="pt-2 border-t border-[#F0ECF9]">
+              <ConditionsInspector
+                conditions={tp.conditions || {}}
+                currentStep={(tp.index || 0) + 1}
+                maxStep={32}
+                onChange={(next) => onChange({ ...tp, conditions: next })}
+              />
+            </div>
+
             <div className="flex items-center gap-2 pt-2 border-t border-[#F0ECF9]">
               <button onClick={() => onMove(tp.index, -1)} disabled={isFirst} data-testid="drawer-move-up"
                 className="px-3 py-1.5 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-md text-xs font-bold disabled:opacity-30">↑ Move up</button>
@@ -586,12 +597,25 @@ const DocumentUploadModal = ({ onClose, onApply }) => {
     try {
       const form = new FormData();
       form.append('file', file);
-      const r = await api.post('/api/touchpoints/import-document', form);
+      // CRITICAL: force multipart content-type (axios instance default is application/json,
+      // which makes FastAPI reject the upload with a 422 Pydantic error array → renders
+      // crash the React tree if surfaced as a toast).
+      const r = await api.post('/api/touchpoints/import-document', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
       setPreview(r.data?.preview || []);
       setMeta({ filename: r.data?.source_filename, count: r.data?.extracted_count, truncated: r.data?.truncated });
       setStage('preview');
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Import failed');
+      // Defensive: FastAPI 422 returns detail as an Array<object>; convert to a string
+      // so Sonner doesn't choke trying to render an object as a React child.
+      const detail = e?.response?.data?.detail;
+      let msg = 'Import failed';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail)) msg = detail.map((d) => d?.msg || JSON.stringify(d)).join('; ');
+      else if (detail && typeof detail === 'object') msg = detail.message || detail.error || JSON.stringify(detail);
+      else if (e?.message) msg = e.message;
+      toast.error(msg);
       setStage('upload');
     } finally { setBusy(false); }
   };
@@ -777,6 +801,7 @@ const TouchpointJourney = () => {
           index: tp.index, day: Number(tp.day), hour: Number(tp.hour),
           channel: tp.channel, message_type: tp.message_type, aria_role: tp.aria_role,
           trigger: tp.trigger || '', message_template: tp.message_template,
+          conditions: tp.conditions || {},
         })),
       };
       await api.post('/api/touchpoints/map', payload);

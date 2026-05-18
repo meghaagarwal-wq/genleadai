@@ -84,6 +84,7 @@ import CompareAriaVsSpreadsheets from './public/pages/compare/AriaVsSpreadsheets
 import CompareAiVsCrm from './public/pages/compare/AISalesAssistantVsCrm';
 import Layout from './components/Layout';
 import UpgradeModal from './components/UpgradeModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import api from './config/api';
 import './App.css';
 
@@ -145,6 +146,7 @@ function ProtectedRoute({ children, requireOnboarded = true }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ErrorBoundary>
       <AuthProvider>
         <PlanProvider>
           <WorkspaceProvider>
@@ -272,6 +274,7 @@ function App() {
           </WorkspaceProvider>
         </PlanProvider>
       </AuthProvider>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }
