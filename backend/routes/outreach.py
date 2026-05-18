@@ -588,6 +588,69 @@ async def campaign_analytics(campaign_id: str, tenant: dict = Depends(get_active
     }
 
 
+@router.post("/campaigns/{campaign_id}/enroll-high-intent")
+async def enroll_high_intent(campaign_id: str, tenant: dict = Depends(get_active_tenant)):
+    """One-click enrolment for all currently 'high intent' leads in the workspace.
+
+    A lead is high-intent if any of:
+      - tier == 'hot'
+      - status in {'high_intent', 'qualified', 'demo_booked'}
+      - aria_intent_score >= 70
+
+    Returns {enrolled, skipped, missing}. Same shape as POST /enroll.
+    """
+    _require_role(tenant, "owner", "admin", "member")
+    _require_campaign(tenant["id"], campaign_id)
+
+    step1 = _touchpoint_for_step(tenant["id"], campaign_id, 1)
+    if not step1:
+        raise HTTPException(
+            status_code=400,
+            detail="no_touchpoint_step_1: add step 1 to this campaign before enrolling.",
+        )
+
+    cur = leads_collection.find(
+        {
+            "tenant_id": tenant["id"],
+            "$or": [
+                {"tier": "hot"},
+                {"status": {"$in": ["high_intent", "qualified", "demo_booked"]}},
+                {"aria_intent_score": {"$gte": 70}},
+            ],
+        },
+        {"_id": 0, "id": 1},
+    ).limit(500)
+    contact_ids = [lead["id"] for lead in cur if lead.get("id")]
+
+    enrolled = 0
+    skipped = 0
+    for cid in contact_ids:
+        already = ccs_col.find_one({
+            "tenant_id": tenant["id"], "campaign_id": campaign_id, "contact_id": cid,
+        })
+        if already:
+            skipped += 1
+            continue
+        due_at = (_now() + timedelta(hours=int(step1.get("delay_hours") or 0))).isoformat()
+        ccs_col.insert_one({
+            "id": _new_id("ccs"),
+            "tenant_id": tenant["id"],
+            "campaign_id": campaign_id,
+            "contact_id": cid,
+            "current_step": 1,
+            "status": "active",
+            "tags": ["high_intent"],
+            "next_due_at": due_at,
+            "no_reply_target_step": None,
+            "no_reply_due_at": None,
+            "created_at": _now_iso(),
+            "last_action_at": _now_iso(),
+        })
+        enrolled += 1
+
+    return {"enrolled": enrolled, "skipped": skipped, "matched": len(contact_ids)}
+
+
 # ─── Send path + condition evaluator ────────────────────────────────────────
 async def _send_one(status_row: dict) -> Dict[str, Any]:
     """Fire the current touchpoint for one contact. Updates status_row state."""

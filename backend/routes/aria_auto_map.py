@@ -446,6 +446,55 @@ class ImprovePayload(BaseModel):
     handoff: Optional[Dict[str, Any]] = None
 
 
+@router.post("/diff")
+async def diff(payload: ImprovePayload, tenant: dict = Depends(get_active_tenant)):
+    """Compare the just-extracted preview against the workspace's CURRENT published
+    workflow (existing ICPs + current touchpoint map). Returns a human-readable
+    diff so the user can see exactly what would change if they re-publish.
+    """
+    tenant_id = tenant["id"]
+    # Current ICPs
+    current_icps = [_scrub(d) for d in icps_col.find({"tenant_id": tenant_id})]
+    current_icp_labels = {(i.get("label") or "").lower() for i in current_icps}
+
+    # Current touchpoint map
+    tmap = db["workspace_touchpoint_maps"].find_one({"tenant_id": tenant_id}, {"_id": 0}) or {}
+    current_tps = tmap.get("touchpoints", [])
+
+    new_icps = payload.icps or []
+    new_tps = payload.touchpoints or []
+
+    icp_changes = []
+    for icp in new_icps:
+        lab = (icp.get("label") or "").lower()
+        if lab and lab not in current_icp_labels:
+            icp_changes.append({"action": "create", "label": icp.get("label")})
+        else:
+            icp_changes.append({"action": "skip_exists", "label": icp.get("label")})
+
+    tp_diff = {
+        "current_count": len(current_tps),
+        "new_count": len(new_tps),
+        "delta": len(new_tps) - len(current_tps),
+        "current_channels": sorted({tp.get("channel") for tp in current_tps if tp.get("channel")}),
+        "new_channels": sorted({tp.get("channel") for tp in new_tps if tp.get("channel")}),
+        "new_with_conditions": sum(1 for tp in new_tps if tp.get("conditions")),
+        "current_with_conditions": sum(1 for tp in current_tps if tp.get("conditions")),
+    }
+
+    return {
+        "icp_changes": icp_changes,
+        "touchpoint_diff": tp_diff,
+        "summary": (
+            f"{sum(1 for c in icp_changes if c['action'] == 'create')} new ICP(s), "
+            f"{sum(1 for c in icp_changes if c['action'] == 'skip_exists')} already exist. "
+            f"Touchpoint count changes from {tp_diff['current_count']} → {tp_diff['new_count']} "
+            f"({'+' if tp_diff['delta'] >= 0 else ''}{tp_diff['delta']}). "
+            f"Branching coverage: {tp_diff['current_with_conditions']} → {tp_diff['new_with_conditions']} steps with conditions."
+        ),
+    }
+
+
 @router.post("/improve")
 async def improve(payload: ImprovePayload, tenant: dict = Depends(get_active_tenant)):
     """Send the workflow back to Claude and ask for gap analysis.

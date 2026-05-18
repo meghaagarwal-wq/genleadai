@@ -58,6 +58,9 @@ const LeadInbox = () => {
   const [page, setPage] = useState(0);
   const [engagementMap, setEngagementMap] = useState({});
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'all');
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set());
+  const [bulkEnrollOpen, setBulkEnrollOpen] = useState(false);
+  const [outreachCampaigns, setOutreachCampaigns] = useState([]);
   const [tabCounts, setTabCounts] = useState({});
   const limit = 20;
 
@@ -232,10 +235,55 @@ const LeadInbox = () => {
       )}
 
       <div className="bg-white border border-[#E8E0F5] rounded-xl overflow-hidden" style={{ boxShadow:'var(--shadow-card)' }} data-testid="leads-table">
+        {selectedLeadIds.size > 0 && (
+          <div data-testid="bulk-action-bar" className="px-4 py-3 bg-violet-50 border-b border-violet-200 flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-semibold text-violet-900">
+              {selectedLeadIds.size} lead{selectedLeadIds.size === 1 ? '' : 's'} selected
+            </span>
+            <button
+              type="button"
+              data-testid="bulk-enroll-btn"
+              onClick={async () => {
+                try {
+                  const r = await api.get('/api/outreach/campaigns');
+                  setOutreachCampaigns(r.data?.campaigns || []);
+                  setBulkEnrollOpen(true);
+                } catch (e) {
+                  toast.error('Could not load campaigns');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
+            >
+              Enroll in campaign…
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedLeadIds(new Set())}
+              className="text-xs text-slate-500 hover:text-slate-900"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead>
               <tr className="bg-[#F4F0FF]">
+                <th className="px-3 py-3 w-8" data-testid="th-select">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all on page"
+                    checked={leads.length > 0 && leads.every((l) => selectedLeadIds.has(l.id))}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const next = new Set(selectedLeadIds);
+                      if (e.target.checked) leads.forEach((l) => next.add(l.id));
+                      else leads.forEach((l) => next.delete(l.id));
+                      setSelectedLeadIds(next);
+                    }}
+                    data-testid="lead-select-all"
+                  />
+                </th>
                 {['Name','Company','Type','Status','ICP','Score','Aria','Channel','Next Best Action','Created'].map(h => (
                   <th key={h} data-testid={`th-${h.toLowerCase().replace(/\s+/g,'-')}`} className="px-6 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily:'Plus Jakarta Sans' }}>{h}</th>
                 ))}
@@ -243,14 +291,28 @@ const LeadInbox = () => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} className="px-6 py-12 text-center text-[#9B8AB0]">Loading...</td></tr>
+                <tr><td colSpan={11} className="px-6 py-12 text-center text-[#9B8AB0]">Loading...</td></tr>
               ) : leads.length === 0 ? (
-                <tr><td colSpan={10} className="px-6 py-12 text-center text-[#9B8AB0]">No leads found</td></tr>
+                <tr><td colSpan={11} className="px-6 py-12 text-center text-[#9B8AB0]">No leads found</td></tr>
               ) : leads.map(lead => {
                 const eng = engagementMap[lead.id];
                 const isHot = eng?.is_hot;
+                const isSelected = selectedLeadIds.has(lead.id);
                 return (
-                <tr key={lead.id} className={`border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors relative ${isHot ? 'bg-gradient-to-r from-[#FEE2E2]/30 to-transparent' : ''}`} onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
+                <tr key={lead.id} className={`border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors relative ${isHot ? 'bg-gradient-to-r from-[#FEE2E2]/30 to-transparent' : ''} ${isSelected ? 'bg-violet-50' : ''}`} onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
+                  <td className="px-3 py-4 w-8" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        const next = new Set(selectedLeadIds);
+                        if (next.has(lead.id)) next.delete(lead.id); else next.add(lead.id);
+                        setSelectedLeadIds(next);
+                      }}
+                      data-testid={`lead-select-${lead.id}`}
+                      aria-label={`Select ${lead.first_name}`}
+                    />
+                  </td>
                   {isHot && <td className="absolute left-0 top-0 bottom-0 w-1" style={{ background: 'linear-gradient(180deg, #DC2626 0%, #C044E0 100%)' }} aria-hidden="true"></td>}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
@@ -316,6 +378,72 @@ const LeadInbox = () => {
 
       {showAddModal && <AddLeadModal onClose={() => setShowAddModal(false)} onSuccess={() => { setShowAddModal(false); fetchLeads(); }} />}
       {showPushModal && <PushToSequenceModal leadIds={leads.map(l => l.id)} onClose={() => setShowPushModal(false)} onSuccess={() => { setShowPushModal(false); fetchLeads(); }} />}
+      {bulkEnrollOpen && (
+        <BulkEnrollModal
+          leadIds={Array.from(selectedLeadIds)}
+          campaigns={outreachCampaigns}
+          onClose={() => setBulkEnrollOpen(false)}
+          onSuccess={() => { setBulkEnrollOpen(false); setSelectedLeadIds(new Set()); }}
+        />
+      )}
+    </div>
+  );
+};
+
+const BulkEnrollModal = ({ leadIds, campaigns, onClose, onSuccess }) => {
+  const [selected, setSelected] = useState('');
+  const [busy, setBusy] = useState(false);
+  const enroll = async () => {
+    if (!selected) { toast.error('Pick a campaign first'); return; }
+    setBusy(true);
+    try {
+      const r = await api.post(`/api/outreach/campaigns/${selected}/enroll`, { contact_ids: leadIds });
+      toast.success(`Enrolled ${r.data.enrolled} · skipped ${r.data.skipped} (already enrolled)`);
+      onSuccess();
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      toast.error(typeof d === 'string' ? d : 'Enroll failed');
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" data-testid="bulk-enroll-modal">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-lg font-semibold text-slate-900">Enroll {leadIds.length} lead{leadIds.length === 1 ? '' : 's'} in a campaign</h2>
+          <p className="text-xs text-slate-500 mt-1">Aria will fire step 1 immediately and proceed through the sequence.</p>
+        </div>
+        <div className="px-6 py-5 space-y-3">
+          {campaigns.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No outreach campaigns yet. <a href="/outreach" className="text-violet-600 font-semibold">Create one →</a>
+            </p>
+          ) : (
+            <select
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+              data-testid="bulk-enroll-campaign-select"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
+            >
+              <option value="">Pick a campaign…</option>
+              {campaigns.filter((c) => c.status !== 'archived').map((c) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.status})</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-200">Cancel</button>
+          <button
+            type="button"
+            disabled={busy || !selected || campaigns.length === 0}
+            onClick={enroll}
+            data-testid="bulk-enroll-confirm"
+            className="px-5 py-2 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50"
+          >
+            {busy ? 'Enrolling…' : 'Enroll'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

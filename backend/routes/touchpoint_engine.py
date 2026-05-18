@@ -31,6 +31,12 @@ from deps import db
 from routes.tenants import get_active_tenant
 from routes.compliance import can_send_outbound
 
+# leads_collection is used by branch handler to tag leads on keyword match
+try:
+    from deps import leads_collection
+except ImportError:
+    leads_collection = db["leads"]
+
 log_col = db["lead_touchpoint_log"]
 maps_col = db["workspace_touchpoint_maps"]
 leads_col = db["leads"]
@@ -103,6 +109,131 @@ def pause_lead(tenant_id: str, lead_id: str) -> int:
         {"$set": {"status": "paused", "paused_at": _now_iso()}},
     )
     return r.modified_count
+
+
+def handle_inbound_reply_for_journey(tenant_id: str, lead_id: str, message_body: str) -> Dict[str, Any]:
+    """Iter 56 — Wire the 32-touchpoint journey's per-touchpoint conditions to fire
+    on real inbound replies.
+
+    Looks at the most recently fired/sent touchpoint for this lead. If it has
+    branching conditions, evaluates them and applies the branch:
+      - on_negative_keyword match → cancel all pending journey touchpoints
+      - on_keyword_match → tag lead + optionally jump to a specific touchpoint
+      - on_reply (generic) → notify_user / tag / move / stop
+    Tags land on the lead document, notifies create aria_alerts, and jumps
+    reshuffle the remaining pending touchpoints to fire from `target_step`.
+    """
+    body_lower = (message_body or "").lower()
+
+    # Find the most recently 'sent' touchpoint to evaluate against.
+    recent = log_col.find_one(
+        {"tenant_id": tenant_id, "lead_id": lead_id, "status": "sent"},
+        sort=[("fired_at", -1)],
+    )
+    if not recent:
+        return {"evaluated": False, "reason": "no_sent_touchpoint"}
+    conditions = recent.get("conditions") or {}
+    if not conditions:
+        return {"evaluated": False, "reason": "no_conditions"}
+
+    def _matches(kws):
+        return any(kw and kw in body_lower for kw in (kws or []))
+
+    def _patch_lead(tag=None):
+        if tag:
+            leads_collection.update_one(
+                {"id": lead_id, "tenant_id": tenant_id},
+                {"$addToSet": {"tags": tag}, "$set": {"last_tag_at": _now_iso()}},
+            )
+
+    def _stop_journey():
+        log_col.update_many(
+            {"tenant_id": tenant_id, "lead_id": lead_id, "status": {"$in": ["pending", "paused"]}},
+            {"$set": {"status": "cancelled", "cancelled_at": _now_iso(), "cancel_reason": "branch_stop"}},
+        )
+
+    def _alert(summary):
+        db["aria_alerts"].insert_one({
+            "tenant_id": tenant_id, "lead_id": lead_id,
+            "kind": "journey_branch_notify",
+            "summary": summary[:300],
+            "created_at": _now_iso(), "read": False,
+        })
+
+    def _move_to(target_step):
+        # Cancel remaining pending/paused, then re-instantiate from target onwards
+        log_col.update_many(
+            {"tenant_id": tenant_id, "lead_id": lead_id, "status": {"$in": ["pending", "paused"]}},
+            {"$set": {"status": "cancelled", "cancelled_at": _now_iso(), "cancel_reason": "branch_jump"},
+             "$unset": {"paused_at": ""}},
+        )
+        tmap = maps_col.find_one({"tenant_id": tenant_id})
+        if not tmap:
+            return
+        target_idx = int(target_step) - 1
+        if target_idx < 0:
+            return
+        start = _now()
+        new_rows = []
+        for tp in tmap.get("touchpoints", []):
+            if int(tp.get("index", 0)) < target_idx:
+                continue
+            new_rows.append({
+                "id": _new_id(),
+                "tenant_id": tenant_id,
+                "lead_id": lead_id,
+                "touchpoint_index": tp.get("index", 0),
+                "channel": tp.get("channel", "whatsapp"),
+                "message_type": tp.get("message_type", "intro"),
+                "aria_role": tp.get("aria_role", "autonomous"),
+                "message_template": tp.get("message_template", ""),
+                "conditions": tp.get("conditions") or {},
+                "scheduled_for": _scheduled_for(tp, start).isoformat(),
+                "status": "pending",
+                "fired_at": None,
+                "message_sent": None,
+                "retry_count": 0,
+                "created_at": _now_iso(),
+            })
+        if new_rows:
+            log_col.insert_many(new_rows)
+
+    # Priority: negative_keyword > keyword_match > on_reply
+    neg = conditions.get("on_negative_keyword")
+    if neg and _matches(neg.get("keywords")):
+        if neg.get("tag"):
+            _patch_lead(neg.get("tag"))
+        if neg.get("action") == "stop":
+            _stop_journey()
+        return {"evaluated": True, "branch": "on_negative_keyword", "action": neg.get("action")}
+
+    kw = conditions.get("on_keyword_match")
+    if kw and _matches(kw.get("keywords")):
+        if kw.get("tag"):
+            _patch_lead(kw.get("tag"))
+        action = kw.get("action")
+        if action == "stop":
+            _stop_journey()
+        elif action == "notify_user":
+            _alert(f"Lead replied with keyword on touchpoint {recent.get('touchpoint_index', 0) + 1}")
+        elif action == "move_to_step":
+            _move_to(kw.get("target_step", recent.get("touchpoint_index", 0) + 2))
+        return {"evaluated": True, "branch": "on_keyword_match", "action": action}
+
+    on_reply = conditions.get("on_reply")
+    if on_reply:
+        action = on_reply.get("action")
+        if on_reply.get("tag"):
+            _patch_lead(on_reply.get("tag"))
+        if action == "stop":
+            _stop_journey()
+        elif action == "notify_user":
+            _alert(f"Lead replied on touchpoint {recent.get('touchpoint_index', 0) + 1}")
+        elif action == "move_to_step":
+            _move_to(on_reply.get("target_step", recent.get("touchpoint_index", 0) + 2))
+        return {"evaluated": True, "branch": "on_reply", "action": action}
+
+    return {"evaluated": False, "reason": "no_branch_matched"}
 
 
 def resume_lead(tenant_id: str, lead_id: str) -> int:

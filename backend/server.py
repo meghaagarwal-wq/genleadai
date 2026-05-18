@@ -67,6 +67,7 @@ from routes.notifications import router as notifications_router
 from routes.icps import router as icps_router
 from routes.outreach import router as outreach_router, outreach_engine_loop, handle_inbound_reply as outreach_handle_reply
 from routes.aria_auto_map import router as aria_auto_map_router
+from routes.billing_upgrade import router as billing_upgrade_router
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -132,6 +133,7 @@ app.include_router(notifications_router)
 app.include_router(icps_router)
 app.include_router(outreach_router)
 app.include_router(aria_auto_map_router)
+app.include_router(billing_upgrade_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 
@@ -3857,6 +3859,12 @@ async def whatsapp_webhook_receive(request: Request):
                                 lead_id = candidate.get("id") or str(candidate.get("_id"))
                                 # Pause pending touchpoints (lead is engaging)
                                 pause_lead(tenant_id, lead_id)
+                                # Iter 56 — evaluate 32-journey branching conditions on reply
+                                try:
+                                    from routes.touchpoint_engine import handle_inbound_reply_for_journey
+                                    handle_inbound_reply_for_journey(tenant_id, lead_id, body)
+                                except Exception as _e:
+                                    print(f"[whatsapp] journey branch handler error: {_e}")
                                 # Outreach campaigns — evaluate conditions, cancel no_reply timers
                                 try:
                                     outreach_handle_reply(tenant_id, lead_id, body)

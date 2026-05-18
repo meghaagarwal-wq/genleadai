@@ -53,6 +53,7 @@ import TouchpointJourney from './pages/TouchpointJourney';
 import ICPManager from './pages/ICPManager';
 import OutreachCampaigns from './pages/OutreachCampaigns';
 import AISetupAssistant from './pages/AISetupAssistant';
+import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
 import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
 
@@ -262,6 +263,8 @@ function App() {
                         <Route path="/outreach" element={<OutreachCampaigns />} />
                         <Route path="/outreach/:campaignId" element={<OutreachCampaigns />} />
                         <Route path="/ai-setup" element={<AISetupAssistant />} />
+                        <Route path="/billing/success" element={<BillingSuccess />} />
+                        <Route path="/billing/cancel" element={<BillingCancel />} />
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                       <UpgradeModal />

@@ -20,6 +20,7 @@ export default function AISetupAssistant() {
   const navigate = useNavigate();
   const [stage, setStage] = useState('upload');     // upload | extracting | review | publishing | done
   const [extracted, setExtracted] = useState(null);
+  const [diff, setDiff] = useState(null);
   const [filename, setFilename] = useState(null);
   const [overwriteJourney, setOverwriteJourney] = useState(true);
   const [suggestions, setSuggestions] = useState([]);
@@ -43,6 +44,15 @@ export default function AISetupAssistant() {
       setExtracted(r.data?.extracted || null);
       setStage('review');
       toast.success(`Aria mapped ${r.data?.extracted?.touchpoints?.length || 0} touchpoints from your doc`);
+      // Fire-and-forget diff against current workspace state
+      try {
+        const d = await api.post('/api/aria/auto-map/diff', {
+          icps: r.data?.extracted?.icps || [],
+          touchpoints: r.data?.extracted?.touchpoints || [],
+          lead_sources: r.data?.extracted?.lead_sources || [],
+        });
+        setDiff(d.data);
+      } catch (_e) { /* diff is optional */ }
     } catch (e) {
       const d = e?.response?.data?.detail;
       const msg = typeof d === 'string' ? d : Array.isArray(d) ? d.map((x) => x?.msg).join('; ') : (e?.message || 'Aria could not analyze the document');
@@ -97,7 +107,7 @@ export default function AISetupAssistant() {
 
   const reset = () => {
     setStage('upload'); setExtracted(null); setFilename(null);
-    setSuggestions([]); setPublishResult(null);
+    setSuggestions([]); setPublishResult(null); setDiff(null);
   };
 
   return (
@@ -156,6 +166,7 @@ export default function AISetupAssistant() {
       {(stage === 'review' || stage === 'publishing') && extracted && (
         <ReviewPanel
           extracted={extracted}
+          diff={diff}
           onChange={setExtracted}
           onPublish={handlePublish}
           onAskAria={handleAskAria}
@@ -248,7 +259,7 @@ function ExtractingPanel({ filename }) {
 }
 
 // ─── STAGE 3: Review (editable cards) ───────────────────────────────────────
-function ReviewPanel({ extracted, onChange, onPublish, onAskAria, askingAria, suggestions, publishing, overwriteJourney, setOverwriteJourney, filename, onStartOver }) {
+function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAria, suggestions, publishing, overwriteJourney, setOverwriteJourney, filename, onStartOver }) {
   const updateField = (path, val) => {
     const next = JSON.parse(JSON.stringify(extracted));
     let ref = next;
@@ -272,6 +283,25 @@ function ReviewPanel({ extracted, onChange, onPublish, onAskAria, askingAria, su
           <X size={14} /> Start over
         </button>
       </div>
+
+      {/* Diff vs. current workspace */}
+      {diff && (diff.icp_changes?.length > 0 || diff.touchpoint_diff) && (
+        <div data-testid="auto-map-diff-card" className="bg-white border border-sky-200 bg-sky-50/40 rounded-2xl p-4 flex items-start gap-3">
+          <ChatTeardropDots size={18} weight="duotone" className="text-sky-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs text-slate-700">
+            <div className="text-[10px] uppercase tracking-wider text-sky-700 font-semibold mb-1">What will change if you publish</div>
+            <p>{diff.summary}</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {diff.icp_changes?.filter((c) => c.action === 'create').map((c, i) => (
+                <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">+ {c.label}</span>
+              ))}
+              {diff.icp_changes?.filter((c) => c.action === 'skip_exists').map((c, i) => (
+                <span key={`s${i}`} className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">= {c.label}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CARD 1: ICPs */}
       <Card
@@ -459,10 +489,13 @@ function DonePanel({ result, onStartOver, navigate }) {
         <button onClick={() => navigate('/icps')} className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
           <Target size={14} /> View ICPs
         </button>
-        <button onClick={onStartOver} className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
-          <UploadSimple size={14} /> Upload another
+        <button onClick={onStartOver} data-testid="auto-map-upload-another" className="inline-flex items-center gap-1.5 px-5 py-3 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">
+          <UploadSimple size={14} /> Upload another version
         </button>
       </div>
+      <p className="text-[10px] text-slate-500 mt-4">
+        Tip: when you upload a v2/v3 of your GTM doc, Aria's preview panel will let you see exactly what changed before re-publishing.
+      </p>
     </div>
   );
 }

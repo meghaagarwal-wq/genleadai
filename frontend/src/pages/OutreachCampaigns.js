@@ -328,6 +328,23 @@ function CampaignDetail({ campaignId }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={async () => {
+              try {
+                const r = await api.post(`/api/outreach/campaigns/${campaignId}/enroll-high-intent`);
+                toast.success(`Enrolled ${r.data.enrolled} high-intent leads (${r.data.skipped} already enrolled)`);
+                loadAnalytics();
+              } catch (e) {
+                const d = e?.response?.data?.detail;
+                toast.error(typeof d === 'string' ? d : 'Could not enroll high-intent leads');
+              }
+            }}
+            data-testid="outreach-enroll-high-intent-btn"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+          >
+            <Sparkle size={12} weight="fill" /> Enroll all High-Intent leads
+          </button>
+          <button
+            type="button"
             onClick={handlePauseToggle}
             data-testid="outreach-toggle-status-btn"
             className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border ${

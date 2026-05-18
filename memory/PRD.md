@@ -1,3 +1,75 @@
+## Iter 56 — Backlog clearance: Stripe upgrade + 32-journey live branches + bulk-enroll + doc diff (Feb 2026)
+
+**User intent:** Ship the full P1+P2 backlog in one go (option `a` — skipped only the server.py refactor): Stripe DIY→DWY upgrade, wire 32-journey conditions to fire on real replies, bulk enroll from Lead Inbox, "Enroll all High-Intent" one-click, and doc-version diff on the AI Setup Assistant.
+
+### Item 1 — Stripe DIY→DWY upgrade flow (revenue lever)
+
+**Backend** `routes/billing_upgrade.py` (new):
+- `GET /api/billing/upgrade-packages` — server-side price catalog so the frontend can never tamper with amounts. 3 SKUs: `diy_to_dwy` (₹12,999/mo), `diy_to_dfy` (₹29,999/mo), `dwy_to_dfy` (₹17,000/mo).
+- `POST /api/billing/checkout/session` — uses `emergentintegrations.payments.stripe.checkout.StripeCheckout` with `STRIPE_API_KEY=sk_test_emergent` from env. Validates package + current plan, builds success/cancel URLs from `origin_url` (never hardcoded), creates a `payment_transactions` row, returns the Stripe Checkout URL.
+- `GET /api/billing/checkout/status/{session_id}` — polled by the success-return page; idempotently flips `tenants.plan` on first 'paid' observation + writes an `audit_log` entry.
+- `POST /api/webhook/stripe` — webhook receiver with signature verification via `stripe.handle_webhook`; fires the same idempotent `_apply_plan_change` path so race-conditions are safe.
+
+**Frontend:**
+- `components/PlanUpgradeModal.js` (new) — violet gradient header, GST-invoice footer, INR-formatted amounts, 4-feature checkmark list, redirect-to-Stripe CTA.
+- `pages/BillingReturn.js` (new) — `/billing/success` polls status with 8 retry attempts (2s spacing) and shows a green confirmation card; `/billing/cancel` shows "no card was charged" copy.
+- `pages/ICPManager.js` — tier-limit banner now has an **"Upgrade now"** button (`icp-tier-upgrade-btn`) that opens the modal. Auto-opens the modal when "New ICP" is clicked after the cap. Catches backend `tier_limit_reached` 403 from save → opens modal automatically.
+- `App.js` — `/billing/success` + `/billing/cancel` routes mounted inside protected layout.
+
+### Item 2 — 32-touchpoint journey branches fire on real WhatsApp replies
+
+**Backend** `routes/touchpoint_engine.py`:
+- New `handle_inbound_reply_for_journey(tenant_id, lead_id, message_body)` — looks up the most recently `sent` `lead_touchpoint_log` row, reads its `conditions` JSON, evaluates branches in priority order (negative_keyword → keyword_match → on_reply):
+  - **stop** → bulk-cancels all pending/paused journey rows with `cancel_reason: branch_stop`.
+  - **tag_contact** → `$addToSet` tag onto the lead document.
+  - **notify_user** → inserts an `aria_alerts` row of kind `journey_branch_notify`.
+  - **move_to_step** → cancels remaining pending/paused rows then re-instantiates fresh rows from the target step forward (same scheduling as the original instantiate path).
+- `server.py::whatsapp_webhook_receive` — calls `handle_inbound_reply_for_journey()` right after `pause_lead()` and before `outreach_handle_reply()`, so a single inbound reply fires both the journey branches AND the outreach campaign branches.
+
+### Item 3 — Bulk enroll + "Enroll all High-Intent"
+
+**Backend** `routes/outreach.py`:
+- `POST /api/outreach/campaigns/{id}/enroll-high-intent` — finds every lead in the tenant where (`tier=='hot'` OR `status ∈ {high_intent,qualified,demo_booked}` OR `aria_intent_score ≥ 70`), enrols them into the campaign idempotently (caps at 500). Returns `{enrolled, skipped, matched}`. 400 with string detail if campaign has no step 1.
+
+**Frontend:**
+- `pages/LeadInbox.js` — added a checkbox column with a select-all-on-page checkbox. When ≥1 row is selected, a violet **bulk-action-bar** appears above the table with "Enroll in campaign…" + "Clear selection" buttons. Clicking opens a `BulkEnrollModal` that fetches active campaigns and lets the user pick one → POSTs to `/api/outreach/campaigns/{id}/enroll`. Test-ids: `bulk-action-bar`, `bulk-enroll-btn`, `bulk-enroll-modal`, `bulk-enroll-campaign-select`, `bulk-enroll-confirm`, `lead-select-{id}`, `lead-select-all`.
+- `pages/OutreachCampaigns.js` — campaign detail header now has a rose-tinted **"Enroll all High-Intent leads"** button (`outreach-enroll-high-intent-btn`) next to Pause/Resume. Calls the new endpoint, surfaces a toast with the count.
+
+### Item 4 — Doc-version diff on AI Setup Assistant
+
+**Backend** `routes/aria_auto_map.py`:
+- New `POST /api/aria/auto-map/diff` — compares the just-extracted preview against the workspace's current ICPs + current 32-touchpoint map. Returns `{icp_changes: [{action:create|skip_exists, label}], touchpoint_diff: {current_count, new_count, delta, channels...}, summary: "..." }`.
+
+**Frontend** `pages/AISetupAssistant.js`:
+- `/analyze` now fires `/diff` in the background after extraction. The Review panel surfaces a sky-tinted **"What will change if you publish"** card (`auto-map-diff-card`) showing the plain-English summary plus per-ICP chips (`+ Brand-new persona` in emerald for creates, `= Existing label` in slate for skips).
+- Done panel: the "Upload another" button is now **"Upload another version"** with a violet primary CTA + helper text *"when you upload a v2/v3 of your GTM doc, Aria's preview panel will let you see exactly what changed before re-publishing."*
+
+### Tests (`tests/test_iter56_upgrade_branches_bulk.py`) — 8/8 PASS
+- `test_upgrade_packages_catalog` — server-side amounts locked at ₹12,999 / inr / target=dwy.
+- `test_create_checkout_session_returns_stripe_url` — real Stripe API call returns a `cs_...` session id + `https://checkout.stripe.com/...` URL + writes `payment_transactions` row with `payment_status='initiated'`.
+- `test_invalid_package_rejected` — bogus package_id → 400 `invalid_package`.
+- `test_enroll_high_intent_creates_enrollments` — seeds 2 hot leads, calls `/enroll-high-intent`, asserts ≥2 enrolments + ccs rows.
+- `test_enroll_high_intent_400_when_no_step_1` — campaign without step 1 → 400 with string detail.
+- `test_journey_branch_keyword_match_stops_journey` — stages a sent touchpoint with `on_negative_keyword.stop`, fires `handle_inbound_reply_for_journey("please STOP, not interested")` → all 2 pending journey rows flipped to `cancelled`.
+- `test_journey_branch_no_match_returns_evaluated_false` — body that doesn't match any keyword → branch handler returns `evaluated: false`.
+- `test_auto_map_diff_returns_changes` — diff endpoint returns the expected shape + creates a `Brand-new persona` change row.
+
+**Cumulative: 39/39 pytest PASS across iter52, iter54, iter55, iter56.**
+
+### Smoke screenshot evidence
+- Forced demo tenant onto `plan: diy`, seeded 2 ICPs → /icps page → tier-limit banner shows with "Upgrade now" button → clicking it opens the violet-gradient PlanUpgradeModal with the DWY ₹12,999/mo card + 4 feature checkmarks + "Secured by Stripe · GST invoice" footer. Zero console errors.
+
+### Files added/modified
+- ADDED: `/app/backend/routes/billing_upgrade.py`, `/app/backend/tests/test_iter56_upgrade_branches_bulk.py`, `/app/frontend/src/components/PlanUpgradeModal.js`, `/app/frontend/src/pages/BillingReturn.js`
+- MODIFIED: `/app/backend/server.py` (billing_upgrade router + journey-branch handler wired into webhook), `/app/backend/routes/touchpoint_engine.py` (new `handle_inbound_reply_for_journey` + leads_collection import), `/app/backend/routes/outreach.py` (enroll-high-intent endpoint), `/app/backend/routes/aria_auto_map.py` (diff endpoint), `/app/frontend/src/App.js` (billing-return routes), `/app/frontend/src/pages/ICPManager.js` (banner CTA + modal wiring), `/app/frontend/src/pages/LeadInbox.js` (multi-select + bulk-enroll modal), `/app/frontend/src/pages/OutreachCampaigns.js` (enroll-high-intent button), `/app/frontend/src/pages/AISetupAssistant.js` (diff card + "Upload another version" CTA)
+
+### Skipped (intentional, per user's `a` choice)
+- ⚪ server.py (~5,200 lines) refactor. Pure plumbing, no user-facing value, high regression risk. Defer until something forces it.
+
+---
+
+
+
 ## Iter 55 — Flowchart view + AI Journey Auto Mapper (Feb 2026)
 
 **User intent:** Ship two big features back-to-back: (a) the 32-touchpoint journey should look like Expandi's branching flowchart, (b) full "AI Setup Assistant" that reads a GTM/ICP/strategy doc and auto-builds the whole workflow — ICPs, lead sources, touchpoints, conditional logic, qualification, handoff. User answered the planning question as `c, a, c` — ship both in one go, use React Flow, preview-then-publish.
