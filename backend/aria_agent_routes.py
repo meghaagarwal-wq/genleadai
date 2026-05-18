@@ -213,7 +213,8 @@ def _aria_agent_endpoints(app, get_current_user, db):
         last_name = lead.get("last_name") or ""
         company = lead.get("company_name") or "—"
         source = (lead.get("source_channel") or "—").replace("_", " ").title()
-        # Compact training snippet for the prompt
+        # White-label — workspace context Aria will speak from.
+        biz_name = (training.get("business_name") or training.get("company_name") or "").strip() if isinstance(training, dict) else ""
         training_snippet = ""
         if training:
             t = training
@@ -225,6 +226,7 @@ def _aria_agent_endpoints(app, get_current_user, db):
             objections = (t.get("pricing_objections") or t.get("trust_concerns") or "").strip()
             training_snippet = f"""
 WORKSPACE / FOUNDER CONTEXT (use for tone, framing, and language):
+- Business name (use THIS as the brand on every message — never 'GenLeadAI', never 'Aria as a platform'): {biz_name or '— not configured —'}
 - We sell: {sells or 'AI sales agent for founder-led businesses.'}
 - We sell to: {audience or 'Startups, agencies, consultants who cannot yet hire a sales team.'}
 - Problem we solve: {problem or 'Founders manually chasing leads, follow-ups slipping.'}
@@ -267,10 +269,19 @@ RECENT ACTIVITY (most recent first):
 {activities_text}
 """
 
+        # White-label — the system prompt must reflect THIS tenant's business,
+        # not the platform's. Otherwise every workspace's leads see "GenLeadAI"
+        # in the brief, which is the wrong brand for everyone except us.
+        tenant_business_name = (
+            (training.get("business_name") if isinstance(training, dict) else None)
+            or (training.get("company_name") if isinstance(training, dict) else None)
+            or "this business"
+        )
         system = (
-            "You are ARIA — an AI sales agent for GenLeadAI. You prepare founder briefs before sales calls. "
+            f"You are ARIA — an AI sales agent for {tenant_business_name}. You prepare founder briefs before sales calls. "
             "Your output must feel like a senior sales operator wrote it: specific, decisive, no fluff, no AI-speak. "
             "Never use phrases like 'as an AI' or 'I think'. Use the founder's voice. "
+            f"You ALWAYS represent {tenant_business_name} — never any other company, and never mention 'GenLeadAI' or 'Aria' as a platform. "
             "Tailor every section to THIS lead — no generic boilerplate."
         )
 
@@ -803,10 +814,16 @@ Make every word earn its place."""
         sp = onboarding_cfg.get("sales_process") or {}
 
         training_snippet = ""
+        # White-label — the brand name that goes into every drafted reply.
+        tenant_business_name = (
+            bp.get("business_name")
+            or (training.get("business_name") if isinstance(training, dict) else None)
+            or "this business"
+        )
         if training or onboarding_cfg:
             training_snippet = f"""
 WORKSPACE CONTEXT:
-- Business: {bp.get('business_name') or training.get('business_name') or 'GenLeadAI'}
+- Business name (use THIS as the brand on every message — never 'GenLeadAI', never 'Aria as a platform'): {tenant_business_name}
 - Industry: {bp.get('industry') or '—'}
 - We sell: {sp.get('product_description') or training.get('what_you_sell') or 'AI sales agent'}
 - Audience: {bp.get('primary_market') or training.get('who_you_sell_to') or '—'}
@@ -844,7 +861,8 @@ WORKSPACE CONTEXT:
         channel_hint = channel_limits.get(payload.channel, channel_limits["whatsapp"])
 
         system = (
-            "You are ARIA, an AI sales agent drafting outbound replies for GenLeadAI founders. "
+            f"You are ARIA, an AI sales agent drafting outbound replies on behalf of {tenant_business_name}. "
+            f"You ALWAYS represent {tenant_business_name} — never any other company, never 'GenLeadAI', never call yourself 'a platform'. "
             "You write like a seasoned sales operator — specific, confident, no AI-speak, no emoji spam, no 'I hope this finds you well'. "
             "Match the requested tone and channel exactly. Never explain the message or add commentary — just the message itself."
         )

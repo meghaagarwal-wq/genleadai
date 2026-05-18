@@ -747,16 +747,52 @@ async def execute_aria_action(lead_id: str, action: str, action_data: dict, mess
         # Send email via Resend
         if lead.get("email"):
             try:
-                founder_name = os.getenv("FOUNDER_NAME", "Megha")
-                company_name = os.getenv("COMPANY_NAME", "GenLeadAI")
+                # White-label: derive sender identity from THIS lead's tenant —
+                # never the platform-level env defaults. Hardcoded fallbacks
+                # like COMPANY_NAME=GenLeadAI used to leak into every tenant's
+                # outbound mail.
+                tenant_doc = {}
+                if lead.get("tenant_id"):
+                    try:
+                        tenant_doc = db["tenants"].find_one(
+                            {"id": lead["tenant_id"]}, {"_id": 0}) or {}
+                    except Exception:
+                        tenant_doc = {}
+                bp = (tenant_doc.get("settings") or {}).get("business_profile") or {}
+                persona_cfg = (tenant_doc.get("settings") or {}).get("aria_persona") or {}
+                onboarding = {}
+                try:
+                    if lead.get("tenant_id"):
+                        onboarding = db["onboarding_config"].find_one(
+                            {"tenant_id": lead["tenant_id"]}, {"_id": 0}) or {}
+                except Exception:
+                    onboarding = {}
+                ob_bp = onboarding.get("business_profile") or {}
+
+                company_name = (
+                    (bp.get("business_name") or "").strip()
+                    or (ob_bp.get("business_name") or "").strip()
+                    or (tenant_doc.get("name") or "").strip()
+                    or "the team"
+                )
+                founder_name = (
+                    (bp.get("founder_name") or "").strip()
+                    or (ob_bp.get("founder_name") or "").strip()
+                    or (tenant_doc.get("owner_name") or "").strip()
+                    or "the founder"
+                )
+                aria_label = (
+                    (persona_cfg.get("aria_name") or "").strip()
+                    or os.getenv("ARIA_PERSONA_NAME", "Aria")
+                )
                 html_body = f"""
                 <div style="font-family: -apple-system, sans-serif; max-width: 600px;">
                     <p>{message.replace(chr(10), '<br>')}</p>
                     <br>
-                    <p style="color: #666;">Best,<br>{os.getenv('ARIA_PERSONA_NAME', 'Aria')}<br>
+                    <p style="color: #666;">Best,<br>{aria_label}<br>
                     Assistant to {founder_name}, {company_name}</p>
                 </div>"""
-                
+
                 params = {
                     "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
                     "to": [lead["email"]],

@@ -1,3 +1,64 @@
+## Iter 65 — White-label fix: Aria stops calling herself "GenLeadAI's agent" (Feb 2026)
+
+### Reported issue
+> "Aria is acting like or sending the first touch as GenLeadAI's agent when it has to speak as a Pietential agent. The white-labeling needs to be done."
+
+### Root cause
+Multiple Claude system prompts across the codebase had hardcoded `"GenLeadAI"` / `COMPANY_NAME=GenLeadAI` references (the platform brand) — every tenant was getting **identical prompts telling Claude they represent GenLeadAI**. Even tenants who set their `business_profile.business_name` to "Pietential" or "Acme Inc" had Claude saying "I'm Aria from GenLeadAI" because Claude was never told otherwise.
+
+Specific offenders found by `grep -rn "GenLeadAI" /app/backend`:
+1. `aria_agent.py` — `get_aria_system_prompt()` was a no-arg function reading global `COMPANY_NAME`/`FOUNDER_NAME` env vars. This is the **master prompt every Aria conversation uses**.
+2. `aria_agent.py:341` — exception fallback message: `"Thanks for reaching out to {COMPANY_NAME}"`.
+3. `aria_agent_routes.py:271` — founder brief system prompt: `"You are ARIA — an AI sales agent for GenLeadAI"`.
+4. `aria_agent_routes.py:809` — `"Business: ... or 'GenLeadAI'"` fallback default in workspace context block.
+5. `aria_agent_routes.py:847` — outbound reply drafter system: `"drafting outbound replies for GenLeadAI founders"`.
+6. `server.py:686-708` — `SEND_EMAIL` handler: `founder_name = os.getenv("FOUNDER_NAME", "Megha")` + `company_name = os.getenv("COMPANY_NAME", "GenLeadAI")` → every email signed `"Assistant to Megha, GenLeadAI"` regardless of tenant.
+7. `routes/touchpoint_engine.py:251` — main outbound message renderer used `biz_name = tenant.get("name")` (the workspace name, not the actual business name from onboarding).
+
+### Fix
+**Single principle applied everywhere:**
+- Always prefer `tenant.settings.business_profile.business_name` (founder-configured during onboarding).
+- Fall back to `tenant.name` (workspace name).
+- Env defaults (`COMPANY_NAME`, `FOUNDER_NAME`) are last resort — and in the main `SEND_EMAIL` handler we removed them entirely.
+
+**`aria_agent.py`:**
+- `get_aria_system_prompt(tenant=None)` — now takes the tenant dict, resolves business name + founder name + Aria's persona name from `settings.business_profile` and `settings.aria_persona`.
+- Added an explicit **"Brand integrity" block** in the prompt: *"You ALWAYS represent {company_name}. Never mention any other company by name as your employer. Never say 'GenLeadAI' unless that IS literally the company name above. Never call yourself 'a platform'."* — gives Claude a hard rail even if a stray reference slips through future code.
+- `run_aria_agent()` — fetches the tenant from `db["tenants"]` using `lead.tenant_id` before constructing the chat, passes it through to `get_aria_system_prompt(tenant_doc)`.
+- Exception fallback also white-labeled.
+
+**`aria_agent_routes.py`:**
+- Founder brief system prompt now takes `tenant_business_name` derived from `training.business_name` → "this business".
+- Outbound reply drafter system prompt + workspace context block both now read `bp.business_name → training.business_name → "this business"` (NEVER "GenLeadAI").
+- Both prompts include the same anti-leakage rule.
+
+**`server.py` (`SEND_EMAIL` handler):**
+- Fetches the tenant doc + onboarding config using `lead.tenant_id`.
+- Builds sender identity entirely from `business_profile.business_name` + `business_profile.founder_name` + `aria_persona.aria_name`.
+- Subject line + signature both use the tenant's company name.
+- Env defaults removed from this path.
+
+**`routes/touchpoint_engine.py`:**
+- `_render_with_claude()` — `biz_name` now reads from `settings.business_profile.business_name` first (with same anti-leakage rule in the system prompt).
+- `_heuristic_render()` — same precedence applied to the `{{company}}` token substitution.
+
+### Testing — `tests/test_iter65_white_label.py`
+4/4 pass:
+1. Pietential tenant → prompt contains "Pietential", "Riya", no "represent GenLeadAI" or "from GenLeadAI" phrases. Anti-leakage rule present.
+2. No business_profile → falls back to tenant.name (NOT env COMPANY_NAME).
+3. Touchpoint heuristic renderer with business_profile set → `{{company}}` resolves to "Pietential", not workspace name, not "GenLeadAI".
+4. Touchpoint heuristic renderer without business_profile → falls back to tenant.name.
+
+### Full regression
+**106/106 tests pass** across iters 51-65 (~86s). Zero regressions.
+
+### Action items for user
+- Make sure your **Pietential workspace has `business_profile.business_name` set** to "Pietential" (Onboarding step 1 OR Settings → Workspace). If it's blank, the fallback uses `tenant.name` which may still be wrong.
+- **Redeploy** to production to push the fix live.
+
+---
+
+
 ## Iter 64 — Fix #2 for auto-mapper: switch to Claude Haiku 4.5 (Feb 2026)
 
 ### Reported issue (after Iter 63 redeploy)

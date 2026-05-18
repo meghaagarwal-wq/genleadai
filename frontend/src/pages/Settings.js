@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt, Megaphone } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt, Megaphone, Buildings } from '@phosphor-icons/react';
+import { toast } from 'sonner';
+import PageHeader from '../components/PageHeader';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
 import AvatarPicker from '../components/AvatarPicker';
 import CrmSettingsTab from '../components/CrmSettingsTab';
@@ -10,6 +12,79 @@ import NotificationsTab from '../components/settings/NotificationsTab';
 import BillingAddressTab from '../components/settings/BillingAddressTab';
 import SalesChannelsTab from '../components/settings/SalesChannelsTab';
 import AuditLogPanel from '../components/AuditLogPanel';
+
+/**
+ * Workspace ID card — shows the active tenant ID with a one-click copy.
+ * Lives at the top of the Workspace tab because it's the answer to
+ * "where do I find my tenant id for the webhook URL?".
+ */
+const WorkspaceIdCard = ({ tenantId: tenantIdProp }) => {
+  const [tenantId, setTenantId] = useState(tenantIdProp || '');
+  const [copied, setCopied] = useState(false);
+
+  // Resolve tenant id from multiple sources (props → active_tenant → /me).
+  useEffect(() => {
+    if (tenantIdProp) { setTenantId(tenantIdProp); return; }
+    try {
+      const raw = localStorage.getItem('active_tenant');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.id) { setTenantId(parsed.id); return; }
+      }
+    } catch (_e) { /* ignore */ }
+    // Fallback — ask the backend
+    api.get('/api/auth/me').then((r) => {
+      const u = r.data?.user || r.data || {};
+      const id = u?.tenants?.[0]?.id || u?.tenant_id || u?.active_tenant_id;
+      if (id) setTenantId(id);
+    }).catch(() => {});
+  }, [tenantIdProp]);
+
+  const id = tenantId || '—';
+  const copy = async () => {
+    if (!tenantId) return;
+    try {
+      await navigator.clipboard.writeText(tenantId);
+      setCopied(true);
+      toast.success('Workspace ID copied');
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error('Could not copy');
+    }
+  };
+  return (
+    <div
+      className="bg-white border border-[#E8E0F5] rounded-2xl p-5 flex items-start justify-between gap-4 flex-wrap"
+      style={{ boxShadow: 'var(--shadow-card)' }}
+      data-testid="workspace-id-card"
+    >
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
+          <Buildings size={18} weight="duotone" />
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-[#7C35DC] mb-0.5">Workspace ID</div>
+          <h3 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your tenant identifier</h3>
+          <p className="text-xs text-[#5A4A7A] mt-0.5 max-w-md">
+            Paste this anywhere a webhook setup asks for <code className="text-violet-700 bg-violet-50 px-1 py-0.5 rounded text-[11px] font-mono">&lt;your-tenant-id&gt;</code> — for example in the Saleshandy or Lemlist integration URL.
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <code data-testid="workspace-id-value" className="px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono text-[#1A0A2E] select-all">{id}</code>
+        <button
+          type="button"
+          onClick={copy}
+          disabled={!tenantId}
+          data-testid="workspace-id-copy"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-slate-800 disabled:opacity-40"
+        >
+          {copied ? <><CheckCircle size={12} weight="fill" /> Copied</> : <><Copy size={12} weight="bold" /> Copy</>}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const Settings = () => {
   const { user } = useAuth();
@@ -264,14 +339,19 @@ const Settings = () => {
   };
 
   return (
-    <div data-testid="settings-page" className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
-        <p className="text-sm text-[#A3A3A3] mt-1">Team, AI agent, and workspace configuration</p>
-      </div>
+    <div data-testid="settings-page" className="space-y-6 max-w-[1300px] mx-auto pb-12">
+      <PageHeader
+        eyebrow="Workspace controls"
+        title="Settings"
+        subtitle="Team, ARIA agent, integrations, billing, and everything that makes your sales OS yours."
+      />
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#141414] border border-[#262626] rounded-lg p-1 w-fit" data-testid="settings-tabs">
+      <div
+        className="flex gap-1 flex-wrap p-1 bg-white border border-[#E8E0F5] rounded-2xl w-fit max-w-full overflow-x-auto"
+        style={{ boxShadow: 'var(--shadow-card)' }}
+        data-testid="settings-tabs"
+      >
         {[
           { id: 'team', label: 'Team', icon: User },
           { id: 'aria', label: 'ARIA Agent', icon: Robot },
@@ -289,10 +369,15 @@ const Settings = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab.id ? (tab.id === 'aria' ? 'bg-[#8B5CF6] text-white' : 'bg-[#0055FF] text-white') : 'text-[#A3A3A3] hover:text-white'}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold uppercase tracking-wider whitespace-nowrap transition-all ${
+              activeTab === tab.id
+                ? 'bg-gradient-to-r from-[#7C35DC] to-[#C044E0] text-white shadow-sm'
+                : 'text-[#5A4A7A] hover:bg-[#F4F0FF] hover:text-[#7C35DC]'
+            }`}
+            style={{ fontFamily: 'Plus Jakarta Sans' }}
             data-testid={`settings-tab-${tab.id}`}
           >
-            <tab.icon size={16} /> {tab.label}
+            <tab.icon size={13} weight="duotone" /> {tab.label}
           </button>
         ))}
       </div>
@@ -893,6 +978,8 @@ const Settings = () => {
             </div>
           </div>
 
+          <WorkspaceIdCard tenantId={user?.tenants?.[0]?.id || user?.tenant_id} />
+
           <WorkspaceSettingsSection />
           <DemoVideoSection />
           <WhatsAppProviderSection />
@@ -916,32 +1003,32 @@ const Settings = () => {
             </button>
           </div>
 
-          <div className="bg-[#141414] border border-[#262626] rounded-lg p-4 flex items-center justify-between" data-testid="limits-link">
+          <div className="bg-white border border-[#E8E0F5] rounded-2xl p-4 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="limits-link">
             <div>
-              <div className="text-sm font-semibold text-white">Plan limits & scope</div>
-              <div className="text-xs text-[#737373]">Active leads, team seats, what Aria does and doesn't.</div>
+              <div className="text-sm font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Plan limits & scope</div>
+              <div className="text-xs text-[#5A4A7A]">Active leads, team seats, what Aria does and doesn't.</div>
             </div>
             <a href="/limits" data-testid="settings-view-limits"
-              className="px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-[0.14em] bg-[#0055FF] text-white hover:bg-[#0044CC]">
-              View plan limits & scope →
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-extrabold uppercase tracking-wider bg-gradient-to-r from-[#7C35DC] to-[#C044E0] text-white hover:opacity-90">
+              View plan limits →
             </a>
           </div>
 
-          <div className="bg-[#141414] border border-[#262626] rounded-lg p-6" data-testid="api-keys-section">
-            <h3 className="text-lg font-semibold text-white mb-4">API Configuration</h3>
-            <div className="space-y-3">
+          <div className="bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="api-keys-section">
+            <h3 className="text-base font-extrabold text-[#1A0A2E] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>API configuration</h3>
+            <div className="space-y-2">
               {[
                 { name: 'AI Scoring (Claude API)', desc: 'Managed Claude API key', connected: true },
                 { name: 'Email (Resend)', desc: 'Transactional email service', connected: true },
                 { name: 'Calendly', desc: 'Meeting booking integration', connected: true },
                 { name: 'Object Storage', desc: 'Managed object storage', connected: true },
               ].map(item => (
-                <div key={item.name} className="flex items-center justify-between p-3 bg-[#0A0A0A] rounded-lg">
+                <div key={item.name} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <div>
-                    <div className="text-sm font-medium text-white">{item.name}</div>
-                    <div className="text-xs text-[#737373]">{item.desc}</div>
+                    <div className="text-sm font-bold text-[#1A0A2E]">{item.name}</div>
+                    <div className="text-xs text-[#5A4A7A]">{item.desc}</div>
                   </div>
-                  <span className={`px-2 py-0.5 text-xs font-medium uppercase tracking-wider rounded-sm border ${item.connected ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30' : 'bg-[#FF3B30]/10 text-[#FF3B30] border-[#FF3B30]/30'}`}>
+                  <span className={`px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider rounded-full border ${item.connected ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                     {item.connected ? 'Connected' : 'Not configured'}
                   </span>
                 </div>

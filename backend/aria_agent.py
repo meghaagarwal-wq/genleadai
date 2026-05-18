@@ -152,25 +152,54 @@ async def create_scheduling_link(event_type_uri: str, lead_name: str = None, lea
     return None
 
 # ─── ARIA Agent System Prompt ───
-def get_aria_system_prompt():
-    return f"""You are {ARIA_NAME}, a warm, intelligent sales assistant for {COMPANY_NAME}. You represent {FOUNDER_NAME} personally. Your job is to have genuine, helpful conversations with potential clients — not to pitch aggressively.
+def get_aria_system_prompt(tenant: Optional[Dict[str, Any]] = None):
+    """Build the master Aria conversation prompt. ALWAYS tenant-aware so
+    the bot represents THIS workspace's business, not the platform.
+
+    Fall-back order for each field:
+      tenant.settings.business_profile.business_name
+      → tenant.settings.business_profile.legal_name
+      → tenant.name
+      → env COMPANY_NAME (last resort, may be the platform brand)
+    """
+    bp = ((tenant or {}).get("settings") or {}).get("business_profile") or {}
+    persona = ((tenant or {}).get("settings") or {}).get("aria_persona") or {}
+    company_name = (
+        (bp.get("business_name") or "").strip()
+        or (bp.get("legal_name") or "").strip()
+        or ((tenant or {}).get("name") or "").strip()
+        or COMPANY_NAME
+    )
+    founder_name = (
+        (bp.get("founder_name") or "").strip()
+        or ((tenant or {}).get("owner_name") or "").strip()
+        or FOUNDER_NAME
+    )
+    aria_name = (persona.get("aria_name") or "").strip() or ARIA_NAME
+
+    return f"""You are {aria_name}, a warm, intelligent sales assistant for {company_name}. You represent {founder_name} personally. Your job is to have genuine, helpful conversations with potential clients — not to pitch aggressively.
+
+CRITICAL — Brand integrity:
+- You ALWAYS represent {company_name}. Never mention any other company by name as your employer.
+- Never say "GenLeadAI" unless that IS literally the company name above.
+- Never call yourself "a platform" or "an AI sales platform" — you are {founder_name}'s assistant at {company_name}.
 
 Your goals in order:
 1. Make the lead feel heard and valued
 2. Understand their situation (budget, timeline, pain point)
 3. Determine if they are a good fit
-4. If fit → book a 20-minute discovery call on {FOUNDER_NAME}'s calendar
+4. If fit → book a 20-minute discovery call on {founder_name}'s calendar
 5. If not fit → politely disqualify and close gracefully
 
 Rules:
-- Never say you are an AI unless directly asked. If asked, say: "I'm {ARIA_NAME}, {FOUNDER_NAME}'s assistant — I help with initial conversations before connecting you with her directly."
+- Never say you are an AI unless directly asked. If asked, say: "I'm {aria_name}, {founder_name}'s assistant — I help with initial conversations before connecting you with them directly."
 - Never send more than 2 unprompted messages to any lead
 - Keep messages short: 3-5 sentences max per message
 - Match the lead's tone and energy
 - Never spam. Never pressure. Never lie.
 - If a lead says stop/unsubscribe/not interested → immediately recommend marking as do not contact
 - Use Indian Standard Time for meeting slots unless lead is clearly in another timezone
-- Never share pricing — that's {FOUNDER_NAME}'s job
+- Never share pricing — that's {founder_name}'s job
 - Never handle payment or contract discussions
 
 When you need to take an action, describe it clearly in your response. Available actions:
@@ -200,10 +229,21 @@ async def run_aria_agent(lead: dict, conversation_history: list, incoming_messag
         touch_type: 'first_touch', 'followup', or None for reply processing
     """
     try:
+        # Resolve tenant for white-labelling — Aria must speak as the tenant's
+        # business, not the platform. We lazy-import the Mongo client so this
+        # module stays cheap to import.
+        tenant_doc = None
+        if lead.get("tenant_id"):
+            try:
+                from deps import db as _db
+                tenant_doc = _db["tenants"].find_one({"id": lead["tenant_id"]}, {"_id": 0})
+            except Exception as _e:
+                logger.warning(f"[aria] tenant lookup failed: {_e}")
+
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"aria_{lead.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}",
-            system_message=get_aria_system_prompt()
+            system_message=get_aria_system_prompt(tenant_doc)
         )
         chat.with_model("anthropic", "claude-4-sonnet-20250514")
         
@@ -297,8 +337,15 @@ Respond with JSON: {{"message": "...", "action": "NONE|UPDATE_STATUS|BOOK_MEETIN
     
     except Exception as e:
         logger.error(f"ARIA agent error: {e}")
+        # Fallback message — also white-labeled if we have the tenant context
+        bp = ((tenant_doc or {}).get("settings") or {}).get("business_profile") or {}
+        fallback_company = (
+            (bp.get("business_name") or "").strip()
+            or ((tenant_doc or {}).get("name") or "").strip()
+            or "us"
+        )
         return {
-            "message": f"Hi {lead.get('first_name', 'there')}! Thanks for reaching out to {COMPANY_NAME}. I'd love to learn more about what you're working on. What's the biggest growth challenge you're facing right now?",
+            "message": f"Hi {lead.get('first_name', 'there')}! Thanks for reaching out to {fallback_company}. I'd love to learn more about what you're working on. What's the biggest growth challenge you're facing right now?",
             "action": "NONE",
             "action_data": {},
             "error": str(e)

@@ -261,8 +261,15 @@ async def _render_with_claude(tenant: dict, lead: dict, tp_row: dict) -> Optiona
         return None
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
-        biz_name = tenant.get("name") or "the team"
         biz = (tenant.get("settings") or {}).get("business_profile") or {}
+        # White-label: prefer the founder-configured business_name from onboarding.
+        # Fall back to the workspace name only if onboarding wasn't completed.
+        # NEVER let "GenLeadAI" (the platform brand) leak into a tenant's outbound.
+        biz_name = (
+            (biz.get("business_name") or "").strip()
+            or (tenant.get("name") or "").strip()
+            or "the team"
+        )
         industry = biz.get("industry") or "B2B"
         persona = (tenant.get("settings") or {}).get("aria_persona") or {}
         tone = persona.get("tone") or "friendly_professional"
@@ -292,8 +299,10 @@ async def _render_with_claude(tenant: dict, lead: dict, tp_row: dict) -> Optiona
             print(f"[engine] icp context fetch failed: {_e}")
 
         system = (
-            f"You are {aria_name}, AI sales assistant for {biz_name} ({industry}). Tone: {tone}. "
-            "Output ONLY the message body. No preamble, markdown, quotes."
+            f"You are {aria_name}, AI sales assistant for {biz_name} (industry: {industry}). "
+            f"You ALWAYS represent {biz_name} — never mention 'GenLeadAI', never call yourself a platform, "
+            f"never say 'I am an AI from <other company>'. Sign off as {biz_name} only. "
+            f"Tone: {tone}. Output ONLY the message body. No preamble, markdown, quotes."
         )
         user_msg = (
             f"Lead first name: {first_name}\nProduct/service: {product}\n"
@@ -317,7 +326,13 @@ def _heuristic_render(tenant: dict, lead: dict, tp_row: dict) -> str:
     first_name = (lead.get("name") or "").split()[0] if lead.get("name") else "there"
     persona = (tenant.get("settings") or {}).get("aria_persona") or {}
     aria_name = persona.get("aria_name") or "Aria"
-    biz_name = tenant.get("name") or "our team"
+    # White-label: prefer the founder-configured business_name; never default to the platform brand.
+    biz_profile = (tenant.get("settings") or {}).get("business_profile") or {}
+    biz_name = (
+        (biz_profile.get("business_name") or "").strip()
+        or (tenant.get("name") or "").strip()
+        or "our team"
+    )
     product = ((tenant.get("settings") or {}).get("sales_process") or {}).get("product_description") or "our offering"
     return (
         msg.replace("{{first_name}}", first_name)
