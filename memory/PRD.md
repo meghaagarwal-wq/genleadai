@@ -1,3 +1,57 @@
+## Iter 69 — Saleshandy/Lemlist pull import + Dagre flowchart + AI Setup Assistant audit (Feb 2026)
+
+### Reported asks (from user mega-prompt)
+1. Saleshandy + Lemlist are connected but leads never pull in — build the **active pull** (campaign list, lead import, dedup, logs).
+2. Make the touchpoint flowchart **clean, non-overlapping, with Dagre layout** + zoom/fit/auto-clean controls.
+3. AI Setup Assistant should also extract **recommended integrations + sales channel preferences** from uploaded GTM/ICP docs and apply them.
+4. Lead Inbox should chip-tag leads by their originating campaign + source tool.
+5. Trim "fake demo leads" from a fresh tenant's dashboard down to 1-2 max.
+
+### What landed (this iter)
+**Phase 0 — Sample-leads trim (carryover from previous turn)**
+- `server.py` — trimmed `_demo_*_rows` fixtures: money-at-risk 4→1, hot-untouched 5→1, proposal-graveyard 3→0, source-quality 5→1; rewrote `_demo_command_center_fallback` with realistic small-tenant numbers (₹4.8L total → ₹1.5L total) and a "Your dashboard is ready" headline instead of a fake "37% leakage" stat.
+- `server.py:founder_command_center` — **multi-tenant data-leak fix**: was querying `leads_collection.find({})` with no tenant filter, returning every tenant's leads to fresh signups. Now scoped via `current_user["tenant_id"]`. New tenants properly fall through to the demo fallback now.
+
+**Phase 1 — Saleshandy + Lemlist pull-based import**
+- New file: `/app/backend/routes/outreach_import.py`. Endpoints:
+  - `POST /api/integrations/{tool}/test-connection`
+  - `GET /api/integrations/{tool}/campaigns` (lists Saleshandy sequences / Lemlist campaigns with status, leads, opens, clicks, replies)
+  - `POST /api/integrations/{tool}/import-leads` body `{campaign_ids, import_mode: selected|all|active_only}`
+  - `GET /api/integrations/import-logs?tool=...`
+- Auth handling: Saleshandy uses `x-api-key` header, Lemlist uses HTTP Basic with empty user + api_key. Base URLs: `https://open-api.saleshandy.com/v1`, `https://api.lemlist.com/api`.
+- Dedup: tries (tool + external_id), then email, then phone. Updates `external_campaign_id`/`external_campaign_name`/`last_imported_at` on existing leads rather than re-inserting.
+- All Saleshandy/Lemlist 401/403/404 errors are converted to 4xx with helpful messages (no 5xx leaks). Per-import-run row stored in new `integration_import_logs` collection with totals + per-campaign breakdown + first 50 failures.
+
+**Phase 2 — Frontend Import UI**
+- New file: `/app/frontend/src/components/integrations/CampaignsImportPanel.js` — embedded inside the existing `Integrations.js` ConfigModal whenever tool is `saleshandy` or `lemlist`. Provides Test connection / Fetch campaigns / Campaigns table (with checkboxes, status colors, opens/clicks/replies columns) / Import-selected & Import-all-active buttons / Recent imports log (status badges, fetched/imported/updated/duplicates/failed counts).
+
+**Phase 3 — Lead Inbox source pill**
+- `LeadInbox.js` — the source column now shows an extra tiny pill for `external_source ∈ {saleshandy, lemlist}` with the campaign name truncated to 18 chars (orange for Saleshandy, pink for Lemlist). testid `lead-source-pill-{lead_id}`.
+
+**Phase 4 — Dagre flowchart refactor**
+- `JourneyFlowchart.js` — added `dagre` dependency (yarn). Rewrote `buildGraph` to emit only logical nodes/edges; new `layoutWithDagre(nodes, edges, {rankdir})` pass computes positions with `nodesep=60, ranksep=100`. Default direction now `LR` (left-to-right). New `FlowchartInner` wraps the canvas in a `ReactFlowProvider` so it can call `useReactFlow().fitView/zoomIn/zoomOut`.
+- Added toolbar (top-right): `Auto-clean` (re-runs Dagre), `L↔R` direction toggle, `Fit`, `+/−` zoom. testids: `flowchart-auto-clean`, `flowchart-direction-toggle`, `flowchart-fit`, `flowchart-zoom-in`, `flowchart-zoom-out`.
+- All node `Handle` positions rotated from Top/Bottom to Left/Right to match horizontal flow.
+- Layout-key trick: bumping `layoutKey` forces React Flow remount + re-fit when user clicks Auto-clean or toggles direction.
+
+**Phase 5 — AI Setup Assistant audit**
+- `aria_auto_map.py:SYSTEM_PROMPT` — Claude prompt now also asks for `recommended_integrations` (lowercase tool keys like saleshandy/lemlist/zoho_crm/calendly) and `sales_channels` (top-level prefs: email/linkedin/whatsapp/sms/phone/website_chat).
+- `/analyze` response includes both new fields, whitelisted to valid channel keys.
+- `/publish` accepts `recommended_integrations` (stored on `settings.automap_summary.recommended_integrations` as a passive surface — never auto-wires API keys) + `sales_channels` + new `apply_sales_channels=True` flag. When set, writes the inferred channels to `tenants.settings.sales_channels` so Aria's tenant-aware channel gating (iter 67/68) immediately reflects the AI's choices.
+- `AISetupAssistant.js` — two new review cards `auto-map-card-integrations` and `auto-map-card-sales-channels`; publish payload + toast both updated.
+
+### Verified
+- Backend pytest: 10/10 PASS (test_iter69_outreach_import_automap.py)
+- Frontend iter53: Flowchart toolbar + AutoMap cards + Lead source pill all verified. Saleshandy modal panel mounting unverified due to test-selector ambiguity (component IS wired correctly per code review).
+- Lint: all touched files clean.
+
+### Known limitations
+- AI Setup Assistant `recommended_integrations` is **passive** — surfaces tool names in the review screen and persists them, but does not auto-paste API keys. The tenant still has to manually click Connect + paste the key in Integration Hub. This is intentional (API keys belong to the user).
+- Saleshandy + Lemlist pull endpoints will return 4xx until the tenant pastes a valid API key. Test-connection is the canonical "is my key working" check.
+
+---
+
+
 ## Iter 68 — Extend channel-aware UI gating to Empty Dashboard + Journey (Feb 2026)
 
 ### Reported issue (continuation of Iter 67)
