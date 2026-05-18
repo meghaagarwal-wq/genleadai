@@ -1,3 +1,61 @@
+## Iter 58 — Billing profile, seller GST overrides, founder upgrade notifications, CSV export, production-readiness panel (Feb 2026)
+
+**User intent (chain `a → b → c → d → e`):** Complete every code-implementable item from the post-Iter-57 backlog so the only remaining "launch checklist" items are user-action (domain verification, live Stripe key, GSTIN registration).
+
+### Backend — `/app/backend/routes/billing_profile.py` (new)
+- `GET /api/billing/tenant-info` / `PUT /api/billing/tenant-info` — per-tenant billing address (legal_name, billing_state, billing_gstin, billing_email, billing_address). Owner/Admin only. Stored under `tenants.settings.billing.*`.
+- `GET /api/admin/seller-profile` / `PUT /api/admin/seller-profile` — platform-wide seller GST profile + founder notify email + Slack webhook URL. Master admin only. DB-stored on `platform_config` with `key=seller_profile`, **takes precedence over env**, so GSTIN can be filled without redeploy.
+- `GET /api/admin/production-readiness` — returns 5 checks (resend, stripe, gstin, founder_email, slack) each with `status ∈ {green,yellow,red}` + a detail string, plus an `overall` rollup. Resend status looks at the last 50 `email_delivery_log` rows to detect test-mode forwarding.
+- `GET /api/billing/invoices/export.csv` — streams a CA-friendly CSV with 16 columns including base/CGST/SGST/IGST/total/buyer-GSTIN/session-id. Owner/Admin only.
+
+### Backend — `/app/backend/invoicing.py` (updated)
+- `issue_invoice_for_transaction` now reads the effective seller profile from `routes.billing_profile.get_seller_profile()` (DB override → env fallback), and the buyer's state/GSTIN/billing email from `tenants.settings.billing`. Karnataka buyers now correctly get **CGST 9% + SGST 9%** instead of defaulting to IGST.
+- `_build_pdf` adds a buyer GSTIN line to the header block.
+- New `_notify_founder_on_upgrade(tx, invoice, pdf, seller)`:
+  - Computes a rough new-MRR (sums notional plan prices across all paying tenants).
+  - Emails the configured founder address with subject `💸 New {PLAN} upgrade — ₹{amt} · {workspace}`, invoice PDF attached.
+  - Posts a Slack message to the configured incoming webhook (`hooks.slack.com/...`) with the same data.
+  - Wrapped in try/except so notification failures never block plan flip or invoice issuance.
+
+### Backend — `/app/backend/server.py`
+- Imports + registers `billing_profile_router`.
+
+### Frontend
+- `components/settings/BillingAddressTab.js` (new) — Settings → **Billing** tab. Legal name, billing email, GSTIN, state dropdown (all 36 Indian states/UTs), address textarea. Informational chip explains IGST vs CGST/SGST behaviour. Wired in via `Settings.js` (`settings-tab-billing-info`).
+- `components/admin/BillingConfigTab.js` (new) — Master Admin → **Billing config** tab. Two stacked panels:
+  - Production Readiness — 5 status rows with green/yellow/red pills + actionable detail text, "Almost there"/"Production ready"/"Not ready" overall pill, refresh button.
+  - Seller GST profile form — name, GSTIN, state, state code, billing email, founder notify email, Slack webhook, address. Saves to DB, takes effect on next invoice immediately.
+- `pages/Invoices.js` — added an **"Export all (CSV)"** button (`invoices-export-csv`) in the page header that streams the CA CSV.
+
+### Testing — `tests/test_iter58_billing_profile.py`
+9/9 tests pass. Coverage:
+1. `GET /api/billing/tenant-info` returns a dict on fresh tenant.
+2. `PUT /api/billing/tenant-info` persists & round-trips.
+3. Intra-state buyer (Karnataka → Karnataka) → CGST + SGST > 0, IGST == 0.
+4. Inter-state buyer (Maharashtra → Karnataka) → IGST > 0, CGST/SGST == 0.
+5. `GET /api/admin/seller-profile` returns env defaults.
+6. `PUT /api/admin/seller-profile` overrides → `get_seller_profile()` reflects new value.
+7. `/api/admin/production-readiness` returns all 5 checks + `overall` rollup.
+8. CSV export contains the expected columns + the seeded invoice row.
+9. Founder notification — `send_email_safe` called with `purpose=founder_upgrade_notify` + invoice PDF attachment, AND Slack webhook posted (mocked `urlopen`).
+
+### Full regression
+**72/72 tests pass** across iters 51, 52, 54, 55, 56, 57, 58 (~73s). No regressions.
+
+### Frontend smoke (verified via Playwright)
+- Master Admin → Billing config tab renders with all 5 readiness checks + correct env-derived statuses (founder email auto-detected as `meghaagarwaljain2015@gmail.com` — green; Resend yellow due to 38 forwarded test-mode emails; Stripe yellow due to `sk_test_emergent`; GSTIN yellow; Slack yellow).
+- Settings → Billing tab renders the BillingAddressTab body.
+- Invoices page CSV export wired (button appears once invoices exist).
+
+### Remaining (user action — not code)
+- Verify Resend production domain at resend.com/domains → set `SENDER_EMAIL=noreply@<verified>`.
+- Switch `STRIPE_API_KEY` to `sk_live_...` when ready for live cards.
+- Fill seller GSTIN in Master Admin → Billing config (no redeploy needed — DB override).
+- Optionally add a Slack incoming webhook for revenue pings.
+
+---
+
+
 ## Iter 57 — GST Invoice Auto-Generation + Invoices Page Wiring (Feb 2026)
 
 **User intent:** Wrap the Stripe upgrade loop with compliant Indian B2B billing — every successful payment must produce a GST-compliant PDF invoice, persist it, email it to the buyer, and expose a downloadable history. Then make sure the page is actually reachable.

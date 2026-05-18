@@ -112,6 +112,7 @@ def _build_pdf(invoice: Dict[str, Any]) -> bytes:
         f"Workspace: {invoice.get('tenant_id','')}",
         f"Email: {invoice.get('buyer_email','')}",
         f"State: {invoice.get('buyer_state') or 'Not provided'}",
+        f"GSTIN: {invoice.get('buyer_gstin') or '— not provided —'}",
     ]
     meta_lines = [
         f"<b>Invoice No:</b> {invoice['invoice_no']}",
@@ -213,13 +214,34 @@ def issue_invoice_for_transaction(tx: Dict[str, Any]) -> Optional[Dict[str, Any]
         if existing:
             return {k: v for k, v in existing.items() if k != "_id"}
 
-        # Seller info from env
-        seller_state_code = os.getenv("GST_SELLER_STATE_CODE", "29")
-        # Lookup buyer info
-        tenant = db["tenants"].find_one({"id": tx["tenant_id"]}, {"_id": 0}) or {}
-        buyer_state = (tenant.get("settings", {}) or {}).get("billing_state") or tenant.get("state")
-        # If buyer didn't disclose state OR state != seller state → IGST
-        is_inter_state = not buyer_state or buyer_state.lower() != os.getenv("GST_SELLER_STATE", "Karnataka").lower()
+        # Pull effective seller profile (DB override > env). Imported lazily
+        # to avoid a circular import (billing_profile -> tenants -> deps ...).
+        try:
+            from routes.billing_profile import get_seller_profile, get_tenant_billing
+            seller = get_seller_profile()
+            tenant = db["tenants"].find_one({"id": tx["tenant_id"]}, {"_id": 0}) or {}
+            buyer_billing = get_tenant_billing(tenant)
+        except Exception:
+            seller = {
+                "seller_name": os.getenv("GST_SELLER_NAME", "GenLeadAI Technologies Pvt Ltd"),
+                "seller_address": os.getenv("GST_SELLER_ADDRESS", "Bengaluru, Karnataka, India"),
+                "seller_state": os.getenv("GST_SELLER_STATE", "Karnataka"),
+                "seller_state_code": os.getenv("GST_SELLER_STATE_CODE", "29"),
+                "seller_gstin": os.getenv("GST_SELLER_GSTIN", ""),
+                "seller_email": os.getenv("GST_SELLER_EMAIL") or os.getenv("SENDER_EMAIL") or "billing@genleadai.com",
+                "slack_webhook_url": "",
+                "founder_notify_email": os.getenv("MASTER_ADMIN_EMAIL") or "",
+            }
+            tenant = db["tenants"].find_one({"id": tx["tenant_id"]}, {"_id": 0}) or {}
+            buyer_billing = (tenant.get("settings") or {}).get("billing") or {}
+
+        buyer_state = (buyer_billing.get("billing_state") or "").strip() or tenant.get("state")
+        buyer_gstin = (buyer_billing.get("billing_gstin") or "").strip()
+        invoice_to_email = (buyer_billing.get("billing_email") or "").strip() or tx.get("user_email") or ""
+        legal_name = (buyer_billing.get("legal_name") or "").strip() or tenant.get("name") or "Customer"
+
+        # Inter-state if buyer didn't disclose state OR state != seller state
+        is_inter_state = not buyer_state or buyer_state.lower() != (seller["seller_state"] or "").lower()
 
         split = _split_gst(float(tx["amount"]), is_inter_state=is_inter_state)
         invoice_no, fy, seq = _next_invoice_number()
@@ -233,15 +255,16 @@ def issue_invoice_for_transaction(tx: Dict[str, Any]) -> Optional[Dict[str, Any]
             "tenant_id": tx["tenant_id"],
             "session_id": tx.get("session_id"),
             "tx_id": tx.get("id"),
-            "buyer_name": tenant.get("name") or "Customer",
-            "buyer_email": tx.get("user_email") or "",
+            "buyer_name": legal_name,
+            "buyer_email": invoice_to_email,
             "buyer_state": buyer_state or "",
-            "seller_name": os.getenv("GST_SELLER_NAME", "GenLeadAI Technologies Pvt Ltd"),
-            "seller_address": os.getenv("GST_SELLER_ADDRESS", "Bengaluru, Karnataka, India"),
-            "seller_state": os.getenv("GST_SELLER_STATE", "Karnataka"),
-            "seller_state_code": seller_state_code,
-            "seller_gstin": os.getenv("GST_SELLER_GSTIN") or "",
-            "seller_email": os.getenv("GST_SELLER_EMAIL") or os.getenv("SENDER_EMAIL") or "billing@genleadai.com",
+            "buyer_gstin": buyer_gstin,
+            "seller_name": seller["seller_name"],
+            "seller_address": seller["seller_address"],
+            "seller_state": seller["seller_state"],
+            "seller_state_code": seller["seller_state_code"],
+            "seller_gstin": seller["seller_gstin"],
+            "seller_email": seller["seller_email"],
             "item_description": f"Subscription — {tx.get('plan_target', '').upper()} plan (monthly)",
             "hsn_code": "998314",
             "currency": tx.get("currency", "inr").upper(),
@@ -275,7 +298,69 @@ def issue_invoice_for_transaction(tx: Dict[str, Any]) -> Optional[Dict[str, Any]
                     "content": pdf,
                 }],
             )
+
+        # Founder notification — cha-ching alert with invoice PDF + MRR delta.
+        # Never fails the invoice flow.
+        try:
+            _notify_founder_on_upgrade(tx=tx, invoice=invoice, pdf=pdf, seller=seller)
+        except Exception as e:
+            print(f"[invoice] founder notify skipped: {e}")
+
         return {k: v for k, v in invoice.items() if k != "_id"}
     except Exception as e:
         print(f"[invoice] generation failed for tx {tx.get('id')}: {e}")
         return None
+
+
+def _notify_founder_on_upgrade(*, tx: dict, invoice: dict, pdf: bytes, seller: dict) -> None:
+    """Email the founder + (optional) Slack ping on every successful upgrade."""
+    founder_email = seller.get("founder_notify_email") or ""
+    slack_url = seller.get("slack_webhook_url") or ""
+
+    # Compute a rough MRR delta — count active paid tenants and sum their notional plan prices.
+    plan_prices = {"dwy": 12999.0, "dfy": 29999.0, "diy": 1499.0}
+    paid_tenants = list(db["tenants"].find(
+        {"plan": {"$in": ["dwy", "dfy", "diy"]}}, {"_id": 0, "plan": 1, "id": 1}))
+    new_mrr = sum(plan_prices.get(t.get("plan", "diy"), 0.0) for t in paid_tenants)
+
+    summary_html = (
+        f"<p><b>💸 New upgrade.</b></p>"
+        f"<ul style='line-height:1.7'>"
+        f"<li><b>Workspace:</b> {invoice.get('buyer_name','—')} ({tx.get('tenant_id','')})</li>"
+        f"<li><b>Buyer:</b> {tx.get('user_email','')}</li>"
+        f"<li><b>Plan:</b> {tx.get('plan_from','')} → <b>{tx.get('plan_target','').upper()}</b></li>"
+        f"<li><b>Amount:</b> ₹ {tx.get('amount',0):.2f} ({tx.get('currency','INR').upper()})</li>"
+        f"<li><b>Invoice:</b> {invoice['invoice_no']}</li>"
+        f"<li><b>Est. total MRR:</b> ₹ {new_mrr:,.0f} across {len(paid_tenants)} paying workspaces</li>"
+        f"</ul>"
+        f"<p>Invoice PDF is attached.</p>"
+    )
+    if founder_email:
+        send_email_safe(
+            to_email=founder_email,
+            subject=f"💸 New {tx.get('plan_target','').upper()} upgrade — ₹{tx.get('amount',0):,.0f} · {invoice.get('buyer_name','')}",
+            html=summary_html,
+            purpose="founder_upgrade_notify",
+            attachments=[{
+                "filename": f"{invoice['invoice_no'].replace('/', '-')}.pdf",
+                "content": pdf,
+            }],
+        )
+
+    if slack_url:
+        try:
+            import urllib.request, urllib.error, json as _json
+            text = (
+                f":moneybag: *New {tx.get('plan_target','').upper()} upgrade — ₹{tx.get('amount',0):,.0f}*\n"
+                f"• Workspace: *{invoice.get('buyer_name','—')}* (`{tx.get('tenant_id','')}`)\n"
+                f"• Buyer: {tx.get('user_email','')}\n"
+                f"• Plan: {tx.get('plan_from','')} → *{tx.get('plan_target','').upper()}*\n"
+                f"• Invoice: `{invoice['invoice_no']}`\n"
+                f"• Est. total MRR: ₹ {new_mrr:,.0f} across {len(paid_tenants)} workspaces"
+            )
+            data = _json.dumps({"text": text}).encode("utf-8")
+            req = urllib.request.Request(
+                slack_url, data=data, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=5).read()
+        except Exception as e:
+            print(f"[invoice] slack notify failed: {e}")

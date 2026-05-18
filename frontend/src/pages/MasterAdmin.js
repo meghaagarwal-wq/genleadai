@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ChartLineUp, ShieldCheck, Users, Heartbeat, Clock } from '@phosphor-icons/react';
+import { ChartLineUp, ShieldCheck, Users, Heartbeat, Clock, Receipt } from '@phosphor-icons/react';
 import RevenueTab from '../components/admin/RevenueTab';
 import WorkspacesTab from '../components/admin/WorkspacesTab';
 import HealthMonitorTab from '../components/admin/HealthMonitorTab';
@@ -8,6 +8,7 @@ import TrialExpiriesTab from '../components/admin/TrialExpiriesTab';
 import PlatformStatsTab from '../components/admin/PlatformStatsTab';
 import ContactRequestsTab from '../components/admin/ContactRequestsTab';
 import AuditLogAdminTab from '../components/admin/AuditLogAdminTab';
+import BillingConfigTab from '../components/admin/BillingConfigTab';
 
 const TABS = [
   { key: 'revenue', label: 'Revenue', icon: ChartLineUp, component: RevenueTab },
@@ -17,6 +18,7 @@ const TABS = [
   { key: 'platform-stats', label: 'Platform Stats', icon: ChartLineUp, component: PlatformStatsTab },
   { key: 'contact-requests', label: 'Contact Inbox', icon: Users, component: ContactRequestsTab },
   { key: 'audit-log', label: 'Audit Log', icon: Heartbeat, component: AuditLogAdminTab },
+  { key: 'billing-config', label: 'Billing config', icon: Receipt, component: BillingConfigTab },
 ];
 
 const MasterAdmin = () => {

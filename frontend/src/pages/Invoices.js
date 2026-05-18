@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, DownloadSimple, Receipt } from '@phosphor-icons/react';
+import { FileText, DownloadSimple, Receipt, FileCsv } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import api from '../config/api';
 
 export default function Invoices() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     api.get('/api/billing/invoices')
@@ -28,12 +29,43 @@ export default function Invoices() {
     }
   };
 
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const r = await api.get('/api/billing/invoices/export.csv', { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `genleadai-invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Invoice CSV exported');
+    } catch (e) {
+      toast.error('Could not export CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div data-testid="invoices-page" className="max-w-5xl mx-auto px-6 py-8">
-      <div className="mb-6">
-        <p className="text-xs uppercase tracking-[0.18em] text-violet-600 font-semibold mb-2">Billing</p>
-        <h1 className="text-3xl font-semibold text-slate-900 mb-1">Tax invoices</h1>
-        <p className="text-slate-600 text-sm">GST-compliant PDFs for every plan upgrade. Download any time for filing.</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-violet-600 font-semibold mb-2">Billing</p>
+          <h1 className="text-3xl font-semibold text-slate-900 mb-1">Tax invoices</h1>
+          <p className="text-slate-600 text-sm">GST-compliant PDFs for every plan upgrade. Download any time for filing.</p>
+        </div>
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exporting}
+            data-testid="invoices-export-csv"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
+          >
+            <FileCsv size={14} weight="duotone" /> {exporting ? 'Exporting…' : 'Export all (CSV)'}
+          </button>
+        )}
       </div>
 
       {loading ? (
