@@ -21,6 +21,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/api';
 import { CheckCircle, Circle, X, Sparkle, ArrowRight } from '@phosphor-icons/react';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
 
 const STORAGE_KEY = 'aria.setup_checklist.dismissed';
 
@@ -28,6 +29,7 @@ const SetupChecklist = () => {
   const navigate = useNavigate();
   const [signals, setSignals] = useState(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(STORAGE_KEY) === '1');
+  const { isEnabled, hasPrefs } = useChannelEnabled();
 
   useEffect(() => {
     if (dismissed) return;
@@ -61,9 +63,23 @@ const SetupChecklist = () => {
 
   if (dismissed || !signals) return null;
 
+  // Tailor the "connect a lead source" copy to the channels the founder
+  // actually picked — saying "plug in WhatsApp" to an email-only seller is
+  // confusing and feels off-brand for their flow.
+  const sourceHint = (() => {
+    if (!hasPrefs) return 'Plug in WhatsApp, your website form, Meta/Google Ads or a CRM.';
+    const parts = [];
+    if (isEnabled('email')) parts.push('Gmail / Outlook');
+    if (isEnabled('whatsapp')) parts.push('WhatsApp Business API');
+    if (isEnabled('linkedin')) parts.push('Lemlist or PhantomBuster');
+    if (isEnabled('sms') || isEnabled('phone')) parts.push('Twilio / Exotel');
+    if (parts.length === 0) parts.push('your website form, Meta/Google Ads or a CRM');
+    return `Plug in ${parts.slice(0, 2).join(', ')}${parts.length > 2 ? ' or a CRM' : ''}.`;
+  })();
+
   const steps = [
     { key: 'trained',      done: signals.trained,      label: 'Train Aria',                  sub: 'Tell Aria what you sell, who you sell to, and what makes you different.', to: '/aria-agent/train' },
-    { key: 'integrations', done: signals.integrations, label: 'Connect a lead source',       sub: 'Plug in WhatsApp, your website form, Meta/Google Ads or a CRM.',         to: '/integrations' },
+    { key: 'integrations', done: signals.integrations, label: 'Connect a lead source',       sub: sourceHint,                                                                 to: '/integrations' },
     { key: 'touchpoints',  done: signals.touchpoints,  label: 'Customize the 32-touchpoint journey', sub: 'Aria will run leads through this sequence automatically.',     to: '/touchpoint-journey' },
     { key: 'calendar',     done: signals.calendar,     label: 'Set your calendar link',       sub: 'So Aria can book qualified leads onto your calendar.',                  to: '/aria-agent/train' },
     { key: 'leads',        done: signals.leads,        label: 'Add or import a lead',         sub: 'Test Aria with one real lead before going live.',                       to: '/leads' },

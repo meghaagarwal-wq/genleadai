@@ -1,3 +1,36 @@
+## Iter 67 — Hide WhatsApp UI for tenants that didn't pick WhatsApp (Feb 2026)
+
+### Reported issue
+> "If a person chooses email, linkedin as their channel, remove WhatsApp-related things from their dashboard to avoid confusion and vice versa."
+
+### Fix
+**New hook — `hooks/useChannelEnabled.js`:**
+- Reads `/api/tenant/sales-channels` once and caches at module scope (deduped concurrent fetches).
+- Returns `isEnabled(channelKey)` → `true` if the channel is selected, OR if no prefs are saved yet (back-compat for fresh tenants).
+- Exposes `invalidateChannelCache()` so widgets re-render the instant a user saves new prefs in Settings.
+
+**Wired into 3 high-leverage surfaces:**
+
+1. **`AriaTodayWidget.js`** — Each KPI tile now declares `channel` (`'whatsapp'`, `'email'`, `'phone'`, or `null` for always-show). The grid filters `.filter(tile => !tile.channel || isEnabled(tile.channel))` — so an Email+LinkedIn tenant sees only the Emails + Wins tiles, never the WhatsApps tile.
+2. **`LeadOptInBanner.js`** — The yellow "WhatsApp opt-in pending" banner now returns `null` if `isEnabled('whatsapp') === false`. Opt-in is a WhatsApp compliance construct; showing it on email-only workflows was pure noise.
+3. **`SetupChecklist.js`** — The "Connect a lead source" step's sub-copy is now dynamic. Old: *"Plug in WhatsApp, your website form, Meta/Google Ads or a CRM."* New for an Email+LinkedIn tenant: *"Plug in Gmail / Outlook, Lemlist or PhantomBuster or a CRM."*
+
+**Wired into the onboarding flow:**
+4. **`OnboardingWizard.js`** — A `useEffect` watches the step counter. When the wizard reaches step 5 (WhatsApp setup), if the user didn't pick WhatsApp on step 3 (Sales Channels), it auto-skips to step 6 (Team), pre-fills `whatsapp.compliance_agreed=true` + `whatsapp.skipped=true` so the final submit doesn't reject, and shows a toast *"Skipping WhatsApp setup — you didn't pick WhatsApp as a channel."* Email-first founders no longer have to click through an irrelevant WhatsApp Provider screen.
+
+**Cache invalidation:**
+- `components/settings/SalesChannelsTab.js` — after PUT succeeds, calls `invalidateChannelCache()` so the next render of any widget across the app re-fetches preferences. No page reload required.
+
+### Smoke verified
+- Saved USA B2B SaaS preset (Email + LinkedIn + Phone, NO WhatsApp) via Settings → reloaded Dashboard → confirmed no "WhatsApps" tile in the rendered HTML.
+- Frontend compiles clean (1 unrelated warning).
+
+### Why the back-compat default matters
+`isEnabled('whatsapp')` returns `true` when no prefs are saved → existing tenants who haven't opened the Sales Channels tab keep seeing everything, no regression. Only once a tenant explicitly commits to a channel set do the tiles filter down.
+
+---
+
+
 ## Iter 66 — Outbound emails silently dropping in test mode (Feb 2026)
 
 ### Reported issue

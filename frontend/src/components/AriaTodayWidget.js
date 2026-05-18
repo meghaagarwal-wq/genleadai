@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Phone, EnvelopeSimple, WhatsappLogo, Trophy, Fire, Sun, Lightning } from '@phosphor-icons/react';
 import api from '../config/api';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
 
 const MOMENTUM_TONE = {
   strong: { label: 'STRONG DAY', accent: '#16A34A', bg: 'rgba(22,163,74,0.12)', border: 'rgba(22,163,74,0.25)' },
@@ -8,16 +9,20 @@ const MOMENTUM_TONE = {
   quiet:  { label: 'QUIET DAY',  accent: '#D97706', bg: 'rgba(217,119,6,0.12)',  border: 'rgba(217,119,6,0.30)' },
 };
 
+// Each tile is wired to a sales-channel preference key. If the tenant didn't
+// pick that channel, the tile is hidden — avoids "WhatsApps: 0" guilt for
+// founders who never selected WhatsApp as a channel.
 const KPI_TILES = [
-  { key: 'calls',      label: 'Calls',      icon: Phone,         color: '#7C35DC' },
-  { key: 'emails',     label: 'Emails',     icon: EnvelopeSimple, color: '#7C35DC' },
-  { key: 'whatsapps',  label: 'WhatsApps',  icon: WhatsappLogo,   color: '#16A34A' },
-  { key: 'wins',       label: 'Wins',       icon: Trophy,         color: '#16A34A' },
+  { key: 'calls',      label: 'Calls',      icon: Phone,          color: '#7C35DC', channel: 'phone' },
+  { key: 'emails',     label: 'Emails',     icon: EnvelopeSimple, color: '#7C35DC', channel: 'email' },
+  { key: 'whatsapps',  label: 'WhatsApps',  icon: WhatsappLogo,   color: '#16A34A', channel: 'whatsapp' },
+  { key: 'wins',       label: 'Wins',       icon: Trophy,         color: '#16A34A', channel: null /* always shown */ },
 ];
 
 const AriaTodayWidget = () => {
   const [today, setToday] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { isEnabled } = useChannelEnabled();
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +78,7 @@ const AriaTodayWidget = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-5 pb-3">
-        {KPI_TILES.map(tile => {
+        {KPI_TILES.filter(tile => !tile.channel || isEnabled(tile.channel)).map(tile => {
           const Icon = tile.icon;
           const value = t[tile.key] || 0;
           return (

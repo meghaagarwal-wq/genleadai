@@ -2,17 +2,21 @@ import React, { useEffect, useState } from 'react';
 import api from '../config/api';
 import { toast } from 'sonner';
 import { ShieldCheck, ShieldWarning } from '@phosphor-icons/react';
+import { useChannelEnabled } from '../hooks/useChannelEnabled';
 
 /**
- * LeadOptInBanner — yellow warning banner shown when a lead has not opted in.
- * Includes two actions: "Mark as opted in" (manual confirm) and "Send opt-in
- * request" (queues an opt-in prompt via the touchpoint engine — for now we
- * just call a placeholder endpoint that creates an activity log).
+ * LeadOptInBanner — yellow warning banner shown when a lead has not opted in
+ * to WhatsApp messaging. Only relevant for tenants who actually use WhatsApp
+ * as a follow-up channel.
  */
 const LeadOptInBanner = ({ lead, onUpdated }) => {
   const [loading, setLoading] = useState(false);
+  const { isEnabled, isLoading: prefsLoading } = useChannelEnabled();
 
   if (!lead) return null;
+  // Hide entirely if the tenant didn't pick WhatsApp — opt-in is a WhatsApp
+  // compliance construct, irrelevant for email-only / linkedin-only flows.
+  if (!prefsLoading && !isEnabled('whatsapp')) return null;
   const isOptedIn = !!lead.opted_in;
 
   if (isOptedIn) {

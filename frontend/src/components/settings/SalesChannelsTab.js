@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { FloppyDisk, Megaphone } from '@phosphor-icons/react';
 import api from '../../config/api';
 import SalesChannelsPicker from '../onboarding/SalesChannelsPicker';
+import { invalidateChannelCache } from '../../hooks/useChannelEnabled';
 
 /**
  * Settings → Sales Channels — Edit channel preferences post-onboarding.
@@ -34,6 +35,9 @@ export default function SalesChannelsTab() {
       setValue(r.data.preferences);
       const recR = await api.get('/api/tenant/sales-channels/recommendations');
       setRecs(recR.data);
+      // Drop the channel-prefs cache so widgets across the app re-fetch and
+      // the WhatsApp tile / banner appears/disappears immediately.
+      invalidateChannelCache();
       toast.success('Sales channel preferences saved. Aria will use these for follow-ups.');
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Could not save');

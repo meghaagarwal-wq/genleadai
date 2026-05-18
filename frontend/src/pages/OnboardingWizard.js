@@ -38,8 +38,7 @@ const QUAL_CRITERIA = [
 const DEFAULT_PIPELINE = ['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost'];
 
 const OnboardingWizard = () => {
-  const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState(0);  const [saving, setSaving] = useState(false);
   const [tenantName, setTenantName] = useState('');
   const [submitError, setSubmitError] = useState(null);
   const [touchpointSaved, setTouchpointSaved] = useState(false);
@@ -83,6 +82,24 @@ const OnboardingWizard = () => {
   }, []);
 
   const update = (section, patch) => setForm((p) => ({ ...p, [section]: { ...p[section], ...patch } }));
+
+  // Auto-skip the WhatsApp step (#5) if the user did NOT pick WhatsApp as a
+  // sales channel. Same logic for "Lead Journey" (#4) — only relevant if at
+  // least one channel was picked, but channels are required to advance step 3
+  // so this is always true here.
+  useEffect(() => {
+    if (step !== 5) return;
+    const selected = form.channels?.selected_channels || [];
+    if (selected.length > 0 && !selected.includes('whatsapp')) {
+      // Pre-mark whatsapp config as compliance-agreed = true so the final
+      // submit doesn't reject. We're not collecting credentials anyway since
+      // they don't use the channel.
+      setForm((p) => ({ ...p, whatsapp: { ...p.whatsapp, compliance_agreed: true, skipped: true } }));
+      setStep(6);
+      toast.message('Skipping WhatsApp setup — you didn\'t pick WhatsApp as a channel.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const toggleQual = (id) => {
     const cur = form.sales.qualification_criteria;
