@@ -71,8 +71,13 @@ def send_email_safe(
     html: str,
     reply_to: Optional[str] = None,
     purpose: str = "generic",
+    attachments: Optional[list] = None,
 ) -> DeliveryResult:
-    """Best-effort email send with test-mode fallback. Never raises."""
+    """Best-effort email send with test-mode fallback. Never raises.
+
+    attachments: list of dicts like
+        {"filename": "invoice.pdf", "content": <bytes>}
+    """
     api_key = os.getenv("RESEND_API_KEY")
     sender = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
     if not api_key:
@@ -84,6 +89,14 @@ def send_email_safe(
     params = {"from": sender, "to": [to_email], "subject": subject, "html": html}
     if reply_to:
         params["reply_to"] = reply_to
+    if attachments:
+        # Resend expects {filename, content (base64 OR bytes)}.
+        import base64
+        params["attachments"] = [
+            {"filename": a["filename"],
+             "content": base64.b64encode(a["content"]).decode() if isinstance(a.get("content"), (bytes, bytearray)) else a["content"]}
+            for a in attachments
+        ]
 
     # 1. Try the real send.
     try:

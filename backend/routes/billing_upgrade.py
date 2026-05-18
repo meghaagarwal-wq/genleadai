@@ -110,6 +110,20 @@ def _apply_plan_change(tx: dict) -> None:
             "session_id": tx["session_id"],
         },
     })
+    # Iter 57 — Auto-generate GST invoice + email the PDF. Never blocks the
+    # plan change if invoicing fails.
+    try:
+        from invoicing import issue_invoice_for_transaction
+        # Re-fetch the tx so `plan_applied=True` is reflected in the snapshot
+        fresh_tx = tx_col.find_one({"_id": tx["_id"]})
+        invoice = issue_invoice_for_transaction(fresh_tx or tx)
+        if invoice:
+            tx_col.update_one(
+                {"_id": tx["_id"]},
+                {"$set": {"invoice_no": invoice.get("invoice_no"), "invoice_id": invoice.get("id")}},
+            )
+    except Exception as e:
+        print(f"[billing] invoice generation skipped: {e}")
 
 
 # ─── Public catalog ──────────────────────────────────────────────────────────
@@ -251,3 +265,37 @@ async def stripe_webhook(request: Request):
             )
             _apply_plan_change(tx)
     return {"received": True, "event_type": event.event_type, "session_id": event.session_id}
+
+
+# ─── Admin: list + download invoices ────────────────────────────────────────
+@router.get("/api/billing/invoices")
+async def list_invoices(tenant: dict = Depends(get_active_tenant)):
+    """List invoices for the current tenant (Owner/Admin only)."""
+    role = tenant.get("_member_role")
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    rows = list(
+        db["invoices"].find({"tenant_id": tenant["id"]}).sort("issued_at", -1).limit(200)
+    )
+    return {"invoices": [{k: v for k, v in r.items() if k != "_id"} for r in rows]}
+
+
+@router.get("/api/billing/invoices/{invoice_id}/pdf")
+async def download_invoice(invoice_id: str, tenant: dict = Depends(get_active_tenant)):
+    """Stream the invoice PDF for download. Re-renders from stored data so the
+    Mongo footprint stays tiny."""
+    from fastapi.responses import Response
+    from invoicing import _build_pdf
+    role = tenant.get("_member_role")
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+    invoice = db["invoices"].find_one({"id": invoice_id, "tenant_id": tenant["id"]}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="invoice_not_found")
+    pdf = _build_pdf(invoice)
+    safe_no = invoice["invoice_no"].replace("/", "-")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_no}.pdf"'},
+    )

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { Check, ArrowClockwise, House, Crown, X } from '@phosphor-icons/react';
+import { Check, ArrowClockwise, House, Crown, X, FileText, DownloadSimple } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import api from '../config/api';
 
@@ -15,6 +15,7 @@ export function BillingSuccess() {
   const [status, setStatus] = useState({ payment_status: 'pending', plan_target: null, plan_applied: false });
   const [attempts, setAttempts] = useState(0);
   const [done, setDone] = useState(false);
+  const [invoice, setInvoice] = useState(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -28,6 +29,12 @@ export function BillingSuccess() {
           setDone(true);
           if (r.data.payment_status === 'paid') {
             toast.success(`Plan upgraded to ${(r.data.plan_target || '').toUpperCase()}`);
+            // Fetch the latest invoice
+            try {
+              const inv = await api.get('/api/billing/invoices');
+              const latest = (inv.data?.invoices || [])[0];
+              if (latest && latest.session_id === sessionId) setInvoice(latest);
+            } catch (_) { /* ignore */ }
           }
           return;
         }
@@ -48,6 +55,21 @@ export function BillingSuccess() {
 
   const paid = status.payment_status === 'paid';
 
+  const downloadInvoice = async () => {
+    if (!invoice) return;
+    try {
+      const r = await api.get(`/api/billing/invoices/${invoice.id}/pdf`, { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoice.invoice_no.replace(/\//g, '-')}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Could not download invoice');
+    }
+  };
+
   return (
     <div data-testid="billing-success-page" className="min-h-[70vh] flex items-center justify-center px-6">
       <div className="max-w-md w-full bg-white border border-slate-200 rounded-3xl p-10 text-center shadow-sm">
@@ -64,6 +86,29 @@ export function BillingSuccess() {
             ? "We couldn't confirm payment automatically. Check your email or contact support."
             : 'This usually takes a couple of seconds.'}
         </p>
+
+        {invoice && (
+          <div data-testid="billing-invoice-card" className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <FileText size={12} weight="duotone" /> Tax invoice
+              </div>
+              <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Paid</div>
+            </div>
+            <div className="text-[11px] text-slate-500 mb-3">
+              <strong className="text-slate-900">{invoice.invoice_no}</strong> · ₹ {invoice.total.toFixed(2)} (incl. GST)
+            </div>
+            <button
+              type="button"
+              onClick={downloadInvoice}
+              data-testid="download-invoice-btn"
+              className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-medium hover:bg-slate-100"
+            >
+              <DownloadSimple size={12} weight="bold" /> Download PDF
+            </button>
+          </div>
+        )}
+
         <Link
           to="/"
           data-testid="billing-success-home-btn"
