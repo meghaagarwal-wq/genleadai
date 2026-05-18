@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Receipt, FloppyDisk, ShieldCheck, Warning, XCircle, CheckCircle, ArrowsClockwise } from '@phosphor-icons/react';
+import { Receipt, FloppyDisk, ShieldCheck, Warning, XCircle, CheckCircle, ArrowsClockwise, Fire } from '@phosphor-icons/react';
 import api from '../../config/api';
 
 /**
@@ -18,6 +18,7 @@ export default function BillingConfigTab() {
   const [saving, setSaving] = useState(false);
   const [readiness, setReadiness] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [hot, setHot] = useState(null);
 
   const loadReadiness = async () => {
     setRefreshing(true);
@@ -34,6 +35,7 @@ export default function BillingConfigTab() {
       .then((r) => { setProfile(r.data); setForm(r.data); })
       .catch(() => toast.error('Could not load seller profile'));
     loadReadiness();
+    api.get('/api/admin/hot-integrations').then((r) => setHot(r.data)).catch(() => {});
   }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -86,6 +88,61 @@ export default function BillingConfigTab() {
           ))}
           {!readiness && <div className="text-slate-400 text-xs py-3">Loading readiness…</div>}
         </div>
+      </section>
+
+      {/* Hot integrations leaderboard */}
+      <section className="bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="hot-integrations">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Fire size={18} weight="duotone" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Hot integrations (waitlist demand)</h3>
+              <p className="text-xs text-[#5A4A7A] mt-0.5">Top coming-soon tools by waitlist signups across all tenants — build these next.</p>
+            </div>
+          </div>
+          {hot && (
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full border bg-amber-50 text-amber-800 border-amber-200">
+              {hot.total_requests || 0} total signups
+            </span>
+          )}
+        </div>
+        {!hot ? (
+          <div className="text-slate-400 text-xs py-3">Loading…</div>
+        ) : (hot.hot || []).length === 0 ? (
+          <div className="text-slate-500 text-xs py-3" data-testid="hot-integrations-empty">
+            No waitlist signups yet. Once users click <b>Join Waitlist</b> on coming-soon cards, the leaderboard fills in here.
+          </div>
+        ) : (
+          <ol className="space-y-2" data-testid="hot-integrations-list">
+            {hot.hot.map((r, i) => (
+              <li
+                key={r.integration_type}
+                data-testid={`hot-row-${r.integration_type}`}
+                className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50"
+              >
+                <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-extrabold ${
+                  i === 0 ? 'bg-amber-500 text-white' : i < 3 ? 'bg-violet-500 text-white' : 'bg-slate-300 text-white'
+                }`}>{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-bold text-slate-900">{r.integration_type}</span>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {r.request_count} request{r.request_count === 1 ? '' : 's'}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">across {r.tenant_count} workspace{r.tenant_count === 1 ? '' : 's'}</span>
+                  </div>
+                  {(r.sample_notes || []).length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5 text-[11px] text-slate-600">
+                      {r.sample_notes.map((n, k) => <li key={k}>“{n}”</li>)}
+                    </ul>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
 
       {/* Seller profile form */}

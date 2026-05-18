@@ -1,3 +1,52 @@
+## Iter 60 — Sales Channel Preferences + Hot Integrations Leaderboard (Feb 2026)
+
+**User intent:** Stop assuming WhatsApp is everyone's first channel. Let founders pick their preferred sales channels during onboarding (and later in Settings), drag-reorder priority, choose a conversation style, and have Aria recommend the right integrations + first-touch workflow rule for each market (India founder-led, USA B2B SaaS, UAE high-ticket, D2C, enterprise, webinar funnel, outbound). Plus build the "Hot integrations" leaderboard requested as the previous improvement.
+
+### Backend — `/app/backend/routes/sales_channels.py` (new, ~250 LoC)
+- `GET /api/sales-channels/catalog` — public catalog: 6 channels (WhatsApp, Email, LinkedIn, SMS, Phone/AI Call, Website Chat), 5 conversation styles (Professional, Founder-led, Consultative, Friendly, Premium), 7 market presets (India Founder-Led, USA B2B SaaS, UAE High-Ticket, D2C, Enterprise, Webinar Funnel, Outbound Sales).
+- `GET /api/tenant/sales-channels` / `PUT /api/tenant/sales-channels` — per-tenant prefs. PUT sanitises `priority_order` (only selected channels, in given order), strips invalid channels, derives `primary_channel`, `fallback_channels`, `disabled_channels`. Owner/Admin only. Stored on `tenants.settings.sales_channels`.
+- `GET /api/tenant/sales-channels/recommendations` — derives recommended integrations (de-duped, ordered by channel priority) from the saved prefs, plus a `workflow_rule` object the touchpoint generator + Lead cards consume:
+  - `trigger: "New lead received"`
+  - `primary_action: "Send email intro"` (per primary channel)
+  - `fallback_chain: ["View LinkedIn profile → send connection", ...]`
+  - `stop_condition: "Lead books demo or replies negatively"`
+  - If user did NOT pick WhatsApp, `whatsapp_biz` is NOT recommended (this was the spec's core ask).
+- `GET /api/admin/hot-integrations` — Master Admin aggregation pipeline over `integration_waitlist`, ranks coming-soon tools by request count, returns sample notes per row + `total_requests` rollup.
+
+### Frontend
+- `components/onboarding/SalesChannelsPicker.js` (new) — Shared component used by **both** onboarding step + Settings tab. Includes:
+  - 7-preset shortcut grid (clicking applies channel order + matching conversation style).
+  - 6-channel selection cards with per-channel "best for…" blurbs.
+  - **Drag-and-drop priority reorder** (native HTML5 DnD, no extra deps) with a "Primary" badge on the top item.
+  - 5-style picker grid.
+  - Live preview of recommended integrations (with `Live` chip on the 4 already-shippable ones: Saleshandy, Instantly, Lemlist, etc.) that updates as the user toggles channels.
+- `pages/OnboardingWizard.js` — added new step **#4 "Sales Channels"** between Sales Process and Lead Journey. The whole step gating + canNext + step-body indices shifted accordingly. On finish, channels are PUT to the new endpoint before `/api/onboarding/complete`.
+- `components/settings/SalesChannelsTab.js` (new) — Settings → **Sales Channels** tab. Renders the same picker, shows the live `workflow_rule` derived from server (`"When: New lead received → Do: Send email intro → If no reply: …"`), saves via PUT.
+- `pages/Settings.js` — wired the new tab.
+- `components/admin/BillingConfigTab.js` — added **Hot Integrations leaderboard** between Production Readiness and Seller Profile sections. Numbered ranking, request count, tenant count, sample notes, "total signups" pill.
+
+### Testing — `tests/test_iter60_sales_channels.py`
+8/8 pass:
+1. Catalog returns 6 channels, 5 styles, 7 presets.
+2. PUT persists + derives primary/fallback/disabled.
+3. Priority sanitisation — non-selected channels dropped from priority order.
+4. Invalid channel keys stripped.
+5. Recommendations include the right integrations from selected channels.
+6. **Unselected channel is NOT recommended** (the core "don't force WhatsApp" requirement).
+7. Hot integrations leaderboard aggregates correctly.
+8. Hot integrations 403s for non-admin.
+
+### Full regression
+**88/88 tests pass** across iters 51-60 (~77s). Zero regressions.
+
+### Frontend smoke (Playwright)
+- Settings → Sales Channels tab renders all 5 testids (`sales-channels-tab`, `sales-channels-picker`, `channel-presets`, `channel-grid`, `style-grid`).
+- Clicking `preset-usa_b2b_saas` → 3 priority items appear, "Email" tagged Primary, recommended-integrations chip group renders with Saleshandy/Instantly/Lemlist marked LIVE.
+- Master Admin → Billing config → Hot Integrations panel renders.
+
+---
+
+
 ## Iter 59 — Integration Hub redesign (Option A) (Feb 2026)
 
 **User intent:** Redesign `/integrations` into the full marketplace-style **Integration Hub** spec — header, stat cards, setup progress, recommended path, category tabs, integration cards (live + coming-soon), data-flow preview, integration health, send-test-lead, and custom-request form. All 8 existing live integrations categorized; 45 coming-soon tools shown as "Join Waitlist" cards.

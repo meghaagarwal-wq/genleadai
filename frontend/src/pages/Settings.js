@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt, Megaphone } from '@phosphor-icons/react';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
 import AvatarPicker from '../components/AvatarPicker';
 import CrmSettingsTab from '../components/CrmSettingsTab';
 import LeadCaptureSettings from '../components/settings/LeadCaptureSettings';
 import NotificationsTab from '../components/settings/NotificationsTab';
 import BillingAddressTab from '../components/settings/BillingAddressTab';
+import SalesChannelsTab from '../components/settings/SalesChannelsTab';
 import AuditLogPanel from '../components/AuditLogPanel';
 
 const Settings = () => {
@@ -281,6 +282,7 @@ const Settings = () => {
           { id: 'magnet', label: 'Lead Magnet', icon: Paperclip },
           { id: 'workspace', label: 'Workspace', icon: Gear },
           { id: 'notifications', label: 'Notifications', icon: Bell },
+          { id: 'sales-channels', label: 'Sales Channels', icon: Megaphone },
           { id: 'billing-info', label: 'Billing', icon: Receipt },
           { id: 'security', label: 'Security', icon: Key },
         ].map(tab => (
@@ -957,6 +959,11 @@ const Settings = () => {
       {/* Billing info Tab */}
       {activeTab === 'billing-info' && (
         <BillingAddressTab />
+      )}
+
+      {/* Sales Channels Tab */}
+      {activeTab === 'sales-channels' && (
+        <SalesChannelsTab />
       )}
 
       {/* Security Tab */}

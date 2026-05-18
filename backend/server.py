@@ -70,6 +70,7 @@ from routes.aria_auto_map import router as aria_auto_map_router
 from routes.billing_upgrade import router as billing_upgrade_router
 from routes.billing_profile import router as billing_profile_router
 from routes.integrations_catalog import router as integrations_catalog_router
+from routes.sales_channels import router as sales_channels_router
 from routes.retention import retention_loop
 from routes.health_engine import (
     router as health_router,
@@ -138,6 +139,7 @@ app.include_router(aria_auto_map_router)
 app.include_router(billing_upgrade_router)
 app.include_router(billing_profile_router)
 app.include_router(integrations_catalog_router)
+app.include_router(sales_channels_router)
 app.include_router(health_router)
 app.include_router(failed_messages_router)
 

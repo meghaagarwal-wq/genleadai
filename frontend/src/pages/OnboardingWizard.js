@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
-import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle, WarningCircle, GitBranch } from '@phosphor-icons/react';
+import { Buildings, Robot, Target, ChatTeardropDots, UsersThree, ArrowRight, ArrowLeft, CheckCircle, Sparkle, WarningCircle, GitBranch, Megaphone } from '@phosphor-icons/react';
 import { Toaster, toast } from 'sonner';
 import TouchpointMappingStep from '../components/onboarding/TouchpointMappingStep';
+import SalesChannelsPicker from '../components/onboarding/SalesChannelsPicker';
 
 const STEPS = [
   { id: 'business', title: 'Business Profile', icon: Buildings },
   { id: 'persona', title: "Aria's Persona", icon: Robot },
   { id: 'sales', title: 'Sales Process', icon: Target },
+  { id: 'channels', title: 'Sales Channels', icon: Megaphone },
   { id: 'touchpoints', title: 'Lead Journey', icon: GitBranch },
   { id: 'whatsapp', title: 'WhatsApp', icon: ChatTeardropDots },
   { id: 'team', title: 'Team', icon: UsersThree },
@@ -56,6 +58,10 @@ const OnboardingWizard = () => {
       qualification_criteria: ['budget_confirmed', 'decision_maker_identified'],
       pipeline_stages: [...DEFAULT_PIPELINE],
     },
+    channels: {
+      selected_channels: [], priority_order: [],
+      conversation_style: null, selected_preset: null,
+    },
     whatsapp: {
       provider: 'meta', api_key: '', whatsapp_number: '',
     },
@@ -98,8 +104,9 @@ const OnboardingWizard = () => {
     if (step === 0) return form.business.business_name.trim().length > 0;
     if (step === 1) return form.persona.aria_name.trim().length > 0;
     if (step === 2) return form.sales.product_description.trim().length > 0 && form.sales.pipeline_stages.length >= 2;
-    if (step === 3) return touchpointSaved;
-    if (step === 4) return !!form.whatsapp.compliance_agreed;
+    if (step === 3) return (form.channels.selected_channels || []).length > 0;
+    if (step === 4) return touchpointSaved;
+    if (step === 5) return !!form.whatsapp.compliance_agreed;
     return true;
   };
 
@@ -107,11 +114,17 @@ const OnboardingWizard = () => {
     setSaving(true);
     setSubmitError(null);
     try {
+      // Save sales channels separately so the dedicated endpoint can run validation
+      // + recompute primary/fallback. Failures here are non-fatal.
+      try {
+        await api.put('/api/tenant/sales-channels', form.channels);
+      } catch (e) { console.warn('[Onboarding] channel save failed', e); }
       await api.post('/api/onboarding/complete', {
         business_profile: form.business,
         aria_persona: form.persona,
         sales_process: form.sales,
         whatsapp_config: form.whatsapp,
+        sales_channels: form.channels,
         completed: true,
       });
       // Refresh stored tenant onboarding state
@@ -289,23 +302,31 @@ const OnboardingWizard = () => {
               </>
             )}
 
-            {/* STEP 3: Touchpoint Mapping (auto-generated from steps 0-2) */}
+            {/* STEP 3: Sales Channels (NEW) */}
             {step === 3 && (
+              <SalesChannelsPicker
+                value={form.channels}
+                onChange={(next) => update('channels', next)}
+              />
+            )}
+
+            {/* STEP 4: Touchpoint Mapping (auto-generated from steps 0-2) */}
+            {step === 4 && (
               <TouchpointMappingStep
                 form={form}
                 onSaved={() => {
                   setTouchpointSaved(true);
-                  setStep(4);
+                  setStep(5);
                 }}
                 onSkip={() => {
                   setTouchpointSaved(true);
-                  setStep(4);
+                  setStep(5);
                 }}
               />
             )}
 
-            {/* STEP 4: WhatsApp */}
-            {step === 4 && (
+            {/* STEP 5: WhatsApp */}
+            {step === 5 && (
               <>
                 <div className="text-sm text-[#5A4A7A] mb-2">
                   Aria primarily operates over WhatsApp. You can configure this now or later from Settings.
@@ -349,8 +370,8 @@ const OnboardingWizard = () => {
               </>
             )}
 
-            {/* STEP 5: Team (skippable) */}
-            {step === 5 && (
+            {/* STEP 6: Team (skippable) */}
+            {step === 6 && (
               <>
                 <div className="text-sm text-[#5A4A7A]">
                   You can invite teammates right now or later from <span className="font-bold">Settings → Team</span>.
@@ -385,8 +406,8 @@ const OnboardingWizard = () => {
               data-testid="ob-back" className="flex items-center gap-1 text-sm font-bold text-[#5A4A7A] hover:text-[#7C35DC] disabled:opacity-40">
               <ArrowLeft size={14} /> Back
             </button>
-            {/* Step 3 (touchpoints) handles its own Continue/Customise CTAs internally */}
-            {step === 3 ? (
+            {/* Step 4 (touchpoints) handles its own Continue/Customise CTAs internally */}
+            {step === 4 ? (
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9B8AB0]">
                 {touchpointSaved ? 'Saved · advancing…' : 'Choose to continue'}
               </span>
