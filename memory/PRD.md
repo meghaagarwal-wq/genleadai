@@ -1,3 +1,36 @@
+## Iter 68 — Extend channel-aware UI gating to Empty Dashboard + Journey (Feb 2026)
+
+### Reported issue (continuation of Iter 67)
+> "If a person chooses email, linkedin as their channel, remove WhatsApp-related things from their dashboard to avoid confusion and vice versa."
+
+Iter 67 wired `useChannelEnabled` into AriaTodayWidget + LeadOptInBanner + SetupChecklist. This iteration extends gating to three more high-traffic surfaces.
+
+### Fix
+**`components/EmptyDashboard.js`:**
+- Step 01 body now reads "auto-capture from {captureChannels}" where `captureChannels` is built from `selected_channels` (e.g. "website forms, email and LinkedIn" for an Email+LinkedIn tenant). Falls back to "website forms, WhatsApp, and email" when no prefs are saved.
+- Step 02 body now reads "engages over {qualifyChannel}" using the first enabled channel label. No more "engages over WhatsApp" for an Email-only founder.
+- "Conversation feed" FeaturePill (the WhatsApp-implied ChatTeardropDots tile) is now hidden when WhatsApp isn't enabled.
+
+**`pages/TouchpointJourney.js`:**
+- Channel dropdown in DetailDrawer now filters available channels by `isEnabledFn` (passed from parent via `useChannelEnabled`). An Email+LinkedIn tenant editing a touchpoint can only switch the channel to Email or LinkedIn — WhatsApp/Call options are hidden (unless the touchpoint already uses them, in which case the saved value is preserved so users can see what's there).
+- Added `TP_CHANNEL_TO_PREF` map (touchpoint slug → pref key) so `linkedin_nudge` correctly maps to `linkedin` etc.
+
+**`components/JourneyFlowchart.js`:**
+- MessageNode now displays a rose "Channel off" badge (`data-testid="flow-node-disabled-{step}"`) on any touchpoint whose channel slug doesn't map to an enabled pref key. The node also dims (opacity-60) to make the gap obvious. Tenants instantly see which touchpoints in their saved sequence would never fire because they later disabled the channel.
+
+### Regression fix from testing agent
+- `DetailDrawer` destructured props was missing `isEnabledFn` → caused ReferenceError when opening any timeline row drawer. Fixed by adding `isEnabledFn` to the destructure list (testing agent self-applied the one-line fix).
+
+### Verified
+- Frontend test (iter52) passed 3/5 + 2/5 fixed-and-passed. EmptyDashboard copy fix verified via code review (no empty tenant available in seed data to live-render).
+- Lint clean across all three edited files.
+
+### Known caveat
+`useChannelEnabled` caches at module scope, so workspace switching does NOT auto-invalidate. Users must hard-reload after switching tenants if they want gating to reflect the new tenant's prefs. Lower-priority backlog item to listen on `active_tenant` localStorage change and invalidate.
+
+---
+
+
 ## Iter 67 — Hide WhatsApp UI for tenants that didn't pick WhatsApp (Feb 2026)
 
 ### Reported issue

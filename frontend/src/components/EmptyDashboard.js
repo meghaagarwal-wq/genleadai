@@ -138,13 +138,13 @@ const EmptyDashboard = ({ workspaceName, founderName }) => {
           n="01"
           icon={Users}
           title="Add your leads"
-          body="Manually, via CSV upload, or auto-capture from website forms, WhatsApp, and email."
+          body={`Manually, via CSV upload, or auto-capture from ${captureChannels}.`}
         />
         <Step
           n="02"
           icon={Robot}
           title="Aria qualifies them"
-          body="She scores ICP fit, engages over WhatsApp, asks qualifying questions, and books calls — all on autopilot."
+          body={`She scores ICP fit, engages over ${qualifyChannel}, asks qualifying questions, and books calls — all on autopilot.`}
         />
         <Step
           n="03"
