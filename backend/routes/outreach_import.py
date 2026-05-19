@@ -212,41 +212,79 @@ async def _lemlist_list_campaigns(api_key: str) -> List[dict]:
 
 
 async def _lemlist_list_leads(api_key: str, campaign_id: str) -> List[dict]:
+    """List leads in a Lemlist campaign.
+
+    Tries multiple endpoint shapes Lemlist ships across plans:
+      1. /api/campaigns/{id}/leads          (current v1, no slash)
+      2. /api/campaigns/{id}/leads/         (older v1 — strict-slash plans)
+      3. /api/v2/campaigns/{id}/leads       (newer v2 endpoint)
+      4. /api/campaigns/{id}/exports?type=leads (some plans only expose via export)
+    """
+    candidate_urls = [
+        f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads",
+        f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads/",
+        f"{LEMLIST_BASE}/v2/campaigns/{campaign_id}/leads",
+    ]
     out: List[dict] = []
-    offset = 0
-    limit = 100
+    chosen_url: Optional[str] = None
     async with httpx.AsyncClient(timeout=25) as client:
-        while True:
-            # NOTE: Lemlist's leads endpoint is sensitive to trailing slash — use no slash here.
-            # If `/leads` returns 404 we fall back to `/leads/` for older Lemlist accounts.
-            r = await client.get(
-                f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads",
+        # Pick the first URL that doesn't 404 with an empty result.
+        for url in candidate_urls:
+            r0 = await client.get(
+                url,
                 headers=_lemlist_headers(api_key),
-                params={"offset": offset, "limit": limit},
+                params={"offset": 0, "limit": 100},
             )
-            if r.status_code == 404:
-                r = await client.get(
-                    f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads/",
-                    headers=_lemlist_headers(api_key),
-                    params={"offset": offset, "limit": limit},
-                )
+            if r0.status_code in (401, 403):
+                raise HTTPException(status_code=400, detail="Lemlist API key invalid or missing permissions.")
+            if r0.status_code == 404:
+                continue
+            if r0.status_code != 200:
+                # Try next candidate on 400/5xx; only surface if all fail.
+                continue
+            data0 = r0.json()
+            if isinstance(data0, dict) and "leads" in data0:
+                data0 = data0["leads"]
+            if isinstance(data0, list):
+                chosen_url = url
+                out.extend(data0)
+                if len(data0) < 100:
+                    return out
+                break
+
+        if not chosen_url:
+            # All candidate URLs failed. Surface a clear error.
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Lemlist returned no usable leads endpoint for this campaign. "
+                    "Confirm your API key has lead-read scope (Settings → Integrations → API key permissions)."
+                ),
+            )
+
+        # Continue paginating from the URL that worked.
+        offset = 100
+        while True:
+            r = await client.get(
+                chosen_url,
+                headers=_lemlist_headers(api_key),
+                params={"offset": offset, "limit": 100},
+            )
             if r.status_code in (401, 403):
                 raise HTTPException(status_code=400, detail="Lemlist API key invalid or missing permissions.")
             if r.status_code == 404:
-                # Campaign was deleted on Lemlist side — skip with empty result instead of crashing the whole run.
                 return out
             if r.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"Lemlist leads {r.status_code}: {r.text[:160]}")
             data = r.json()
-            # Lemlist sometimes wraps in {leads: [...]} for newer accounts.
             if isinstance(data, dict) and "leads" in data:
                 data = data["leads"]
             if not isinstance(data, list) or not data:
                 break
             out.extend(data)
-            if len(data) < limit:
+            if len(data) < 100:
                 break
-            offset += limit
+            offset += 100
             if offset >= 2000:
                 break
     return out
@@ -422,9 +460,14 @@ async def import_leads(tool: str, payload: ImportPayload, tenant: dict = Depends
         for item in items:
             raw = normalize(item)
             external_id = raw.pop("external_id", None)
-            # Skip rows with no contact handle at all.
-            if not raw.get("email") and not raw.get("phone") and not raw.get("linkedin_url"):
+            # Skip rows with truly no identifiable handle. We allow leads with
+            # name+company even if email is missing — Lemlist sometimes returns
+            # LinkedIn-only enriched leads that lack an email but are still useful.
+            has_handle = bool(raw.get("email") or raw.get("phone") or raw.get("linkedin_url"))
+            has_name = bool((raw.get("first_name") or raw.get("last_name")) and raw.get("company"))
+            if not has_handle and not has_name:
                 counts["failed"] += 1
+                failures.append({"campaign": camp_name, "external_id": external_id, "error": "no email/phone/linkedin/name+company"})
                 continue
 
             # Dedupe: if a lead already exists for this tenant with same email/phone/external_id,

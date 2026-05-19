@@ -116,11 +116,35 @@ export default function CampaignsImportPanel({ tool, isConnected }) {
         import_mode: mode,
       };
       const r = await api.post(`/api/integrations/${tool}/import-leads`, body);
-      const t = r.data?.log?.totals || {};
-      toast.success(
-        `${TOOL_LABEL} import complete: ${t.imported || 0} new, ${t.updated || 0} updated, ${t.duplicates_merged || 0} duplicates merged, ${t.failed || 0} failed`,
-        { duration: 6000 },
-      );
+      const log = r.data?.log || {};
+      const t = log.totals || {};
+      const fetched = t.fetched || 0;
+      const imported = t.imported || 0;
+      const updated = t.updated || 0;
+      const failed = t.failed || 0;
+      const dups = t.duplicates_merged || 0;
+
+      if (fetched === 0) {
+        // Either auth got us campaigns but no leads, OR the leads endpoint
+        // didn't exist on this Lemlist plan. Either way, the user shouldn't
+        // see a generic "0 imported" — call out the real cause.
+        const firstFail = (log.failures || [])[0];
+        toast.error(
+          `${TOOL_LABEL} returned 0 leads for the selected campaigns. ${firstFail?.error || 'Check that the campaign actually contains contacts and that your API key has lead-read scope.'}`,
+          { duration: 8000 },
+        );
+      } else if (imported === 0 && updated === 0) {
+        const firstFail = (log.failures || [])[0];
+        toast.error(
+          `${TOOL_LABEL} fetched ${fetched} leads but couldn't import any. ${firstFail?.error || 'Check the import log for details.'}`,
+          { duration: 8000 },
+        );
+      } else {
+        toast.success(
+          `${TOOL_LABEL} import complete — fetched ${fetched} · imported ${imported} new · ${updated} updated · ${dups} dupes merged · ${failed} failed`,
+          { duration: 7000 },
+        );
+      }
       loadLogs();
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Import failed');
@@ -301,23 +325,32 @@ export default function CampaignsImportPanel({ tool, isConnected }) {
                 ? { color: '#D97706', bg: '#FEF3C7', label: 'Partial' }
                 : { color: '#DC2626', bg: '#FEE2E2', label: 'Failed' };
               return (
-                <div key={log.id} className="px-3 py-2.5 flex items-start justify-between gap-3" data-testid={`import-log-${log.id}`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
-                        style={{ color: statusBadge.color, background: statusBadge.bg }}
-                      >
-                        {statusBadge.label}
-                      </span>
-                      <span className="text-xs font-semibold text-[#1A0A2E]">
-                        {log.campaigns_selected} campaign{log.campaigns_selected === 1 ? '' : 's'} · {log.import_mode}
-                      </span>
+                <div key={log.id} className="px-3 py-2.5" data-testid={`import-log-${log.id}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded"
+                          style={{ color: statusBadge.color, background: statusBadge.bg }}
+                        >
+                          {statusBadge.label}
+                        </span>
+                        <span className="text-xs font-semibold text-[#1A0A2E]">
+                          {log.campaigns_selected} campaign{log.campaigns_selected === 1 ? '' : 's'} · {log.import_mode}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-[#5A4A7A] mt-1 font-mono">
+                        fetched <strong>{t.fetched || 0}</strong> · imported <strong className="text-[#16A34A]">{t.imported || 0}</strong> · updated <strong className="text-[#0055FF]">{t.updated || 0}</strong> · duplicates <strong>{t.duplicates_merged || 0}</strong> · failed <strong className="text-[#DC2626]">{t.failed || 0}</strong>
+                      </div>
+                      <div className="text-[10px] text-[#9B8AB0] mt-0.5">{fmtDate(log.created_at)}</div>
+                      {/* Show the first failure reason inline so users don't need to ping support. */}
+                      {(log.failures || []).length > 0 && (
+                        <div className="mt-1.5 text-[10px] text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1" data-testid={`import-log-failure-${log.id}`}>
+                          <strong>First failure:</strong> {log.failures[0]?.error || 'unknown'}
+                          {log.failures.length > 1 && <> (+{log.failures.length - 1} more)</>}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-[10px] text-[#5A4A7A] mt-1 font-mono">
-                      fetched <strong>{t.fetched || 0}</strong> · imported <strong className="text-[#16A34A]">{t.imported || 0}</strong> · updated <strong className="text-[#0055FF]">{t.updated || 0}</strong> · duplicates <strong>{t.duplicates_merged || 0}</strong> · failed <strong className="text-[#DC2626]">{t.failed || 0}</strong>
-                    </div>
-                    <div className="text-[10px] text-[#9B8AB0] mt-0.5">{fmtDate(log.created_at)}</div>
                   </div>
                 </div>
               );
