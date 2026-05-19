@@ -75,49 +75,53 @@ def _saleshandy_headers(api_key: str) -> dict:
 
 
 async def _saleshandy_list_sequences(api_key: str) -> List[dict]:
-    """Saleshandy calls their outreach flows 'sequences' in their API."""
-    out: List[dict] = []
-    page = 1
+    """Saleshandy calls their outreach flows 'sequences' in their API.
+
+    NOTE: Saleshandy's `GET /v1/sequences` endpoint takes NO pagination params
+    (confirmed via their public docs + their own 400 response "property limit
+    should not exist"). We get the whole list in one call.
+    """
     async with httpx.AsyncClient(timeout=20) as client:
-        while True:
-            r = await client.get(
-                f"{SALESHANDY_BASE}/sequences",
-                headers=_saleshandy_headers(api_key),
-                params={"page": page, "limit": 50},
-            )
-            if r.status_code == 401 or r.status_code == 403:
-                raise HTTPException(status_code=400, detail="Saleshandy API key invalid or missing permissions.")
-            if r.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"Saleshandy returned {r.status_code}: {r.text[:160]}")
-            data = r.json() or {}
-            # Saleshandy nests results under `data.sequences` or `data` depending on plan.
-            items = (data.get("data") or {}).get("sequences") if isinstance(data.get("data"), dict) else None
-            if items is None:
-                items = data.get("sequences") or data.get("data") or []
-            if not items:
-                break
-            out.extend(items)
-            # Stop when we got a partial page.
-            if len(items) < 50:
-                break
-            page += 1
-            # Safety: stop at 10 pages (500 sequences) to avoid runaway.
-            if page > 10:
-                break
-    return out
+        r = await client.get(
+            f"{SALESHANDY_BASE}/sequences",
+            headers=_saleshandy_headers(api_key),
+        )
+        if r.status_code in (401, 403):
+            raise HTTPException(status_code=400, detail="Saleshandy API key invalid or missing permissions.")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Saleshandy returned {r.status_code}: {r.text[:160]}")
+        data = r.json() or {}
+        # Response shapes seen in the wild: {data: {sequences: [...]}}, {sequences: [...]},
+        # {data: [...]}, or bare [...].
+        if isinstance(data, list):
+            return data
+        items = (data.get("data") or {}).get("sequences") if isinstance(data.get("data"), dict) else None
+        if items is None:
+            items = data.get("sequences") or data.get("data") or []
+        return items if isinstance(items, list) else []
 
 
 async def _saleshandy_list_prospects(api_key: str, sequence_id: str) -> List[dict]:
-    """List prospects inside a Saleshandy sequence."""
+    """List prospects inside a Saleshandy sequence.
+
+    Saleshandy v1 uses `pageSize` + `cursor` (cursor-based pagination). We do
+    NOT pass `limit` — their API rejects it with 400 "property limit should
+    not exist". If both paginated shapes fail, we fall back to a paramless
+    GET so smaller accounts still work.
+    """
     out: List[dict] = []
-    page = 1
+    cursor: Optional[str] = None
+    PAGE_SIZE = 100
     async with httpx.AsyncClient(timeout=25) as client:
-        while True:
-            # Try the most common endpoint shapes Saleshandy ships in different plan tiers.
+        for _attempt in range(20):  # 20 * 100 = 2,000-prospect safety cap
+            params: dict = {"pageSize": PAGE_SIZE}
+            if cursor:
+                params["cursor"] = cursor
+
             r = await client.get(
                 f"{SALESHANDY_BASE}/sequences/{sequence_id}/prospects",
                 headers=_saleshandy_headers(api_key),
-                params={"page": page, "limit": 100},
+                params=params,
             )
             if r.status_code in (401, 403):
                 raise HTTPException(status_code=400, detail="Saleshandy API key invalid or missing permissions.")
@@ -126,7 +130,14 @@ async def _saleshandy_list_prospects(api_key: str, sequence_id: str) -> List[dic
                 r = await client.get(
                     f"{SALESHANDY_BASE}/prospects",
                     headers=_saleshandy_headers(api_key),
-                    params={"sequenceId": sequence_id, "page": page, "limit": 100},
+                    params={**params, "sequenceId": sequence_id},
+                )
+            if r.status_code == 400 and "limit" not in r.text and "pageSize" in r.text:
+                # Last-resort: try with no pagination params (some Saleshandy plans
+                # return the full prospect list in one shot, no pagination at all).
+                r = await client.get(
+                    f"{SALESHANDY_BASE}/sequences/{sequence_id}/prospects",
+                    headers=_saleshandy_headers(api_key),
                 )
             if r.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"Saleshandy prospects {r.status_code}: {r.text[:160]}")
@@ -134,14 +145,16 @@ async def _saleshandy_list_prospects(api_key: str, sequence_id: str) -> List[dic
             items = (data.get("data") or {}).get("prospects") if isinstance(data.get("data"), dict) else None
             if items is None:
                 items = data.get("prospects") or data.get("data") or []
-            if not items:
+            if isinstance(items, list):
+                out.extend(items)
+
+            # Read next cursor (Saleshandy may return at top level or under data.).
+            next_cursor = data.get("nextCursor") or data.get("next_cursor")
+            if not next_cursor and isinstance(data.get("data"), dict):
+                next_cursor = data["data"].get("nextCursor") or data["data"].get("next_cursor")
+            if not next_cursor:
                 break
-            out.extend(items)
-            if len(items) < 100:
-                break
-            page += 1
-            if page > 20:  # 2,000-prospect safety cap per run
-                break
+            cursor = next_cursor
     return out
 
 
