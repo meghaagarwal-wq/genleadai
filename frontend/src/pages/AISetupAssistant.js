@@ -320,6 +320,30 @@ function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAr
         </div>
       )}
 
+      {/* CARD 0: "Not found" banner — surfaces sections the document didn't cover.
+          Iter 70 — strict-mode UI so users see what Aria DIDN'T extract instead
+          of having to guess which fields were inferred vs. literally extracted. */}
+      {(extracted.not_found || []).length > 0 && (
+        <div
+          data-testid="auto-map-not-found-banner"
+          className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3"
+        >
+          <div className="text-amber-700">
+            <Warning size={18} weight="duotone" />
+          </div>
+          <div className="flex-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-1">
+              Not found in uploaded document
+            </div>
+            <p className="text-xs text-amber-900 leading-relaxed">
+              Aria couldn't extract these sections because the document didn't mention them:&nbsp;
+              <strong>{extracted.not_found.join(', ')}</strong>. You can fill these in manually
+              after publishing — Aria will not guess.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* CARD 1: ICPs */}
       <Card
         testid="auto-map-card-icps"
@@ -357,8 +381,7 @@ function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAr
         testid="auto-map-card-sources"
         icon={<FunnelSimple size={16} weight="duotone" />}
         title={`${(extracted.lead_sources || []).length} lead source${(extracted.lead_sources || []).length === 1 ? '' : 's'} detected`}
-        tint="emerald"
-      >
+        tint="emerald"      >
         {(extracted.lead_sources || []).length === 0 ? (
           <p className="text-xs text-slate-400">No lead sources detected in the document.</p>
         ) : (

@@ -110,36 +110,62 @@ MAX_TEXT_CHARS = 12000
 
 
 # ─── Claude prompt ──────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are Aria, an AI sales architect. The user uploads a GTM/sales/strategy/ICP document.
-Your job: read it carefully and return a STRICT JSON object that maps the document to a working sales workflow.
+# Iter 70 — tightened to STRICT EXTRACTION mode after user feedback that Aria
+# was inventing ICPs, expanding "CHRO" → "HR leaders, people analytics heads",
+# and synthesising 7-step nurture sequences from documents that mentioned a
+# single email touchpoint. The system prompt now refuses to fill in missing
+# fields with assumptions — empty stays empty.
+SYSTEM_PROMPT = """You are Aria's AI Setup Assistant.
+
+Your only job: PARSE the uploaded document and MAP what's literally there
+into the JSON schema below. You are NOT a strategist, copywriter, or
+recommender. You are a strict document parser.
+
+HARD RULES — DO NOT BREAK:
+1. Use ONLY information that is directly present in the uploaded document.
+2. If a field is not mentioned, leave the array empty / set the string to "" .
+   Do not guess, infer, or "fill in best practices".
+3. Do not expand single terms. If the doc says "CHRO", extract "CHRO" — do
+   NOT broaden it to "HR leader, People Operations, Workforce Transformation Lead".
+4. Do not add lead sources, tools, channels, or touchpoints that are not
+   named in the document.
+5. Do not invent numbers (ARR, deal sizes, employee counts, response times).
+   If a number isn't in the doc, leave the field "".
+6. Do not generate touchpoints the document didn't describe. If the document
+   mentions one email follow-up, return one touchpoint — not a 7-step sequence.
+7. message_template fields should be a CLOSE PARAPHRASE of any actual messages
+   in the doc. If the doc has no example copy, return "" and let the user fill
+   it in later. Do not write new sales copy from scratch.
+8. Do not write a verbose "summary" — keep it to one factual sentence about
+   what was found.
 
 OUTPUT FORMAT — return ONLY this JSON, nothing else:
 {
   "icps": [
     {
-      "label": "short name like 'CFO at Series B SaaS'",
-      "title_targets": ["CFO", "VP Finance"],
+      "label": "short name like 'CFO at Series B SaaS' (only if doc gives enough to label them)",
+      "title_targets": ["only titles literally mentioned"],
       "industry": "string or empty",
-      "company_size": "string or empty (e.g. '50-200 employees')",
-      "geography": "string or empty",
-      "pain_point": "1-2 sentences of the buyer's biggest pain",
-      "value_prop": "1-2 sentences of what you sell them",
-      "tone": "professional | casual | bold",
+      "company_size": "string or empty (only if mentioned)",
+      "geography": "string or empty (only if mentioned)",
+      "pain_point": "1 sentence drawn directly from the doc, or empty",
+      "value_prop": "1 sentence drawn directly from the doc, or empty",
+      "tone": "professional | casual | bold (default professional if not specified)",
       "deal_size": "string or empty"
     }
   ],
-  "lead_sources": ["Website Form", "Meta Ads", "LinkedIn", "..."],
-  "recommended_integrations": ["saleshandy", "lemlist", "zoho_crm", "calendly", "..."],
-  "sales_channels": ["email", "linkedin", "whatsapp", "phone"],
+  "lead_sources": ["only sources literally named in the doc"],
+  "recommended_integrations": ["only tools literally named in the doc — lowercase keys like saleshandy, lemlist, zoho_crm, hubspot, salesforce, calendly, slack, gmail, outlook, zoom, instantly, apollo, phantombuster"],
+  "sales_channels": ["only channels literally named in the doc — from: email, linkedin, whatsapp, sms, phone, website_chat"],
   "touchpoints": [
     {
       "step": 1,
       "channel": "whatsapp | email | linkedin_nudge | call_reminder",
-      "message_type": "intro | qualifier | value_drop | follow_up | social_proof | soft_cta | hard_cta",
+      "message_type": "intro | qualifier | value_drop | value_add | follow_up | social_proof | soft_cta | budget_probe | meeting_cta | human_escalation | re_engagement | urgency | closure",
       "day": 0,
       "hour": 9,
       "aria_role": "autonomous | alert_human",
-      "message_template": "the actual message text with {{first_name}} {{company}} {{value_prop}} tokens",
+      "message_template": "close paraphrase of the doc's copy with {{first_name}} {{company}} tokens, or empty if doc has no example",
       "conditions": {
         "on_reply": {"action": "notify_user"},
         "on_keyword_match": {"keywords": ["interested","pricing"], "action": "tag_contact", "tag": "hot_lead"},
@@ -149,29 +175,29 @@ OUTPUT FORMAT — return ONLY this JSON, nothing else:
     }
   ],
   "qualification": {
-    "must_have_criteria": ["Budget > $X", "Decision-maker title"],
-    "disqualifiers": ["Outside geo", "<10 employees"],
-    "qualifying_questions": ["What's your timeline?", "Who decides?"]
+    "must_have_criteria": ["only criteria literally in the doc"],
+    "disqualifiers": ["only literally in the doc"],
+    "qualifying_questions": ["only questions literally in the doc"]
   },
   "handoff": {
-    "trigger": "When lead replies positively AND mentions pricing",
-    "alert_channels": ["whatsapp", "email"],
-    "info_passed": ["lead name", "company", "last reply", "intent score"]
+    "trigger": "string drawn from the doc, or empty",
+    "alert_channels": ["only channels literally named"],
+    "info_passed": ["only fields literally named"]
   },
-  "summary": "Aria found N ICPs, M lead sources, K touchpoints, J branches. One-paragraph plain-English overview."
+  "not_found": ["names of any of the top-level sections (icps, lead_sources, recommended_integrations, sales_channels, touchpoints, qualification, handoff) where the document had nothing to extract"],
+  "summary": "One factual sentence describing what was found. No analysis. No recommendations."
 }
 
-RULES:
-- Generate 3-12 touchpoints (not just 1). Stagger days realistically (Day 0, 1, 3, 7, 14, etc.).
-- At least 2 touchpoints MUST have meaningful conditions (on_reply / on_keyword_match / on_no_reply).
-- Use the EXACT condition schema above (action values must be one of: move_to_step, notify_user, tag_contact, stop; on_no_reply only allows move_to_step or stop).
-- If the doc doesn't mention some field, infer a sensible default — never invent numbers (e.g. don't say "$500k ARR" if the doc didn't say it).
-- channel must be one of: whatsapp, email, linkedin_nudge, call_reminder.
-- All message_template strings must use {{first_name}}, {{company}}, {{value_prop}}, {{pain_point}} tokens where natural.
-- Return AT MOST 3 ICPs. If only one buyer type is mentioned, return 1.
-- recommended_integrations — name specific tools you saw in the doc (saleshandy, lemlist, zoho_crm, hubspot, salesforce, calendly, slack, gmail, outlook, zoom, instantly, apollo, phantombuster). Use lowercase keys.
-- sales_channels — top-level channel preferences this team will use, from: email, linkedin, whatsapp, sms, phone, website_chat.
-- DO NOT wrap the JSON in ```json blocks. Output the raw JSON object directly."""
+SCHEMA NOTES (don't invent values outside these enums):
+- touchpoint.channel must be one of: whatsapp, email, linkedin_nudge, call_reminder.
+- touchpoint.message_type must be one of the 13 listed above.
+- touchpoint.aria_role: "autonomous" by default. Only use "alert_human" if the doc says "manual", "human", "rep", "call", or similar.
+- condition.action values must be one of: move_to_step, notify_user, tag_contact, stop.
+- on_no_reply.action only allows move_to_step or stop.
+
+Final reminders:
+- Extract. Map. Do not imagine.
+- Output the raw JSON object directly. No code fences, no commentary."""
 
 
 async def _claude_analyze(text: str) -> Dict[str, Any]:
@@ -225,13 +251,25 @@ async def _claude_analyze(text: str) -> Dict[str, Any]:
 
 
 def _sanitize_touchpoints(raw_tps: List[dict]) -> List[dict]:
-    """Apply schema clamps so Pydantic Touchpoint accepts whatever Claude returns."""
+    """Apply schema clamps so Pydantic Touchpoint accepts whatever Claude returns.
+
+    The canonical channel + message_type + aria_role sets live on
+    `routes.touchpoints.Touchpoint`; we mirror them here to avoid producing rows
+    that would then fail `_validate_touchpoints`.
+    """
     ALLOWED_CHANNELS = {"whatsapp", "email", "linkedin_nudge", "call_reminder"}
+    # Pulled from routes.touchpoints.ALLOWED_TYPES — kept in sync.
     ALLOWED_TYPES_TP = {
         "intro", "qualifier", "value_drop", "value_add", "follow_up",
-        "social_proof", "soft_cta", "hard_cta", "objection_handle",
-        "demo_invite", "calendar_nudge", "founder_handoff", "re_engage",
-        "new_offer", "archive",
+        "social_proof", "soft_cta", "budget_probe", "meeting_cta",
+        "human_escalation", "re_engagement", "urgency", "closure",
+    }
+    # Loose mappings for AI-generated synonyms → canonical message_type.
+    TYPE_ALIASES = {
+        "hard_cta": "meeting_cta", "objection_handle": "follow_up",
+        "demo_invite": "meeting_cta", "calendar_nudge": "meeting_cta",
+        "founder_handoff": "human_escalation", "re_engage": "re_engagement",
+        "new_offer": "value_add", "archive": "closure", "first_touch": "intro",
     }
     ALLOWED_ROLES = {"autonomous", "alert_human"}
     out = []
@@ -239,7 +277,9 @@ def _sanitize_touchpoints(raw_tps: List[dict]) -> List[dict]:
         channel = tp.get("channel") or "whatsapp"
         if channel not in ALLOWED_CHANNELS:
             channel = "whatsapp"
-        message_type = tp.get("message_type") or "intro"
+        message_type = (tp.get("message_type") or "intro").lower()
+        if message_type in TYPE_ALIASES:
+            message_type = TYPE_ALIASES[message_type]
         if message_type not in ALLOWED_TYPES_TP:
             message_type = "intro"
         aria_role = tp.get("aria_role") or "autonomous"
@@ -361,6 +401,8 @@ async def analyze(
     qualification = parsed.get("qualification") or {}
     handoff = parsed.get("handoff") or {}
     summary = (parsed.get("summary") or "").strip()
+    # Iter 70 — strict-mode: surface which sections Aria literally found nothing for.
+    not_found = [str(s).strip() for s in (parsed.get("not_found") or []) if str(s).strip()][:10]
 
     # If Claude found nothing actionable, surface that clearly instead of returning
     # a hollow success that confuses the user. (Resolves: "Aria is not able to map
@@ -385,6 +427,7 @@ async def analyze(
             "touchpoints": touchpoints,
             "qualification": qualification,
             "handoff": handoff,
+            "not_found": not_found,
             "summary": summary or f"Aria found {len(icps)} ICP(s), {len(lead_sources)} lead source(s), {len(touchpoints)} touchpoints.",
         },
         "doc_excerpt_chars": len(text),
@@ -457,8 +500,12 @@ async def publish(
     # 2. Touchpoints — replace the journey (if user said overwrite_journey=true)
     saved_touchpoint_count = 0
     if payload.overwrite_journey and payload.touchpoints:
-        # Wrap in Pydantic model so the validator runs the same way as /api/touchpoints/map
-        pydantic_tps = [Touchpoint(**tp) for tp in payload.touchpoints]
+        # Re-run the same sanitizer the /analyze response used. This is the
+        # canonical clamp for channel / message_type / aria_role / day / hour /
+        # conditions / index, so the publish endpoint stays 4xx-only even if a
+        # user edited a touchpoint to an out-of-range value in the review UI.
+        sanitized = _sanitize_touchpoints([dict(tp) for tp in payload.touchpoints])
+        pydantic_tps = [Touchpoint(**tp) for tp in sanitized]
         _validate_touchpoints(pydantic_tps)
         cleaned = []
         for i, t in enumerate(pydantic_tps):

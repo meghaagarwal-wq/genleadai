@@ -204,11 +204,19 @@ async def _lemlist_list_leads(api_key: str, campaign_id: str) -> List[dict]:
     limit = 100
     async with httpx.AsyncClient(timeout=25) as client:
         while True:
+            # NOTE: Lemlist's leads endpoint is sensitive to trailing slash — use no slash here.
+            # If `/leads` returns 404 we fall back to `/leads/` for older Lemlist accounts.
             r = await client.get(
-                f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads/",
+                f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads",
                 headers=_lemlist_headers(api_key),
                 params={"offset": offset, "limit": limit},
             )
+            if r.status_code == 404:
+                r = await client.get(
+                    f"{LEMLIST_BASE}/campaigns/{campaign_id}/leads/",
+                    headers=_lemlist_headers(api_key),
+                    params={"offset": offset, "limit": limit},
+                )
             if r.status_code in (401, 403):
                 raise HTTPException(status_code=400, detail="Lemlist API key invalid or missing permissions.")
             if r.status_code == 404:
@@ -217,6 +225,9 @@ async def _lemlist_list_leads(api_key: str, campaign_id: str) -> List[dict]:
             if r.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"Lemlist leads {r.status_code}: {r.text[:160]}")
             data = r.json()
+            # Lemlist sometimes wraps in {leads: [...]} for newer accounts.
+            if isinstance(data, dict) and "leads" in data:
+                data = data["leads"]
             if not isinstance(data, list) or not data:
                 break
             out.extend(data)
