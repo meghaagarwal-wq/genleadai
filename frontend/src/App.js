@@ -223,7 +223,10 @@ function App() {
                       <Routes>
                         <Route path="/" element={<Dashboard />} />
                         <Route path="/dashboard" element={<Navigate to="/" replace />} />
-                        <Route path="/demo" element={<Dashboard demo={true} />} />
+                        {/* iter71 — protected demo dashboard with sample data.
+                            Public marketing /demo route (InteractiveDemo) takes precedence
+                            so we route the in-app demo to /dashboard-demo. */}
+                        <Route path="/dashboard-demo" element={<Dashboard demo={true} />} />
                         <Route path="/your-5-today" element={<YourFiveToday />} />
                         <Route path="/leads" element={<LeadInbox />} />
                         <Route path="/leads/:id" element={<LeadDetail />} />

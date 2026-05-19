@@ -1,3 +1,44 @@
+## Iter 71 — Dashboard simplification + remove fake leads + team isolation (Feb 2026)
+
+### Reported asks
+1. Real workspaces must never show fake "Priya Sharma" / "Aanya Kapoor" demo leads.
+2. Strip dashboard from 15+ stacked sections → simple 5 sections.
+3. Workspace team page must show ONLY that workspace's members (not all 37 app users).
+
+### What landed
+**Backend:**
+- `/api/insights/founder-command-center`:
+  - New `?demo=true` flag — only the protected `/dashboard-demo` route opts into sample data.
+  - When tenant has 0 leads → new `_empty_command_center_payload()` returns an EMPTY-but-shaped payload (`is_empty_workspace: true`, all rows `[]`, labels `"-"`) instead of the demo fallback.
+  - Removed ALL `[...] or _demo_*_rows()` fallback patterns in the real-data branch (was leaking fake names when admin tenant had real leads but zero matched the hot-untouched/proposal-graveyard criteria).
+- `/api/users` (`routes/meta.py`):
+  - Was returning every user across every tenant (37 globally).
+  - Now joins `tenant_memberships` scoped to `current_user.tenant_id`. Returns ~5 actual members with `role` + `membership_status` attached. Legacy users with no membership see only themselves.
+
+**Frontend:**
+- `Dashboard.js` — full rewrite (619 lines → ~380 lines). Now exactly 5 sections in order:
+  1. Today's Priority Leads
+  2. Lead Pipeline Snapshot (5 simple counts)
+  3. Active Lead Sources (connected integrations)
+  4. Aria Recommendations (derived from real data, never invented)
+  5. Recent Activity (real import logs)
+- Removed (moved to dedicated pages): Founder Command Center, Aria Stories, Aria Today Widget, Aria Command Room, Sync Activity Digest, Pipeline Mood Card, Pipeline Health Gauge, Event Mix Tile, sleeping/brochure/call-priority banners, KPI tiles, 4 charts, Recent Leads table.
+- Empty states everywhere — no fake names, just guided CTAs ("Import leads", "Connect a source").
+- `/dashboard-demo` route (auth-required) renders the same Dashboard with sample data + visible "Demo Dashboard — sample data only" banner. Public `/demo` continues to be the marketing InteractiveDemo page (no conflict).
+
+### Verified
+- admin@demo.com real-data: 4 money_at_risk rows from real seeded leads, ZERO Priya/Aanya/Bluemoon strings anywhere.
+- Fresh signup tenant: `is_empty_workspace: true`, all rows empty, label `"-"`.
+- `?demo=true`: sample names return (for the demo dashboard route).
+- `/api/users` admin@demo.com: 5 real tenant members (not 37). Fresh tenant: only owner.
+- Frontend smoke: all 5 sections render correctly.
+
+### Known limitation
+- The `/dashboard-demo` protected route is reachable from URL only — no nav link yet. Add a nav entry when product wants admins to find it more easily.
+
+---
+
+
 ## Iter 69 — Saleshandy/Lemlist pull import + Dagre flowchart + AI Setup Assistant audit (Feb 2026)
 
 ### Reported asks (from user mega-prompt)

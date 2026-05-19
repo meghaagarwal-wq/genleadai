@@ -5092,26 +5092,26 @@ async def founder_command_center(
             "cta": "Show Me Where We're Leaking",
         },
         "money_at_risk": {
-            "total_inr": money_at_risk or 480000,
-            "total_label": _fmt_inr(money_at_risk or 480000),
-            "rows": risk_rows or _demo_money_at_risk_rows(),
+            "total_inr": money_at_risk,
+            "total_label": _fmt_inr(money_at_risk) if money_at_risk else "-",
+            "rows": risk_rows,  # iter71 — no `or _demo_*()` fallback: real-tenant response never shows fake names
             "cta": "Rescue These Leads",
         },
         "daily_brief": {
             "greeting": "Good morning",
             "lines": [
-                f"Your team captured {new_today or 42} new leads in the last 24 hours.",
-                f"{hot_count or 13} are hot.",
-                f"{len(overdue) or 7} follow-ups are overdue.",
-                f"{_fmt_inr(money_at_risk or 480000)} pipeline is at risk today.",
-                f"{slowest_rep} has the highest pending follow-up load.",
-                f"{min(3, hot_count) or 3} leads should be contacted before 12 PM.",
+                f"Your team captured {new_today} new leads in the last 24 hours.",
+                f"{hot_count} are hot.",
+                f"{len(overdue)} follow-ups are overdue.",
+                f"{_fmt_inr(money_at_risk) if money_at_risk else '-'} pipeline is at risk today.",
+                f"{slowest_rep} has the highest pending follow-up load." if slowest_rep else "",
+                f"{min(3, hot_count)} leads should be contacted before 12 PM." if hot_count else "",
             ],
             "cta": "Generate Today's Sales Brief",
         },
         "hot_leads_untouched": {
-            "count": len(hot_untouched) or 5,
-            "rows": [{"lead_id": x.get("id"), "name": f"{x.get('first_name','')} {x.get('last_name','')}".strip(), "source": (x.get("source_channel") or "—").replace("_"," ").title(), "score": x.get("icp_score"), "owner": x.get("owner_name") or "Unassigned", "hours_since": int(((now - datetime.fromisoformat(x.get("created_at").replace("Z","+00:00"))).total_seconds() / 3600)) if x.get("created_at") else 4} for x in hot_untouched[:5]] or _demo_hot_untouched_rows(),
+            "count": len(hot_untouched),
+            "rows": [{"lead_id": x.get("id"), "name": f"{x.get('first_name','')} {x.get('last_name','')}".strip(), "source": (x.get("source_channel") or "—").replace("_"," ").title(), "score": x.get("icp_score"), "owner": x.get("owner_name") or "Unassigned", "hours_since": int(((now - datetime.fromisoformat(x.get("created_at").replace("Z","+00:00"))).total_seconds() / 3600)) if x.get("created_at") else 4} for x in hot_untouched[:5]],
         },
         "first_response": {
             "avg_hours": avg_response_hours,
@@ -5122,19 +5122,19 @@ async def founder_command_center(
             "insight": "Your team's current first response time is too slow. Prioritise new hot leads before they go cold.",
         },
         "proposal_graveyard": {
-            "count": len(proposal_stuck) or 3,
-            "rows": [{"lead_id": x.get("id"), "name": x.get("company_name") or f"{x.get('first_name','')} {x.get('last_name','')}".strip(), "value": x.get("deal_value") or 250000, "value_label": _fmt_inr(x.get("deal_value") or 250000), "days_since": x.get("days_since", 6), "owner": x.get("owner_name") or "Unassigned", "action": "Follow up today"} for x in proposal_stuck[:5]] or _demo_proposal_graveyard_rows(),
+            "count": len(proposal_stuck),
+            "rows": [{"lead_id": x.get("id"), "name": x.get("company_name") or f"{x.get('first_name','')} {x.get('last_name','')}".strip(), "value": x.get("deal_value") or 250000, "value_label": _fmt_inr(x.get("deal_value") or 250000), "days_since": x.get("days_since", 6), "owner": x.get("owner_name") or "Unassigned", "action": "Follow up today"} for x in proposal_stuck[:5]],
         },
         "source_quality": {
-            "rows": [{"source": r["source"], "total": r["total"], "hot": r["hot"], "calls_booked": r["calls_booked"], "pipeline": r["pipeline"], "pipeline_label": _fmt_inr(r["pipeline"])} for r in source_rows] or _demo_source_quality_rows(),
-            "insight": "Webinar and LinkedIn are producing the highest-quality pipeline this week.",
+            "rows": [{"source": r["source"], "total": r["total"], "hot": r["hot"], "calls_booked": r["calls_booked"], "pipeline": r["pipeline"], "pipeline_label": _fmt_inr(r["pipeline"])} for r in source_rows],
+            "insight": "Webinar and LinkedIn are producing the highest-quality pipeline this week." if source_rows else "",
         },
         "lost_reasons": {
             "rows": lost_rows,
             "insight": "ARIA helps you separate marketing problems from sales process problems.",
         },
         "pipeline_value": pipeline_value,
-        "pipeline_value_label": _fmt_inr(pipeline_value or 4500000),
+        "pipeline_value_label": _fmt_inr(pipeline_value) if pipeline_value else "-",
     }
 
 
