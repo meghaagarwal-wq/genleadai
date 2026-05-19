@@ -1,76 +1,85 @@
+/**
+ * Aria workspace dashboard — iter 71 simplification.
+ *
+ * Down from ~15 stacked sections (Command Room, Stories, Setup Checklist,
+ * Lead Feed, Pipeline Mood, Pipeline Health, Event Mix, Founder Command Center,
+ * Aria Today, Aria Agent Activity, Sync Activity Digest, sleeping banner,
+ * brochure-opens banner, call-priority widget, KPIs, 4 charts, Recent Leads)
+ * to the 5 sections requested:
+ *
+ *   1. Today's Priority Leads     ← real hot/warm leads only
+ *   2. Lead Pipeline Snapshot     ← five simple counts
+ *   3. Active Lead Sources        ← connected integrations + sync state
+ *   4. Aria Recommendations       ← real next-best-actions only
+ *   5. Recent Activity            ← real lead/integration events
+ *
+ * Empty states never show fake names. Fake / demo data lives in /demo only.
+ */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../config/api';
-import AriaInsightCard from '../components/AriaInsightCard';
-import FounderCommandCenter from '../components/FounderCommandCenter';
-import AriaTodayWidget from '../components/AriaTodayWidget';
-import AriaAgentActivitySection from '../components/AriaAgentActivitySection';
-import SyncActivityDigest from '../components/SyncActivityDigest';
-import AriaCommandRoom from '../components/AriaCommandRoom';
-import AriaStories from '../components/AriaStories';
-import SetupChecklist from '../components/SetupChecklist';
-import LeadFeed from '../components/LeadFeed';
-import PipelineMoodCard from '../components/PipelineMoodCard';
 import EmptyDashboard from '../components/EmptyDashboard';
-import PipelineHealthGauge from '../components/PipelineHealthGauge';
-import StaleLeadAlertChip from '../components/StaleLeadAlertChip';
-import EventMixTile from '../components/EventMixTile';
 import {
-  Users, TrendUp, Fire, Target, ArrowRight, Lightning, Robot,
-  CalendarCheck, Moon, Sparkle, Clock, Phone, EnvelopeSimple,
-  CurrencyCircleDollar, ChartLineUp, ArrowUpRight, Warning,
-  CheckCircle, Trophy, User, Tray,
+  Users, TrendUp, Fire, Target, ArrowRight, Lightning,
+  Sparkle, Clock, Warning, CheckCircle, Plug, ChartLineUp,
+  PaperPlaneTilt, BellSimple,
 } from '@phosphor-icons/react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area,
-} from 'recharts';
 
-const Dashboard = () => {
+const greeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+const SOURCE_LABEL = {
+  saleshandy: 'Saleshandy', lemlist: 'Lemlist', website_form: 'Website Form',
+  meta_ads: 'Meta Ads', google_ads: 'Google Ads', linkedin: 'LinkedIn',
+  whatsapp: 'WhatsApp', email: 'Email', referral: 'Referral', webinar: 'Webinar',
+  manual: 'Manual', csv: 'CSV Import', zoho_crm: 'Zoho CRM',
+};
+
+const Dashboard = ({ demo = false }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
-  const [recentLeads, setRecentLeads] = useState([]);
-  const [ariaStats, setAriaStats] = useState(null);
   const [topLeads, setTopLeads] = useState([]);
-  const [sleepingCount, setSleepingCount] = useState(0);
-  const [ttv, setTtv] = useState(null);
-  const [recentOpens, setRecentOpens] = useState([]);
-  const [callPriority, setCallPriority] = useState([]);
-  const [tenantInfo, setTenantInfo] = useState(null);
+  const [integrations, setIntegrations] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchAll(); }, []);
-
-  const fetchAll = async () => {
-    try {
-      const [aRes, lRes, arRes, tRes, sRes, ttvRes, opensRes, cpRes, tInfo] = await Promise.all([
-        api.get('/api/analytics/dashboard'),
-        api.get('/api/leads?limit=5'),
-        api.get('/api/aria/analytics').catch(() => ({ data: null })),
-        api.get('/api/leads/your-five-today').catch(() => ({ data: { leads: [] } })),
-        api.get('/api/leads/sleeping?threshold_days=14').catch(() => ({ data: { total: 0 } })),
-        api.get('/api/ttv/milestones').catch(() => ({ data: null })),
-        api.get('/api/lead-magnets/recent-opens?limit=5').catch(() => ({ data: { opens: [] } })),
-        api.get('/api/aria/call-priority?limit=3').catch(() => ({ data: { priority: [] } })),
-        api.get('/api/tenants/active').catch(() => ({ data: null })),
-      ]);
-      setAnalytics(aRes.data);
-      setRecentLeads(lRes.data.leads);
-      setAriaStats(arRes.data);
-      setTopLeads(tRes.data.leads?.slice(0, 3) || []);
-      setSleepingCount(sRes.data.total || 0);
-      setTtv(ttvRes.data);
-      setRecentOpens(opensRes.data?.opens || []);
-      setCallPriority(cpRes.data?.priority || []);
-      setTenantInfo(tInfo.data);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = demo ? { demo: 1 } : {};
+        // Fire requests in parallel — each one independently catches its own
+        // 404/500 so a single dead endpoint doesn't blank the entire dashboard.
+        const [aRes, tRes, iRes, actRes] = await Promise.all([
+          api.get('/api/analytics/dashboard', { params }).catch(() => ({ data: null })),
+          api.get('/api/leads', { params: { ...params, limit: 5, status: 'hot' } }).catch(() => ({ data: { leads: [] } })),
+          api.get('/api/integrations/list').catch(() => ({ data: { integrations: [] } })),
+          api.get('/api/integrations/import-logs', { params: { limit: 5 } }).catch(() => ({ data: { logs: [] } })),
+        ]);
+        if (cancelled) return;
+        setAnalytics(aRes.data);
+        setTopLeads((tRes.data?.leads || []).slice(0, 5));
+        setIntegrations((iRes.data?.integrations || []).filter((x) => x.status === 'connected'));
+        setRecentActivity((actRes.data?.logs || []).slice(0, 5));
+        // Recommendations are derived from the real data we already loaded — no
+        // separate endpoint, so they're never fake.
+        setRecommendations(buildRecommendations(aRes.data, iRes.data?.integrations || [], tRes.data?.leads || []));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [demo]);
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64">
+    <div className="flex items-center justify-center h-64" data-testid="dashboard-loading">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center animate-pulse" style={{ background: 'var(--gradient-brand)' }}>
           <Sparkle size={20} className="text-white" weight="fill" />
@@ -80,539 +89,400 @@ const Dashboard = () => {
     </div>
   );
 
-  const channelData = analytics ? Object.entries(analytics.channel_distribution).filter(([, v]) => v > 0).map(([k, v]) => ({ name: k.replace('_', ' '), value: v })).sort((a, b) => b.value - a.value).slice(0, 6) : [];
-  const typeData = analytics ? [{ name: 'B2B', value: analytics.lead_type_distribution.B2B }, { name: 'B2C', value: analytics.lead_type_distribution.B2C }] : [];
-  const icpData = analytics ? [{ name: 'Hot', value: analytics.icp_distribution.hot, color: '#7C35DC' }, { name: 'Warm', value: analytics.icp_distribution.warm, color: '#D97706' }, { name: 'Cold', value: analytics.icp_distribution.cold, color: '#CBD5E1' }] : [];
-  const funnelData = analytics ? [
-    { stage: 'New', value: analytics.status_distribution.new || 0 },
-    { stage: 'Contacted', value: analytics.status_distribution.contacted || 0 },
-    { stage: 'Qualified', value: analytics.status_distribution.qualified || 0 },
-    { stage: 'Proposal', value: analytics.status_distribution.proposal_sent || 0 },
-    { stage: 'Won', value: analytics.status_distribution.won || 0 },
-  ] : [];
-  const tooltipStyle = { background: '#fff', border: '1px solid #E8E0F5', borderRadius: '12px', color: '#1A0A2E', boxShadow: 'var(--shadow-card)', fontSize: 12 };
-
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const tierBadge = (tier) => {
-    const s = { hot: 'bg-[#F4E6FD] text-[#7C35DC] border-[#C044E0]', warm: 'bg-[#FEF3C7] text-[#D97706] border-[#D97706]/30', cold: 'bg-[#F1F5F9] text-[#64748B] border-[#94A3B8]/30' };
-    return `px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border ${s[tier] || s.cold}`;
-  };
-
-  // Fresh tenant with zero leads → show clean empty state instead of fake-data widgets
   const totalLeads = analytics?.total_leads ?? 0;
-  if (!loading && totalLeads === 0) {
-    return (
-      <EmptyDashboard
-        workspaceName={tenantInfo?.tenant?.name}
-        founderName={user?.full_name}
-      />
-    );
+  const isEmpty = totalLeads === 0 && integrations.length === 0;
+
+  // Brand new workspace with no leads + no integrations → guided empty state.
+  if (isEmpty && !demo) {
+    return <EmptyDashboard workspaceName={user?.tenant_name} founderName={user?.full_name} />;
   }
 
+  const firstName = user?.full_name?.split(' ')[0] || 'there';
+
   return (
-    <div data-testid="dashboard-page" className="space-y-6 max-w-[1400px] mx-auto aria-fade-up">
-      {/* ━━━ AriaCommandRoom — the premium AI-first hero (welcome · status · today's pipeline · personality panel · quick actions) ━━━ */}
-      <AriaCommandRoom userName={user?.full_name} />
-
-      {/* Setup Checklist — guided onboarding for new / under-configured tenants. Auto-hides at 100% or when dismissed. */}
-      <SetupChecklist />
-
-      {/* ARIA Stories — leads that need attention now */}
-      <div className="aria-fade-up aria-fade-up-1">
-        <AriaStories />
-      </div>
-
-      {/* Stale lead alert — visible only when stale leads exist */}
-      <StaleLeadAlertChip />
-
-      {/* Lead Feed + Pipeline Mood + Pipeline Health — the central workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 aria-fade-up aria-fade-up-2">
-        <LeadFeed />
-        <div className="space-y-4">
-          <PipelineHealthGauge />
-          <PipelineMoodCard />
-          <EventMixTile />
-        </div>
-      </div>
-
-      <div className="h-2" />
-
-      {/* ━━━ Below-the-fold: existing ARIA Command Center content preserved ━━━ */}
-
-      {/* ARIA Command Center Header */}
+    <div data-testid="dashboard-page" className="space-y-6 max-w-[1280px] mx-auto aria-fade-up">
+      {/* Header */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>{greeting()}, {user?.full_name?.split(' ')[0] || 'there'}</div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-[#1A0A2E] leading-tight" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '-0.01em' }}>
-            ARIA Command Center
+          {demo && (
+            <div
+              data-testid="demo-dashboard-banner"
+              className="inline-flex items-center gap-1.5 mb-3 px-2.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-bold uppercase tracking-wider"
+            >
+              <Sparkle size={11} weight="fill" /> Demo Dashboard — sample data only
+            </div>
+          )}
+          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-2">
+            {greeting()}, {firstName}
+          </div>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-[#1A0A2E] leading-tight" style={{ letterSpacing: '-0.01em' }}>
+            Your workspace today
           </h1>
-          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl">Track every lead, follow-up, and revenue movement from one AI-powered command center.</p>
+          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl">
+            Who needs attention, what's happening, and what to do next — at a glance.
+          </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => navigate('/your-5-today')} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E8E0F5] text-[#5A4A7A] rounded-xl hover:bg-[#F9F5FF] hover:text-[#7C35DC] hover:border-[#7C35DC]/20 transition-all text-sm font-medium" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="your5-shortcut">
-            <Lightning size={16} weight="fill" className="text-[#7C35DC]" /> Your 5 Today
-          </button>
-          <button onClick={() => navigate('/leads')} data-testid="view-all-leads-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-xl text-sm font-semibold" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            View All Leads <ArrowRight size={14} />
+          <button onClick={() => navigate('/leads')} data-testid="view-all-leads-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-xl text-sm font-semibold">
+            View all leads <ArrowRight size={14} />
           </button>
         </div>
       </div>
 
-      {/* ARIA Daily Brief — premium AI insight card matching genleadai.com hero */}
-      {(() => {
-        const hotPriorityCount = (callPriority || []).filter(p => p.urgency === 'now').length;
-        const overdueCount = sleepingCount;
-        const opensCount = recentOpens.length;
-        let title = 'You\'re fully on top of your pipeline.';
-        let message = 'No urgent actions surfaced. Use this clear runway to push proposals forward and book new discovery calls.';
-        let ctaLabel = null, ctaTo = null, tone = 'default';
-        if (hotPriorityCount > 0) {
-          title = `${hotPriorityCount} hot ${hotPriorityCount === 1 ? 'lead is' : 'leads are'} ready to call now.`;
-          message = 'ARIA flagged these because they just engaged or are within their active hours. Hit them before momentum cools.';
-          ctaLabel = 'View Priority Follow-Ups';
-          ctaTo = '/follow-ups';
-          tone = 'urgent';
-        } else if (overdueCount > 5) {
-          title = `${overdueCount} leads are sitting untouched.`;
-          message = 'They went cold for 14+ days. ARIA can re-engage them with personalised messages so revenue movement resumes.';
-          ctaLabel = 'Revive Sleeping Leads';
-          ctaTo = '/sleeping-leads';
-        } else if (opensCount > 0) {
-          title = `${opensCount} ${opensCount === 1 ? 'lead' : 'leads'} just opened your brochure.`;
-          message = 'They\'re warm right now. Reach out while you\'re top of mind — this is the highest-converting window.';
-          ctaLabel = 'See Recent Opens';
-          ctaTo = '/leads';
-        }
-        return <AriaInsightCard title={title} message={message} ctaLabel={ctaLabel} ctaTo={ctaTo} tone={tone} />;
-      })()}
-
-      {/* ARIA Today — live momentum snapshot, refreshes every 60s */}
-      <AriaTodayWidget />
-
-      {/* ARIA Sales Agent — additive activity section + positioning banner */}
-      <AriaAgentActivitySection />
-
-      {/* Sync Activity Digest — today's Lemlist + SalesHandy events at a glance */}
-      <SyncActivityDigest />
-
-      {/* Founder Command Center — high-conversion demo features */}
-      <FounderCommandCenter />
-
-      {/* Sleeping Leads Alert Banner */}
-      {sleepingCount > 5 && (
-        <div className="flex items-center justify-between p-4 rounded-xl border" style={{ background: 'linear-gradient(135deg, rgba(192,68,224,0.06) 0%, rgba(91,40,212,0.06) 100%)', borderColor: 'rgba(124,53,220,0.15)' }} data-testid="sleeping-alert-banner">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#F4F0FF] flex items-center justify-center border border-[#E0D4F7]">
-              <CurrencyCircleDollar size={20} className="text-[#7C35DC]" weight="fill" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#1A0A2E]"><span className="text-[#7C35DC]">{sleepingCount} leads</span> are sitting untouched for 14+ days</p>
-              <p className="text-xs text-[#5A4A7A]">ARIA can re-engage them with personalized messages right now</p>
-            </div>
-          </div>
-          <button onClick={() => navigate('/sleeping-leads')} className="flex items-center gap-2 px-4 py-2 bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20 rounded-xl text-sm font-semibold hover:bg-[#7C35DC] hover:text-white transition-all" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid="activate-revival-btn">
-            <Moon size={16} weight="fill" /> Revive Leads <ArrowRight size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* Brochure Opens Alert — leads who opened your lead magnet */}
-      {recentOpens.length > 0 && (
-        <div className="rounded-xl border overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(220,38,38,0.05) 0%, rgba(192,68,224,0.06) 100%)', borderColor: 'rgba(220,38,38,0.2)' }} data-testid="brochure-opens-alert">
-          <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'rgba(220,38,38,0.15)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #DC2626 0%, #C044E0 100%)' }}>
-                <Fire size={18} className="text-white" weight="fill" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-[#1A0A2E]">
-                  <span className="text-[#DC2626]">{recentOpens.length} {recentOpens.length === 1 ? 'lead' : 'leads'}</span> just opened your brochure
-                </p>
-                <p className="text-xs text-[#5A4A7A]">They're warm right now — perfect time to reach out</p>
-              </div>
-            </div>
-          </div>
-          <div className="px-4 py-2 divide-y divide-[#F4E6F0]">
-            {recentOpens.slice(0, 3).map(o => (
+      {/* ── SECTION 1 · Today's Priority Leads ─────────────────────────── */}
+      <Section
+        title="Today's priority leads"
+        testid="section-priority-leads"
+        icon={<Fire size={16} weight="duotone" className="text-rose-600" />}
+        action={topLeads.length > 0 ? { label: 'View all', onClick: () => navigate('/leads') } : null}
+      >
+        {topLeads.length === 0 ? (
+          <EmptyState
+            testid="empty-priority-leads"
+            title="No priority leads yet"
+            subtitle="Once real leads are imported or captured, Aria will show the ones that need attention here."
+            cta={{ label: 'Import leads', onClick: () => navigate('/integrations') }}
+          />
+        ) : (
+          <div className="divide-y divide-[#F0ECF9]">
+            {topLeads.map((l) => (
               <button
-                key={o.lead_id}
-                onClick={() => navigate(`/leads/${o.lead_id}`)}
-                className="w-full flex items-center justify-between py-2.5 px-2 rounded-lg hover:bg-white/50 transition-colors text-left"
-                data-testid={`brochure-open-row-${o.lead_id}`}
+                key={l.id}
+                onClick={() => navigate(`/leads/${l.id}`)}
+                data-testid={`priority-lead-${l.id}`}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#F9F5FF] transition-colors text-left"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-7 h-7 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{(o.first_name?.[0] || '?').toUpperCase()}</span>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-bold text-[#7C35DC]">{(l.first_name?.[0] || '?').toUpperCase()}</span>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#1A0A2E] truncate">{o.first_name} {o.last_name}</span>
-                      {o.is_hot && (
-                        <span className="flex items-center gap-0.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#FEE2E2] text-[#DC2626] border border-[#DC2626]/20">
-                          <Fire size={9} weight="fill" /> {o.view_count}× hot
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-[#1A0A2E] truncate">{l.first_name} {l.last_name}</span>
+                      <span className="text-xs text-[#9B8AB0]">·</span>
+                      <span className="text-xs text-[#5A4A7A] truncate">{l.company_name || '—'}</span>
+                      {l.icp_tier === 'hot' && (
+                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">Hot</span>
+                      )}
+                      {l.icp_tier === 'warm' && (
+                        <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">Warm</span>
+                      )}
+                      {(l.external_source === 'saleshandy' || l.external_source === 'lemlist') && (
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${l.external_source === 'saleshandy' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-pink-50 text-pink-700 border-pink-200'}`}>
+                          {l.external_source}
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-[#9B8AB0] truncate block">{o.company_name || o.email}</span>
+                    <div className="text-xs text-[#5A4A7A] mt-0.5 truncate">
+                      {l.next_action_label || l.source_channel?.replace('_', ' ') || 'Awaiting follow-up'}
+                    </div>
                   </div>
                 </div>
-                <ArrowRight size={14} className="text-[#7C35DC] flex-shrink-0" />
+                <ArrowRight size={14} className="text-[#9B8AB0] flex-shrink-0" />
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </Section>
 
-      {/* ARIA Best Time to Call — top priority leads */}
-      {callPriority.length > 0 && (
-        <div className="rounded-xl border border-[#E0D4F7] overflow-hidden" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F9F5FF 100%)', boxShadow: 'var(--shadow-card)' }} data-testid="best-time-to-call-widget">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-[#E8E0F5]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
-                <Clock size={14} className="text-white" weight="fill" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA's Best Time to Call</h3>
-                <p className="text-[11px] text-[#5A4A7A]">Right person, right moment — based on opens, ICP & timezone</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#F4F0FF] text-[#7C35DC] border border-[#7C35DC]/20">{callPriority.length} ready</span>
+      {/* ── SECTION 2 · Lead Pipeline Snapshot ─────────────────────────── */}
+      <Section
+        title="Lead pipeline snapshot"
+        testid="section-pipeline-snapshot"
+        icon={<ChartLineUp size={16} weight="duotone" className="text-violet-600" />}
+      >
+        {!analytics || totalLeads === 0 ? (
+          <EmptyState
+            testid="empty-pipeline"
+            title="No pipeline data yet"
+            subtitle="Connect a lead source or import campaign data to see your pipeline."
+            cta={{ label: 'Connect integration', onClick: () => navigate('/integrations') }}
+          />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4">
+            <PipelineMetric
+              testid="pipeline-new"
+              label="New"
+              value={analytics?.status_distribution?.new || 0}
+              tone="violet"
+              icon={Users}
+            />
+            <PipelineMetric
+              testid="pipeline-warm"
+              label="Warm"
+              value={analytics?.icp_distribution?.warm || 0}
+              tone="amber"
+              icon={TrendUp}
+            />
+            <PipelineMetric
+              testid="pipeline-hot"
+              label="Hot"
+              value={analytics?.icp_distribution?.hot || 0}
+              tone="rose"
+              icon={Fire}
+            />
+            <PipelineMetric
+              testid="pipeline-booked"
+              label="Demo booked"
+              value={analytics?.status_distribution?.qualified || 0}
+              tone="emerald"
+              icon={CheckCircle}
+            />
+            <PipelineMetric
+              testid="pipeline-followup"
+              label="Needs follow-up"
+              value={analytics?.status_distribution?.contacted || 0}
+              tone="sky"
+              icon={Clock}
+            />
           </div>
+        )}
+      </Section>
+
+      {/* ── SECTION 3 · Active Lead Sources ─────────────────────────────── */}
+      <Section
+        title="Active lead sources"
+        testid="section-active-sources"
+        icon={<Plug size={16} weight="duotone" className="text-emerald-600" />}
+        action={{ label: 'Manage all', onClick: () => navigate('/integrations') }}
+      >
+        {integrations.length === 0 ? (
+          <EmptyState
+            testid="empty-sources"
+            title="No lead sources connected yet"
+            subtitle="Connect Saleshandy, Lemlist, forms, ads, or CRM tools to start tracking leads."
+            cta={{ label: 'Connect a source', onClick: () => navigate('/integrations') }}
+          />
+        ) : (
           <div className="divide-y divide-[#F0ECF9]">
-            {callPriority.map((p) => {
-              const urgencyStyle = {
-                now: { color: '#16A34A', bg: '#DCFCE7', border: '#16A34A33', label: 'Call now' },
-                soon: { color: '#D97706', bg: '#FEF3C7', border: '#D9770633', label: 'Soon' },
-                later: { color: '#9B8AB0', bg: '#F1F5F9', border: '#94A3B833', label: 'Later' },
-              }[p.urgency] || {};
-              return (
-                <div key={p.lead_id} className="flex items-center justify-between px-5 py-3 hover:bg-white/70 transition-colors" data-testid={`call-priority-row-${p.lead_id}`}>
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-full bg-white border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{(p.first_name?.[0] || '?').toUpperCase()}</span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-[#1A0A2E] truncate">{p.first_name} {p.last_name}</span>
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border" style={{ color: urgencyStyle.color, background: urgencyStyle.bg, borderColor: urgencyStyle.border }}>{urgencyStyle.label}</span>
-                        {p.icp_score >= 70 && (
-                          <span className="flex items-center gap-0.5 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#F4E6FD] text-[#7C35DC] border border-[#7C35DC]/20">
-                            <Fire size={9} weight="fill" /> ICP {p.icp_score}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#5A4A7A]">
-                        <span className="truncate">{p.suggested_action}</span>
-                        <span className="text-[#9B8AB0]">·</span>
-                        <span className="text-[#9B8AB0] font-mono">{p.tz_label} {p.lead_local_hour}:00</span>
-                      </div>
-                    </div>
+            {integrations.map((src) => (
+              <div key={src.type} data-testid={`active-source-${src.type}`} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-[#FAFAFA] border border-[#E8E0F5] flex items-center justify-center flex-shrink-0">
+                    <Plug size={14} weight="duotone" className="text-[#7C35DC]" />
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {p.phone && (
-                      <a href={`tel:${p.phone}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 px-3 py-1.5 btn-gradient rounded-lg text-xs font-semibold text-white" style={{ fontFamily: 'Plus Jakarta Sans' }} data-testid={`call-now-btn-${p.lead_id}`}>
-                        <Phone size={12} weight="fill" /> Call
-                      </a>
-                    )}
-                    <button onClick={() => navigate(`/leads/${p.lead_id}`)} className="px-2.5 py-1.5 bg-white border border-[#E8E0F5] text-[#5A4A7A] hover:text-[#7C35DC] hover:border-[#7C35DC]/30 rounded-lg transition-colors" data-testid={`open-lead-btn-${p.lead_id}`}>
-                      <ArrowRight size={12} />
-                    </button>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[#1A0A2E]">{SOURCE_LABEL[src.type] || src.label || src.type}</div>
+                    <div className="text-[11px] text-[#5A4A7A]">
+                      Status: <span className={src.status === 'connected' ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>{src.status === 'connected' ? 'Connected' : src.status}</span>
+                      {src.last_sync_at && <> · Last sync: {relative(src.last_sync_at)}</>}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Time to Value Tracker */}
-      {ttv && ttv.progress_pct < 100 && (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="ttv-tracker">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Your Progress</h3>
-              <p className="text-xs text-[#5A4A7A] mt-0.5">{ttv.completed_count} of {ttv.total_milestones} milestones completed</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{ttv.progress_pct}%</span>
-            </div>
-          </div>
-          {/* Progress bar */}
-          <div className="w-full h-2 bg-[#F0ECF9] rounded-full mb-5 overflow-hidden">
-            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${ttv.progress_pct}%`, background: 'var(--gradient-brand-horizontal)' }}></div>
-          </div>
-          {/* Milestone steps */}
-          <div className="flex items-start justify-between relative">
-            {/* Connector line */}
-            <div className="absolute top-4 left-6 right-6 h-0.5 bg-[#F0ECF9]" style={{ zIndex: 0 }}></div>
-            <div className="absolute top-4 left-6 h-0.5 transition-all duration-700" style={{ width: `${Math.max(0, (ttv.completed_count - 1) / (ttv.total_milestones - 1) * 100)}%`, background: 'var(--gradient-brand-horizontal)', zIndex: 1 }}></div>
-            {ttv.milestones.map((m, i) => {
-              const IconMap = { user: User, tray: Tray, robot: Robot, calendar: CalendarCheck, trophy: Trophy };
-              const MIcon = IconMap[m.icon] || CheckCircle;
-              return (
-                <div key={m.id} className="flex flex-col items-center relative z-10" style={{ flex: 1 }}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                    m.completed
-                      ? 'text-white shadow-md'
-                      : 'bg-[#F0ECF9] text-[#9B8AB0] border-2 border-[#E8E0F5]'
-                  }`} style={m.completed ? { background: 'var(--gradient-brand)', boxShadow: '0 0 12px rgba(124,53,220,0.3)' } : {}}>
-                    {m.completed ? <CheckCircle size={16} weight="fill" /> : <MIcon size={14} />}
-                  </div>
-                  <span className={`text-[10px] mt-2 font-semibold text-center leading-tight max-w-[80px] ${m.completed ? 'text-[#7C35DC]' : 'text-[#9B8AB0]'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>{m.label}</span>
-                  {m.time_from_start && (
-                    <span className="text-[9px] mt-0.5 font-mono text-[#16A34A] bg-[#DCFCE7] px-1.5 py-0.5 rounded">{m.time_from_start}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {ttv.ttv_to_meeting && (
-            <div className="mt-4 pt-4 border-t border-[#F0ECF9] text-center">
-              <span className="text-xs text-[#5A4A7A]">Time to first meeting: </span>
-              <span className="text-sm font-bold text-[#7C35DC] font-mono">{ttv.ttv_to_meeting}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* KPI Cards — 5 columns */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Total Leads', value: analytics?.total_leads || 0, icon: Users, color: '#7C35DC', sub: 'In pipeline', onClick: () => navigate('/leads') },
-          { label: 'Hot Leads', value: analytics?.icp_distribution?.hot || 0, icon: Fire, color: '#C044E0', sub: 'ICP 70+', onClick: () => navigate('/leads') },
-          { label: 'Meetings', value: ariaStats?.meetings_booked || 0, icon: CalendarCheck, color: '#16A34A', sub: 'Booked by ARIA', onClick: () => navigate('/aria') },
-          { label: 'Won Deals', value: analytics?.status_distribution?.won || 0, icon: Target, color: '#16A34A', sub: 'Closed', onClick: () => navigate('/pipeline') },
-          { label: 'ARIA Convos', value: ariaStats?.total_conversations || 0, icon: Robot, color: '#7C35DC', sub: `${ariaStats?.reply_rate || 0}% reply rate`, onClick: () => navigate('/aria') },
-        ].map(kpi => (
-          <button key={kpi.label} onClick={kpi.onClick} className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4 text-left group" style={{ boxShadow: 'var(--shadow-card)' }} data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B8AB0]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.label}</span>
-              <kpi.icon size={18} style={{ color: kpi.color }} weight="duotone" />
-            </div>
-            <div className="text-2xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{kpi.value}</div>
-            <div className="flex items-center gap-1 mt-1">
-              <span className="text-[11px] text-[#5A4A7A]">{kpi.sub}</span>
-              <ArrowUpRight size={10} className="text-[#9B8AB0] opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Main Grid: 3 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Left: Top Leads to Act On + ARIA Summary */}
-        <div className="space-y-4">
-          {/* Your Top 3 */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="top-leads-widget">
-            <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lightning size={16} className="text-[#7C35DC]" weight="fill" />
-                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Priority Leads</h3>
-              </div>
-              <button onClick={() => navigate('/your-5-today')} className="text-xs text-[#7C35DC] font-semibold hover:text-[#6B28C8]">See all 5</button>
-            </div>
-            {topLeads.length === 0 ? (
-              <div className="p-6 text-center text-sm text-[#9B8AB0]">No priority leads today</div>
-            ) : (
-              <div className="divide-y divide-[#F0ECF9]">
-                {topLeads.map((lead, i) => (
-                  <button key={lead.id} onClick={() => navigate(`/leads/${lead.id}`)} className="w-full p-4 hover:bg-[#F9F5FF] transition-all text-left" data-testid={`top-lead-${i}`}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: 'var(--gradient-brand)' }}>{i + 1}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-[#1A0A2E] truncate">{lead.first_name} {lead.last_name}</span>
-                          <span className={tierBadge(lead.icp_tier)}>{lead.icp_tier}</span>
-                        </div>
-                        <p className="text-xs text-[#7C35DC] mt-1 font-medium truncate">{lead._reason}</p>
-                        {lead.company_name && <p className="text-[11px] text-[#9B8AB0] mt-0.5">{lead.company_name}</p>}
-                      </div>
-                      <span className="text-xs font-mono font-bold text-[#7C35DC] shrink-0">{lead.icp_score}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ARIA Activity */}
-          {ariaStats && (
-            <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="aria-summary-widget">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--gradient-brand)' }}>
-                  <Robot size={14} className="text-white" weight="fill" />
-                </div>
-                <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA Activity</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Messages', value: ariaStats.total_aria_messages, color: '#7C35DC' },
-                  { label: 'Replies', value: ariaStats.total_lead_replies, color: '#C044E0' },
-                  { label: 'Booking %', value: `${ariaStats.booking_rate}%`, color: '#D97706' },
-                  { label: 'Escalated', value: ariaStats.escalations, color: '#DC2626' },
-                ].map(s => (
-                  <div key={s.label} className="bg-[#FAFAFA] rounded-lg p-3 border border-[#F0ECF9]">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#9B8AB0]">{s.label}</div>
-                    <div className="text-lg font-extrabold mt-0.5" style={{ color: s.color, fontFamily: 'Plus Jakarta Sans' }}>{s.value}</div>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => navigate('/aria')} className="w-full mt-3 flex items-center justify-center gap-2 py-2 bg-[#F4F0FF] text-[#7C35DC] rounded-lg text-xs font-semibold border border-[#7C35DC]/10 hover:bg-[#7C35DC] hover:text-white transition-all">
-                Open ARIA Dashboard <ArrowRight size={12} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Center: Charts */}
-        <div className="space-y-4">
-          {/* Channel Chart */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-channels">
-            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Leads by Channel</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={channelData} barSize={24}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F0ECF9" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(124,53,220,0.04)' }} />
-                <Bar dataKey="value" fill="#7C35DC" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Funnel */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-funnel">
-            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversion Funnel</h3>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={funnelData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F0ECF9" vertical={false} />
-                <XAxis dataKey="stage" tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9B8AB0', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <defs>
-                  <linearGradient id="funnelGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#7C35DC" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#7C35DC" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="value" stroke="#7C35DC" fill="url(#funnelGrad)" strokeWidth={2.5} dot={{ r: 4, fill: '#7C35DC', stroke: '#fff', strokeWidth: 2 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Right: Donut Charts + Quick Actions */}
-        <div className="space-y-4">
-          {/* B2B vs B2C */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-lead-type">
-            <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>Lead Split</h3>
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={120} height={120}>
-                <PieChart>
-                  <Pie data={typeData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
-                    {typeData.map((e, i) => <Cell key={i} fill={['#7C35DC', '#16A34A'][i]} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
-                {typeData.map((d, i) => (
-                  <div key={d.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded" style={{ backgroundColor: ['#7C35DC', '#16A34A'][i] }}></div>
-                      <span className="text-sm text-[#5A4A7A]">{d.name}</span>
-                    </div>
-                    <span className="text-sm font-bold text-[#1A0A2E]">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ICP Distribution */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="chart-icp">
-            <h3 className="text-sm font-bold text-[#1A0A2E] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>ICP Distribution</h3>
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={120} height={120}>
-                <PieChart>
-                  <Pie data={icpData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
-                    {icpData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
-                {icpData.map(d => (
-                  <div key={d.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded" style={{ backgroundColor: d.color }}></div>
-                      <span className="text-sm text-[#5A4A7A]">{d.name}</span>
-                    </div>
-                    <span className="text-sm font-bold text-[#1A0A2E]">{d.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-4" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="quick-actions-widget">
-            <h3 className="text-sm font-bold text-[#1A0A2E] mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>Quick Actions</h3>
-            <div className="space-y-2">
-              {[
-                { icon: Lightning, label: 'Your 5 Today', path: '/your-5-today', color: '#7C35DC' },
-                { icon: Moon, label: `Sleeping Leads (${sleepingCount})`, path: '/sleeping-leads', color: '#D97706' },
-                { icon: ChartLineUp, label: 'Full Analytics', path: '/analytics', color: '#16A34A' },
-                { icon: Robot, label: 'ARIA Conversations', path: '/aria', color: '#C044E0' },
-              ].map(action => (
-                <button key={action.label} onClick={() => navigate(action.path)} className="w-full flex items-center gap-3 px-3 py-2.5 bg-[#FAFAFA] border border-[#F0ECF9] rounded-lg hover:bg-[#F9F5FF] hover:border-[#7C35DC]/20 transition-all text-left group">
-                  <action.icon size={16} style={{ color: action.color }} weight="duotone" />
-                  <span className="text-sm text-[#5A4A7A] group-hover:text-[#7C35DC] font-medium flex-1">{action.label}</span>
-                  <ArrowRight size={12} className="text-[#9B8AB0] opacity-0 group-hover:opacity-100 transition-opacity" />
+                <button
+                  onClick={() => navigate('/integrations')}
+                  className="text-xs font-bold text-[#7C35DC] hover:underline"
+                >
+                  Manage
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </div>
-      </div>
+        )}
+      </Section>
 
-      {/* Recent Leads Table */}
-      <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="recent-leads-table">
-        <div className="p-4 border-b border-[#E8E0F5] flex items-center justify-between">
-          <h3 className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Recent Leads</h3>
-          <button onClick={() => navigate('/leads')} className="text-xs text-[#7C35DC] hover:text-[#6B28C8] font-semibold">View all</button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="bg-[#F9F5FF]">
-                {['Name', 'Email', 'Type', 'Status', 'ICP', 'Channel'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-[#5A4A7A]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {recentLeads.map(lead => (
-                <tr key={lead.id} className="border-b border-[#F0ECF9] hover:bg-[#F9F5FF] cursor-pointer transition-colors" onClick={() => navigate(`/leads/${lead.id}`)} data-testid={`lead-row-${lead.id}`}>
-                  <td className="px-4 py-3 font-semibold text-[#1A0A2E] text-sm">{lead.first_name} {lead.last_name}</td>
-                  <td className="px-4 py-3 text-[#5A4A7A] font-mono text-xs">{lead.email}</td>
-                  <td className="px-4 py-3"><span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${lead.lead_type === 'B2B' ? 'bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/20' : 'bg-[#DCFCE7] text-[#16A34A] border-[#16A34A]/20'}`}>{lead.lead_type}</span></td>
-                  <td className="px-4 py-3"><span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded border bg-[#F4F0FF] text-[#7C35DC] border-[#7C35DC]/10">{lead.status}</span></td>
-                  <td className="px-4 py-3"><span className={tierBadge(lead.icp_tier)}>{lead.icp_tier}</span></td>
-                  <td className="px-4 py-3 text-xs text-[#5A4A7A]">{lead.source_channel?.replace('_', ' ')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ── SECTION 4 · Aria Recommendations ────────────────────────────── */}
+      <Section
+        title="Aria recommendations"
+        testid="section-recommendations"
+        icon={<Sparkle size={16} weight="duotone" className="text-violet-600" />}
+      >
+        {recommendations.length === 0 ? (
+          <EmptyState
+            testid="empty-recs"
+            title="No recommendations yet"
+            subtitle="Aria will show next steps once real lead activity comes in."
+          />
+        ) : (
+          <div className="divide-y divide-[#F0ECF9]">
+            {recommendations.map((rec, i) => (
+              <button
+                key={i}
+                onClick={() => rec.onClick?.()}
+                data-testid={`recommendation-${i}`}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#F9F5FF] transition-colors text-left"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${rec.tone === 'urgent' ? 'bg-rose-50' : rec.tone === 'warn' ? 'bg-amber-50' : 'bg-violet-50'}`}>
+                    {rec.tone === 'urgent' ? <Warning size={13} weight="fill" className="text-rose-600" />
+                      : rec.tone === 'warn' ? <BellSimple size={13} weight="fill" className="text-amber-600" />
+                      : <Lightning size={13} weight="fill" className="text-violet-600" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[#1A0A2E]">{rec.title}</div>
+                    {rec.subtitle && <div className="text-xs text-[#5A4A7A] mt-0.5">{rec.subtitle}</div>}
+                  </div>
+                </div>
+                {rec.cta && <span className="text-xs font-bold text-[#7C35DC] flex-shrink-0">{rec.cta} →</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* ── SECTION 5 · Recent Activity ─────────────────────────────────── */}
+      <Section
+        title="Recent activity"
+        testid="section-recent-activity"
+        icon={<Clock size={16} weight="duotone" className="text-slate-600" />}
+      >
+        {recentActivity.length === 0 ? (
+          <EmptyState
+            testid="empty-activity"
+            title="No recent activity"
+            subtitle="Your workspace activity will appear here."
+          />
+        ) : (
+          <div className="divide-y divide-[#F0ECF9]">
+            {recentActivity.map((log, i) => (
+              <div key={log.id || i} data-testid={`activity-${log.id || i}`} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <PaperPlaneTilt size={13} weight="duotone" className="text-[#7C35DC] flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-sm text-[#1A0A2E]">
+                      <strong>{SOURCE_LABEL[log.tool] || log.tool}</strong> imported {log.totals?.imported || 0} lead{(log.totals?.imported || 0) === 1 ? '' : 's'}
+                      {(log.totals?.failed || 0) > 0 && <span className="text-rose-600"> · {log.totals.failed} failed</span>}
+                    </div>
+                    <div className="text-[11px] text-[#9B8AB0]">{relative(log.created_at)}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 };
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function buildRecommendations(analytics, integrations, leads) {
+  const recs = [];
+  const connectedTools = (integrations || []).filter((i) => i.status === 'connected');
+  const hotLeads = (leads || []).filter((l) => l.icp_tier === 'hot').length;
+
+  // 1. Hot leads waiting → urgent
+  if (hotLeads >= 1) {
+    recs.push({
+      tone: 'urgent',
+      title: `${hotLeads} hot lead${hotLeads === 1 ? '' : 's'} need follow-up.`,
+      subtitle: 'Reach out today while intent is high.',
+      cta: 'Open Lead Inbox',
+      onClick: () => (window.location.href = '/leads?icp_tier=hot'),
+    });
+  }
+
+  // 2. Saleshandy/Lemlist connected but no imports yet → warn
+  connectedTools.forEach((tool) => {
+    if ((tool.type === 'saleshandy' || tool.type === 'lemlist') && !tool.last_sync_at) {
+      recs.push({
+        tone: 'warn',
+        title: `${SOURCE_LABEL[tool.type]} is connected, but no leads imported yet.`,
+        subtitle: 'Fetch campaigns and import to start tracking outbound activity.',
+        cta: 'Open integration',
+        onClick: () => (window.location.href = '/integrations'),
+      });
+    }
+  });
+
+  // 3. Errored integrations → urgent
+  (integrations || []).filter((i) => i.status === 'error').forEach((tool) => {
+    recs.push({
+      tone: 'urgent',
+      title: `${SOURCE_LABEL[tool.type] || tool.type} connection failed.`,
+      subtitle: tool.error_message || 'Reconnect to resume syncing.',
+      cta: 'Reconnect',
+      onClick: () => (window.location.href = '/integrations'),
+    });
+  });
+
+  // 4. No integrations connected → info
+  if (connectedTools.length === 0 && (analytics?.total_leads || 0) === 0) {
+    recs.push({
+      tone: 'info',
+      title: 'Connect your first lead source.',
+      subtitle: 'Saleshandy, Lemlist, website forms, or CRM tools — any one gets the dashboard live.',
+      cta: 'Set up',
+      onClick: () => (window.location.href = '/integrations'),
+    });
+  }
+
+  return recs.slice(0, 5);
+}
+
+function relative(iso) {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const diff = Math.max(0, Date.now() - then);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+// ─── Sub-components ────────────────────────────────────────────────────────
+
+const Section = ({ title, icon, action, testid, children }) => (
+  <section
+    data-testid={testid}
+    className="bg-white border border-[#E8E0F5] rounded-2xl overflow-hidden"
+    style={{ boxShadow: 'var(--shadow-card)' }}
+  >
+    <div className="flex items-center justify-between px-4 py-3 border-b border-[#F0ECF9]">
+      <div className="flex items-center gap-2">
+        {icon}
+        <h2 className="text-sm font-bold text-[#1A0A2E]">{title}</h2>
+      </div>
+      {action && (
+        <button onClick={action.onClick} className="text-xs font-bold text-[#7C35DC] hover:underline">
+          {action.label} →
+        </button>
+      )}
+    </div>
+    {children}
+  </section>
+);
+
+const PipelineMetric = ({ label, value, tone, icon: Icon, testid }) => {
+  const TONES = {
+    violet: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-100' },
+    amber:  { bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-100' },
+    rose:   { bg: 'bg-rose-50',   text: 'text-rose-700',   border: 'border-rose-100' },
+    emerald:{ bg: 'bg-emerald-50',text: 'text-emerald-700',border: 'border-emerald-100' },
+    sky:    { bg: 'bg-sky-50',    text: 'text-sky-700',    border: 'border-sky-100' },
+  }[tone] || { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-100' };
+  return (
+    <div
+      data-testid={testid}
+      className={`${TONES.bg} border ${TONES.border} rounded-xl px-3 py-3 flex flex-col gap-1`}
+    >
+      <div className="flex items-center gap-1.5">
+        <Icon size={12} weight="fill" className={TONES.text} />
+        <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A4A7A]">{label}</span>
+      </div>
+      <div className={`text-2xl font-extrabold ${TONES.text}`} style={{ letterSpacing: '-0.02em' }}>{value}</div>
+    </div>
+  );
+};
+
+const EmptyState = ({ title, subtitle, cta, testid }) => (
+  <div data-testid={testid} className="px-6 py-8 text-center">
+    <div className="text-sm font-semibold text-[#1A0A2E]">{title}</div>
+    <div className="text-xs text-[#5A4A7A] mt-1 max-w-md mx-auto">{subtitle}</div>
+    {cta && (
+      <button
+        onClick={cta.onClick}
+        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 btn-gradient rounded-lg text-xs font-bold text-white"
+      >
+        <Target size={11} weight="fill" /> {cta.label}
+      </button>
+    )}
+  </div>
+);
 
 export default Dashboard;

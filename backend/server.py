@@ -4940,9 +4940,20 @@ def _fmt_inr(n):
 
 
 @app.get("/api/insights/founder-command-center")
-async def founder_command_center(current_user: dict = Depends(get_current_user)):
+async def founder_command_center(
+    demo: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Real workspaces get either real numbers or a TRUE empty payload — never
+    fake "Priya Sharma" / "Aanya Kapoor" demo names. Pass `?demo=true` from
+    the admin's Demo Dashboard page to opt-in to sample data.
+    """
     now = datetime.now(timezone.utc)
     cutoff_overdue = now - timedelta(days=2)
+
+    # Demo opt-in: only the admin / demo-dashboard route should ask for this.
+    if demo:
+        return _demo_command_center_fallback()
 
     # CRITICAL: scope by tenant so a fresh signup doesn't see another
     # workspace's leads bleeding into their command-center stats.
@@ -4950,7 +4961,8 @@ async def founder_command_center(current_user: dict = Depends(get_current_user))
     lead_query = {"tenant_id": tenant_id} if tenant_id else {}
     leads = list(leads_collection.find(lead_query, {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "email": 1, "phone": 1, "owner_id": 1, "owner_name": 1, "icp_score": 1, "status": 1, "next_followup_at": 1, "last_contacted_at": 1, "deal_value": 1, "source_channel": 1, "lost_reason": 1, "created_at": 1, "industry": 1, "metadata": 1}))
     if not leads:
-        return _demo_command_center_fallback()
+        # Real workspace with zero leads → clean empty payload (no fake names).
+        return _empty_command_center_payload()
 
     # Compute real metrics
     overdue, hot_untouched, proposal_stuck, unassigned, lost_no_reason = [], [], [], [], []
@@ -5126,9 +5138,50 @@ async def founder_command_center(current_user: dict = Depends(get_current_user))
     }
 
 
+
+def _empty_command_center_payload():
+    """Real workspace with 0 leads — return an empty-but-shaped payload so the
+    frontend renders zero-state UI (not fake "Priya Sharma" / "Aanya Kapoor"
+    rows). The shape must mirror the demo-fallback so existing UI code can
+    branch on `computed_from_real_data` + array lengths.
+    """
+    return {
+        "computed_from_real_data": False,
+        "is_empty_workspace": True,
+        "revenue_leakage": {
+            "score_pct": 0,
+            "headline": "No leads yet — your workspace is ready.",
+            "subhead": "Connect a lead source or import a campaign to populate this dashboard with real numbers.",
+            "breakdown": [],
+            "cta": "Add your first lead",
+        },
+        "money_at_risk": {"total_inr": 0, "total_label": "-", "rows": [], "cta": "Import leads to track risk"},
+        "daily_brief": {
+            "greeting": "Welcome",
+            "lines": [
+                "Your dashboard is wired up and ready.",
+                "Connect Saleshandy, Lemlist, or import a CSV to start tracking real activity here.",
+            ],
+            "cta": "Connect an integration",
+        },
+        "hot_leads_untouched": {"count": 0, "rows": []},
+        "first_response": {
+            "avg_hours": 0,
+            "best_rep": None,
+            "slowest_rep": None,
+            "target_minutes": 30,
+            "pending_first_response": 0,
+            "insight": "Aria will measure your first-response time once leads start arriving.",
+        },
+        "proposal_graveyard": {"count": 0, "rows": []},
+        "source_quality": {"rows": [], "insight": ""},
+        "lost_reasons": {"rows": [], "insight": ""},
+        "pipeline_value": 0,
+        "pipeline_value_label": "-",
+    }
+
+
 def _demo_money_at_risk_rows():
-    # Single illustrative sample so a brand-new dashboard still demonstrates
-    # what this card looks like, without flooding the UI with fake leads.
     return [
         {"lead_id": None, "name": "Priya Sharma",  "deal_value": 150000, "reason": "No follow-up in 3 days", "owner": "Unassigned", "action": "Rescue Lead"},
     ]
