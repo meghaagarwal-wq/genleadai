@@ -26,6 +26,10 @@ export default function AISetupAssistant() {
   const [suggestions, setSuggestions] = useState([]);
   const [askingAria, setAskingAria] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
+  // Iter 71 — safety modal when extracted touchpoints=0 but existing journey is non-empty.
+  const [overwriteWarning, setOverwriteWarning] = useState(null);
+  // Iter 71 — improvement suggestions hidden by default. User must explicitly click to see them.
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const fileRef = useRef();
 
   const currentStepIdx = stage === 'upload' ? 0 : stage === 'extracting' ? 1 : stage === 'review' ? 2 : 3;
@@ -44,7 +48,12 @@ export default function AISetupAssistant() {
       });
       setExtracted(r.data?.extracted || null);
       setStage('review');
-      toast.success(`Aria mapped ${r.data?.extracted?.touchpoints?.length || 0} touchpoints from your doc`);
+      const tpCount = (r.data?.extracted?.touchpoints_extracted?.length || r.data?.extracted?.touchpoints?.length || 0);
+      if (tpCount > 0) {
+        toast.success(`Aria mapped ${tpCount} touchpoint flow${tpCount === 1 ? '' : 's'} from your doc`);
+      } else {
+        toast.warning("Aria didn't find a touchpoint sequence in this doc — review below before publishing.");
+      }
       // Fire-and-forget diff against current workspace state
       try {
         const d = await api.post('/api/aria/auto-map/diff', {
@@ -74,7 +83,7 @@ export default function AISetupAssistant() {
     }
   };
 
-  const handlePublish = async () => {
+  const handlePublish = async (forceEmpty = false) => {
     if (!extracted) return;
     setStage('publishing');
     try {
@@ -88,6 +97,7 @@ export default function AISetupAssistant() {
         handoff: extracted.handoff || {},
         summary: extracted.summary || '',
         overwrite_journey: overwriteJourney,
+        force_empty_overwrite: forceEmpty,
       });
       setPublishResult(r.data);
       setStage('done');
@@ -96,7 +106,18 @@ export default function AISetupAssistant() {
       toast.success(`Published — ${r.data.icps_created} ICP(s), ${r.data.touchpoints_saved} touchpoint(s)${channelsBit}`);
     } catch (e) {
       const d = e?.response?.data?.detail;
-      toast.error(typeof d === 'string' ? d : 'Publish failed');
+      // Iter 71 — safety guard: backend returns 409 with empty_overwrite_blocked
+      // when extracted touchpoints=0 and existing journey is non-empty. Surface a
+      // confirmation dialog instead of silently erasing the user's workflow.
+      if (e?.response?.status === 409 && d?.code === 'empty_overwrite_blocked') {
+        setStage('review');
+        setOverwriteWarning({
+          existing: d.existing_touchpoint_count,
+          message: d.message,
+        });
+        return;
+      }
+      toast.error(typeof d === 'string' ? d : (d?.message || 'Publish failed'));
       setStage('review');
     }
   };
@@ -112,6 +133,9 @@ export default function AISetupAssistant() {
         handoff: extracted.handoff,
       });
       setSuggestions(r.data?.suggestions || []);
+      // Iter 71 — when the user explicitly asks Aria for suggestions, reveal the
+      // suggestions card. (Hidden by default per strict-extraction-mode spec.)
+      setShowSuggestions(true);
       if ((r.data?.suggestions || []).length === 0) {
         toast.success('Aria says: your workflow looks complete.');
       }
@@ -189,11 +213,15 @@ export default function AISetupAssistant() {
           onAskAria={handleAskAria}
           askingAria={askingAria}
           suggestions={suggestions}
+          showSuggestions={showSuggestions}
+          setShowSuggestions={setShowSuggestions}
           publishing={stage === 'publishing'}
           overwriteJourney={overwriteJourney}
           setOverwriteJourney={setOverwriteJourney}
           filename={filename}
           onStartOver={reset}
+          overwriteWarning={overwriteWarning}
+          onDismissWarning={() => setOverwriteWarning(null)}
         />
       )}
 
@@ -276,7 +304,12 @@ function ExtractingPanel({ filename }) {
 }
 
 // ─── STAGE 3: Review (editable cards) ───────────────────────────────────────
-function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAria, suggestions, publishing, overwriteJourney, setOverwriteJourney, filename, onStartOver }) {
+function ReviewPanel({
+  extracted, diff, onChange, onPublish, onAskAria, askingAria, suggestions,
+  showSuggestions, setShowSuggestions,
+  publishing, overwriteJourney, setOverwriteJourney, filename, onStartOver,
+  overwriteWarning, onDismissWarning,
+}) {
   const updateField = (path, val) => {
     const next = JSON.parse(JSON.stringify(extracted));
     let ref = next;
@@ -516,8 +549,108 @@ function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAr
         </Card>
       </div>
 
-      {/* Aria suggestions */}
-      {suggestions.length > 0 && (
+      {/* Iter 71 — Touchpoints detected from doc (verbatim flow structure) */}
+      {(extracted.touchpoints_extracted || []).length > 0 && (
+        <Card
+          testid="auto-map-card-touchpoints-extracted"
+          icon={<MapTrifold size={16} weight="duotone" />}
+          title={`Touchpoints detected from document (${extracted.touchpoints_extracted.length})`}
+          tint="violet"
+        >
+          <div className="space-y-3">
+            {extracted.touchpoints_extracted.map((tp, i) => (
+              <div key={i} data-testid={`tp-extracted-${i}`} className="border border-violet-200 bg-white rounded-lg p-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="font-semibold text-violet-900 text-sm">{tp.entry_point}</div>
+                  {tp.channel_or_tool && <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">{tp.channel_or_tool}</span>}
+                </div>
+                {tp.timeline && <div className="text-[11px] text-slate-500 mt-0.5">{tp.timeline}</div>}
+                {tp.flow_steps?.length > 0 && (
+                  <ul className="mt-1.5 list-disc list-inside text-xs text-slate-700 space-y-0.5">
+                    {tp.flow_steps.map((s, j) => <li key={j}>{s}</li>)}
+                  </ul>
+                )}
+                {tp.outcome && <p className="text-[11px] text-slate-600 italic mt-2">Outcome: {tp.outcome}</p>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Iter 71 — Conditional logic from doc */}
+      {(extracted.conditional_logic || []).length > 0 && (
+        <Card
+          testid="auto-map-card-conditional-logic"
+          icon={<Lightning size={16} weight="duotone" />}
+          title={`Conditional logic (${extracted.conditional_logic.length})`}
+          tint="indigo"
+        >
+          <div className="space-y-2">
+            {extracted.conditional_logic.map((c, i) => (
+              <div key={i} data-testid={`cond-logic-${i}`} className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-2 bg-white border border-indigo-200 rounded-lg p-3 text-xs">
+                <div><span className="text-[10px] uppercase font-bold text-indigo-700">Trigger</span><div className="text-slate-800">{c.trigger}</div></div>
+                <ArrowRight size={14} className="text-indigo-400 mx-auto" />
+                <div><span className="text-[10px] uppercase font-bold text-indigo-700">Action</span><div className="text-slate-800">{c.action}</div></div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Iter 71 — Scoring thresholds + signal scores side by side */}
+      {((extracted.scoring_thresholds || []).length > 0 || (extracted.signal_scores || []).length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {(extracted.scoring_thresholds || []).length > 0 && (
+            <Card testid="auto-map-card-scoring-thresholds" icon={<Target size={16} weight="duotone" />} title="Scoring thresholds" tint="emerald" small>
+              <div className="space-y-1.5">
+                {extracted.scoring_thresholds.map((s, i) => (
+                  <div key={i} data-testid={`scoring-threshold-${i}`} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-mono text-emerald-700">{s.score_range}</span>
+                    <span className="font-semibold text-slate-800">{s.stage}</span>
+                    <span className="text-slate-600 text-right flex-1 truncate" title={s.action}>{s.action}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+          {(extracted.signal_scores || []).length > 0 && (
+            <Card testid="auto-map-card-signal-scores" icon={<Lightning size={16} weight="duotone" />} title="Key signal scores" tint="amber" small>
+              <div className="space-y-1.5">
+                {extracted.signal_scores.map((s, i) => (
+                  <div key={i} data-testid={`signal-score-${i}`} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-700">{s.signal}</span>
+                    <span className="font-mono font-bold text-amber-700">{s.score_or_rule}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Iter 71 — Sales handoff (from doc) */}
+      {extracted.sales_handoff && (extracted.sales_handoff.handoff_triggers?.length > 0 || extracted.sales_handoff.handoff_owner?.length > 0) && (
+        <Card testid="auto-map-card-sales-handoff" icon={<Bell size={16} weight="duotone" />} title="Sales handoff (from doc)" tint="rose" small>
+          {extracted.sales_handoff.handoff_triggers?.length > 0 && (<><Subhead label="Triggers" /><ChipList values={extracted.sales_handoff.handoff_triggers} tint="rose" /></>)}
+          {extracted.sales_handoff.handoff_owner?.length > 0 && (<><Subhead label="Owner(s)" /><ChipList values={extracted.sales_handoff.handoff_owner} tint="violet" /></>)}
+          {extracted.sales_handoff.handoff_timeline?.length > 0 && (<><Subhead label="Timeline" /><ChipList values={extracted.sales_handoff.handoff_timeline} tint="slate" /></>)}
+          {extracted.sales_handoff.manual_takeover_rules?.length > 0 && (<><Subhead label="Manual takeover" /><ChipList values={extracted.sales_handoff.manual_takeover_rules} tint="slate" /></>)}
+        </Card>
+      )}
+
+      {/* Iter 71 — Needs review */}
+      {(extracted.needs_review || []).length > 0 && (
+        <Card testid="auto-map-card-needs-review" icon={<Warning size={16} weight="duotone" />} title={`Needs review (${extracted.needs_review.length})`} tint="amber" small>
+          <ul className="text-xs text-slate-700 space-y-1">
+            {extracted.needs_review.map((nr, i) => (
+              <li key={i} data-testid={`needs-review-${i}`}><strong>{nr.field}:</strong> {nr.reason}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Aria suggestions — iter71: hidden by default. */}
+      {showSuggestions && suggestions.length > 0 && (
         <Card testid="auto-map-suggestions" icon={<Warning size={16} weight="duotone" />} title={`Aria's improvement suggestions (${suggestions.length})`} tint="amber">
           <div className="space-y-2">
             {suggestions.map((s, i) => (
@@ -529,6 +662,30 @@ function ReviewPanel({ extracted, diff, onChange, onPublish, onAskAria, askingAr
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Iter 71 — empty-overwrite warning modal */}
+      {overwriteWarning && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" data-testid="empty-overwrite-modal">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <Warning size={24} weight="duotone" className="text-rose-600 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-900">Existing journey detected</h3>
+                <p className="text-sm text-slate-700 mt-2 leading-relaxed">{overwriteWarning.message}</p>
+                <p className="text-xs text-slate-500 mt-2">Recommended: cancel, retry extraction, or pick a doc that contains a Touchpoint Mapping section.</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button onClick={onDismissWarning} data-testid="empty-overwrite-cancel" className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100">
+                Cancel
+              </button>
+              <button onClick={() => { onDismissWarning(); onPublish(true); }} data-testid="empty-overwrite-confirm" className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-700">
+                Publish anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Sticky action bar */}

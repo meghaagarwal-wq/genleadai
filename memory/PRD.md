@@ -1,3 +1,41 @@
+## Iter 72 — AI Setup Assistant: strict-extraction prompt + safety guard (Feb 2026)
+
+### Reported bug
+User uploaded a Pietential GTM doc with a full Touchpoint Mapping section (6 flows), Disqualify line, scoring thresholds, key signal scores, and sales handoff rules. Aria responded with **"0 touchpoints mapped"**, missed the disqualifiers, and surfaced unrequested improvement suggestions.
+
+### Root cause
+Old SYSTEM_PROMPT told Claude to "generate 3-12 touchpoints" with a flat engine-shape schema. When the doc had a different structure (entry_point + flow_steps + outcome rows), Claude couldn't see them as "touchpoints" so returned an empty array. Section-name synonyms ("Disqualify" vs "disqualifiers") weren't mapped. Improvement suggestions auto-ran on the review screen and crowded out the actual extraction.
+
+### What landed
+**Backend (`routes/aria_auto_map.py`):**
+- New SYSTEM_PROMPT — "strict document parser, NOT strategist/consultant/copywriter". Explicit synonym map (Touchpoint Mapping ↔ touchpoints, Entry Point ↔ source, Flow ↔ steps, Outcome ↔ routing, Disqualify ↔ disqualifiers, Score/Stage/Action ↔ scoring_thresholds, Signal/Score Rule ↔ signal_scores, Alert <Name> ↔ handoff_owner).
+- New JSON schema fields: `document_summary`, `icp` (structured), `lead_sources_struct`, `touchpoints_extracted` (preserves doc shape), `master_flow`, `conditional_logic`, `scoring_thresholds`, `signal_scores`, `sales_handoff`, `needs_review`. The legacy `touchpoints` (engine-runnable shape) still populated so journey engine keeps working.
+- New `_sanitize_touchpoints_extracted` helper preserves entry_point/channel_or_tool/flow_steps/timeline/outcome verbatim from the doc.
+- New `force_empty_overwrite` flag on PublishPayload. `/publish` now returns **409 empty_overwrite_blocked** when extracted touchpoints=0 AND existing tenant journey > 0. Frontend gates this behind a confirmation modal.
+
+**Frontend (`pages/AISetupAssistant.js`):**
+- New review cards: `auto-map-card-touchpoints-extracted`, `auto-map-card-conditional-logic`, `auto-map-card-scoring-thresholds`, `auto-map-card-signal-scores`, `auto-map-card-sales-handoff`, `auto-map-card-needs-review`. Each shows verbatim doc content with row-by-row testids.
+- **Improvement suggestions hidden by default** — only revealed when user explicitly clicks "Ask Aria to Improve This Journey".
+- New empty-overwrite warning modal (`empty-overwrite-modal`) appears when /publish returns 409. Buttons: Cancel + Publish anyway (sends force_empty_overwrite=true).
+- Toast on extract now reads "Aria mapped 6 touchpoint flows from your doc" instead of "0 touchpoints".
+
+### Verified
+Uploaded the user's Pietential acceptance-test doc and got:
+- 6 touchpoint flows (Cold email/LinkedIn DM/John LinkedIn comment/Lead magnet/Good Slice/High-intent visit)
+- 8 conditional logic rules
+- 5 scoring thresholds (Cold/Warm/Hot/Engaged/Session)
+- 8 signal scores with exact numbers (+3 capped, +10, +30 etc.)
+- 4 disqualifiers (was previously empty)
+- handoff_owner: John, Content Vista
+- recommended_integrations: saleshandy, lemlist
+- not_found: [] (no false-missing flags)
+
+### Known limitation
+- The new strict prompt may occasionally extract too literally — e.g. if the doc says "CHRO" only, Aria won't suggest "VP People" even if it's a sensible adjacent persona. That's by design ("boringly accurate first, smart later").
+
+---
+
+
 ## Iter 71 — Dashboard simplification + remove fake leads + team isolation (Feb 2026)
 
 ### Reported asks

@@ -117,9 +117,9 @@ MAX_TEXT_CHARS = 12000
 # fields with assumptions — empty stays empty.
 SYSTEM_PROMPT = """You are Aria's AI Setup Assistant.
 
-Your only job: PARSE the uploaded document and MAP what's literally there
-into the JSON schema below. You are NOT a strategist, copywriter, or
-recommender. You are a strict document parser.
+Your only job: extract structured setup information from the uploaded
+document and map it into Aria's setup fields. You are NOT a strategist,
+consultant, or copywriter. You are a strict document parser.
 
 HARD RULES — DO NOT BREAK:
 1. Use ONLY information that is directly present in the uploaded document.
@@ -130,53 +130,105 @@ HARD RULES — DO NOT BREAK:
 4. Do not add lead sources, tools, channels, or touchpoints that are not
    named in the document.
 5. Do not invent numbers (ARR, deal sizes, employee counts, response times).
-   If a number isn't in the doc, leave the field "".
-6. Do not generate touchpoints the document didn't describe. If the document
-   mentions one email follow-up, return one touchpoint — not a 7-step sequence.
-7. message_template fields should be a CLOSE PARAPHRASE of any actual messages
-   in the doc. If the doc has no example copy, return "" and let the user fill
-   it in later. Do not write new sales copy from scratch.
-8. Do not write a verbose "summary" — keep it to one factual sentence about
-   what was found.
+6. Do not generate touchpoints the document didn't describe.
+7. Do not write a verbose "summary" — keep it to one factual sentence.
 
-OUTPUT FORMAT — return ONLY this JSON, nothing else:
+SECTION DETECTION — these are the section names you must look for. If the
+document uses a slightly different name, still map it to the canonical field:
+
+- "Touchpoint Mapping" / "Touchpoints" / "Sequences" / "Flows" → touchpoints[]
+- "Entry Point" / "Journey starting point" / "Source" → touchpoint.entry_point
+- "Flow" / "Steps" / "Cadence" → touchpoint.flow_steps[]
+- "Outcome" / "Final state" / "Routing" → touchpoint.outcome
+- "Master Flow" / "Top-level flow" → master_flow[]
+- "Conditional Logic" / "Trigger / Action" / "Branching rules" → conditional_logic[]
+- "Scoring Thresholds" / "Score / Stage / Action" / "Tiers" → scoring_thresholds[]
+- "Key Signal Scores" / "Signal / Score Rule" / "Intent scoring inputs" → signal_scores[]
+- "Disqualify" / "Disqualification criteria" / "Out of ICP" → icp.disqualifiers
+- "Alert <Name>" / "Owner" / "Sales handoff" → sales_handoff.handoff_owner
+- "Lead sources" / "Tools" / "Entry points" → lead_sources[]
+- "ICP" / "ICP Details" / "Target buyer" → icp{}
+- "Personas" / "Buyer titles" → icp.primary_personas / secondary_personas
+- "Intent signals" → icp.intent_signals
+
+If a section exists under ANY of these names, you MUST extract it. Do NOT
+mark a present section as "Not found".
+
+OUTPUT FORMAT — return ONLY this JSON object, nothing else:
 {
+  "document_summary": {
+    "detected_sections": ["names of sections you identified in the doc, verbatim or near-verbatim"],
+    "extraction_confidence": "high | medium | low",
+    "notes": "One factual sentence describing what was found. No analysis."
+  },
+  "icp": {
+    "company_size": ["only sizes literally in the doc"],
+    "geography": ["only geographies literally in the doc"],
+    "priority_industries": ["only industries literally in the doc"],
+    "primary_personas": ["only titles in the 'primary personas' list"],
+    "secondary_personas": ["only titles in the 'secondary personas' list"],
+    "intent_signals": ["only signals literally listed (hiring, M&A, etc.)"],
+    "disqualifiers": ["only criteria literally in the doc's Disqualify / Out-of-ICP section"]
+  },
   "icps": [
     {
-      "label": "short name like 'CFO at Series B SaaS' (only if doc gives enough to label them)",
-      "title_targets": ["only titles literally mentioned"],
-      "industry": "string or empty",
-      "company_size": "string or empty (only if mentioned)",
-      "geography": "string or empty (only if mentioned)",
+      "label": "short name (only if doc gives enough to label them)",
+      "title_targets": ["titles literally mentioned"],
+      "industry": "", "company_size": "", "geography": "",
       "pain_point": "1 sentence drawn directly from the doc, or empty",
       "value_prop": "1 sentence drawn directly from the doc, or empty",
-      "tone": "professional | casual | bold (default professional if not specified)",
-      "deal_size": "string or empty"
+      "tone": "professional | casual | bold",
+      "deal_size": ""
     }
   ],
-  "lead_sources": ["only sources literally named in the doc"],
-  "recommended_integrations": ["only tools literally named in the doc — lowercase keys like saleshandy, lemlist, zoho_crm, hubspot, salesforce, calendly, slack, gmail, outlook, zoom, instantly, apollo, phantombuster"],
-  "sales_channels": ["only channels literally named in the doc — from: email, linkedin, whatsapp, sms, phone, website_chat"],
+  "lead_sources": [
+    {
+      "name": "literal source name from doc",
+      "source_type": "outbound | inbound | content | website | newsletter | social | unknown",
+      "tool_or_channel": "tool name if mentioned, else empty"
+    }
+  ],
+  "recommended_integrations": ["lowercase tool keys ONLY if literally named in the doc — saleshandy, lemlist, zoho_crm, hubspot, salesforce, calendly, slack, gmail, outlook, zoom, instantly, apollo, phantombuster"],
+  "sales_channels": ["literal channel keys ONLY if mentioned — email, linkedin, whatsapp, sms, phone, website_chat"],
+  "touchpoints_extracted": [
+    {
+      "entry_point": "e.g. 'Cold email - Saleshandy', 'LinkedIn DM - Lemlist', 'John LinkedIn post comment'",
+      "channel_or_tool": "Saleshandy | Lemlist | LinkedIn | Website | Newsletter | etc.",
+      "flow_steps": ["one entry per literal step in the doc — Email 1, Email 2, DM 1, DM 2, etc."],
+      "timeline": "e.g. 'Day 1-12', 'Day 0-14', 'immediate'",
+      "outcome": "what happens after — e.g. 'Positive reply -> pause account + route to John. No reply -> Good Slice / close.'"
+    }
+  ],
   "touchpoints": [
     {
       "step": 1,
       "channel": "whatsapp | email | linkedin_nudge | call_reminder",
       "message_type": "intro | qualifier | value_drop | value_add | follow_up | social_proof | soft_cta | budget_probe | meeting_cta | human_escalation | re_engagement | urgency | closure",
-      "day": 0,
-      "hour": 9,
+      "day": 0, "hour": 9,
       "aria_role": "autonomous | alert_human",
       "message_template": "close paraphrase of the doc's copy with {{first_name}} {{company}} tokens, or empty if doc has no example",
       "conditions": {
         "on_reply": {"action": "notify_user"},
-        "on_keyword_match": {"keywords": ["interested","pricing"], "action": "tag_contact", "tag": "hot_lead"},
-        "on_negative_keyword": {"keywords": ["not interested","stop"], "action": "stop"},
         "on_no_reply": {"after_hours": 72, "action": "move_to_step", "target_step": 2}
       }
     }
   ],
+  "master_flow": [
+    {"step_number": 1, "step": "literal master-flow step from the doc"}
+  ],
+  "conditional_logic": [
+    {"trigger": "literal trigger from doc (e.g. 'Positive reply from any executive')",
+     "action": "literal action from doc (e.g. 'Pause all outreach to the entire account. Alert John within 2 hours.')"}
+  ],
+  "scoring_thresholds": [
+    {"score_range": "literal range like '0-14' or '35-69'", "stage": "Cold | Warm | Hot | Engaged | Session | Pilot", "action": "literal action from doc"}
+  ],
+  "signal_scores": [
+    {"signal": "literal signal name from doc", "score_or_rule": "literal score or rule (e.g. '+3 capped at 3', '+30 and pause account')"}
+  ],
   "qualification": {
     "must_have_criteria": ["only criteria literally in the doc"],
-    "disqualifiers": ["only literally in the doc"],
+    "disqualifiers": ["only literally in the doc — mirror of icp.disqualifiers"],
     "qualifying_questions": ["only questions literally in the doc"]
   },
   "handoff": {
@@ -184,16 +236,43 @@ OUTPUT FORMAT — return ONLY this JSON, nothing else:
     "alert_channels": ["only channels literally named"],
     "info_passed": ["only fields literally named"]
   },
-  "not_found": ["names of any of the top-level sections (icps, lead_sources, recommended_integrations, sales_channels, touchpoints, qualification, handoff) where the document had nothing to extract"],
-  "summary": "One factual sentence describing what was found. No analysis. No recommendations."
+  "sales_handoff": {
+    "handoff_triggers": ["e.g. 'Score 35+', 'Positive reply'"],
+    "handoff_owner": ["e.g. 'John', 'Content Vista'"],
+    "handoff_timeline": ["e.g. 'within 2 hours'"],
+    "manual_takeover_rules": ["e.g. 'Score 70+ or positive reply = manual-only'"]
+  },
+  "not_found": ["names of top-level sections genuinely absent from the doc — DO NOT include sections you successfully extracted"],
+  "needs_review": [
+    {"field": "<field name>", "reason": "<why it's unclear>"}
+  ],
+  "summary": "One factual sentence describing what was found. No analysis."
 }
 
-SCHEMA NOTES (don't invent values outside these enums):
-- touchpoint.channel must be one of: whatsapp, email, linkedin_nudge, call_reminder.
-- touchpoint.message_type must be one of the 13 listed above.
-- touchpoint.aria_role: "autonomous" by default. Only use "alert_human" if the doc says "manual", "human", "rep", "call", or similar.
-- condition.action values must be one of: move_to_step, notify_user, tag_contact, stop.
-- on_no_reply.action only allows move_to_step or stop.
+DUAL TOUCHPOINT FIELDS:
+- `touchpoints_extracted` mirrors the doc's actual table structure (entry_point + flow_steps + outcome). Use this to PRESERVE the doc's structure.
+- `touchpoints` is the engine-runnable shape (step/day/channel/message_template). Generate ONE touchpoints row per flow_step you extracted. day/hour can be synthetic (Day 0, 1, 3, 7, etc.) based on the timeline field.
+- Both must be populated if the doc has any touchpoints. NEVER return empty `touchpoints[]` if `touchpoints_extracted[]` has entries.
+
+SCHEMA ENUMS (don't invent values outside these):
+- touchpoint.channel: whatsapp, email, linkedin_nudge, call_reminder
+- touchpoint.message_type: intro, qualifier, value_drop, value_add, follow_up, social_proof, soft_cta, budget_probe, meeting_cta, human_escalation, re_engagement, urgency, closure
+- touchpoint.aria_role: autonomous (default), alert_human (only if doc says "manual", "human", "rep", "call")
+- condition.action: move_to_step, notify_user, tag_contact, stop
+- on_no_reply.action: move_to_step or stop only
+
+CRITICAL MAPPING RULES:
+1. If the doc has a "Touchpoint Mapping" table with 6 rows, return 6 entries in
+   touchpoints_extracted AND at least 6 entries in touchpoints (one per row,
+   or more if a row contains multiple Email N/DM N steps).
+2. If the doc has a "Disqualify" line, populate icp.disqualifiers AND
+   qualification.disqualifiers. NEVER mark disqualifiers as missing if the
+   doc has a Disqualify line.
+3. If the doc has scoring numbers (e.g. "+3 per open", "Score 35+ = Hot"),
+   extract them exactly into signal_scores and scoring_thresholds. Do not
+   invent new scoring logic.
+4. If the doc names a handoff owner (e.g. "Alert John", "Route to Content
+   Vista"), populate sales_handoff.handoff_owner with those names exactly.
 
 Final reminders:
 - Extract. Map. Do not imagine.
@@ -313,6 +392,34 @@ def _sanitize_touchpoints(raw_tps: List[dict]) -> List[dict]:
     return out
 
 
+def _sanitize_touchpoints_extracted(raw: List[dict]) -> List[dict]:
+    """Iter 71 — keeps Claude's doc-shape touchpoints intact for the review screen.
+
+    The engine schema (channel/day/hour/message_template/conditions) loses the
+    doc's flow structure when each row gets split into individual emails. So we
+    also keep the original `entry_point + flow_steps + outcome` rows verbatim
+    and surface them in the UI under "Touchpoints detected from document".
+    """
+    out = []
+    for tp in (raw or [])[:32]:
+        if not isinstance(tp, dict):
+            continue
+        entry_point = str(tp.get("entry_point") or "").strip()
+        if not entry_point:
+            continue
+        steps = tp.get("flow_steps") or []
+        if isinstance(steps, str):
+            steps = [steps]
+        out.append({
+            "entry_point": entry_point[:200],
+            "channel_or_tool": str(tp.get("channel_or_tool") or "").strip()[:60],
+            "flow_steps": [str(s).strip()[:200] for s in steps if str(s).strip()][:20],
+            "timeline": str(tp.get("timeline") or "").strip()[:80],
+            "outcome": str(tp.get("outcome") or "").strip()[:400],
+        })
+    return out
+
+
 def _sanitize_icps(raw_icps: List[dict]) -> List[dict]:
     ALLOWED_TONES = {"professional", "casual", "bold"}
     out = []
@@ -391,23 +498,52 @@ async def analyze(
 
     icps = _sanitize_icps(parsed.get("icps") or [])
     touchpoints = _sanitize_touchpoints(parsed.get("touchpoints") or [])
-    lead_sources = [str(s).strip() for s in (parsed.get("lead_sources") or []) if str(s).strip()][:20]
+    # Iter 71 strict-mode: also keep the doc-shape touchpoints so the review
+    # screen can show the ORIGINAL flow structure (entry_point + flow_steps + outcome)
+    # without flattening it through the engine schema.
+    touchpoints_extracted = _sanitize_touchpoints_extracted(parsed.get("touchpoints_extracted") or [])
+
+    # lead_sources can be either an array of strings (legacy) or an array of
+    # {name, source_type, tool_or_channel} objects (strict-mode). Normalize to
+    # both shapes so old UIs keep working.
+    raw_sources = parsed.get("lead_sources") or []
+    lead_sources_objs: List[Dict[str, Any]] = []
+    lead_sources: List[str] = []
+    for s in raw_sources[:20]:
+        if isinstance(s, dict) and s.get("name"):
+            lead_sources_objs.append({
+                "name": str(s.get("name", "")).strip(),
+                "source_type": str(s.get("source_type") or "unknown").strip().lower(),
+                "tool_or_channel": str(s.get("tool_or_channel") or "").strip(),
+            })
+            lead_sources.append(s["name"])
+        elif isinstance(s, str) and s.strip():
+            lead_sources.append(s.strip())
+            lead_sources_objs.append({"name": s.strip(), "source_type": "unknown", "tool_or_channel": ""})
+
     # New (iter 69): integration & channel recommendations Aria infers from the doc.
     recommended_integrations = [str(s).strip().lower() for s in (parsed.get("recommended_integrations") or []) if str(s).strip()][:15]
     sales_channels = [str(s).strip().lower() for s in (parsed.get("sales_channels") or []) if str(s).strip()][:10]
-    # Whitelist to keys our /api/tenant/sales-channels endpoint understands.
     valid_channel_keys = {"email", "linkedin", "whatsapp", "sms", "phone", "website_chat"}
     sales_channels = [c for c in sales_channels if c in valid_channel_keys]
     qualification = parsed.get("qualification") or {}
     handoff = parsed.get("handoff") or {}
     summary = (parsed.get("summary") or "").strip()
-    # Iter 70 — strict-mode: surface which sections Aria literally found nothing for.
     not_found = [str(s).strip() for s in (parsed.get("not_found") or []) if str(s).strip()][:10]
 
+    # Iter 71 — new structured fields from the strict prompt.
+    icp_struct = parsed.get("icp") or {}
+    master_flow = [m for m in (parsed.get("master_flow") or []) if isinstance(m, dict)][:30]
+    conditional_logic = [m for m in (parsed.get("conditional_logic") or []) if isinstance(m, dict)][:30]
+    scoring_thresholds = [m for m in (parsed.get("scoring_thresholds") or []) if isinstance(m, dict)][:20]
+    signal_scores = [m for m in (parsed.get("signal_scores") or []) if isinstance(m, dict)][:30]
+    sales_handoff = parsed.get("sales_handoff") or {}
+    needs_review = [m for m in (parsed.get("needs_review") or []) if isinstance(m, dict)][:20]
+    document_summary = parsed.get("document_summary") or {}
+
     # If Claude found nothing actionable, surface that clearly instead of returning
-    # a hollow success that confuses the user. (Resolves: "Aria is not able to map
-    # the touchpoints".)
-    if not touchpoints and not icps:
+    # a hollow success that confuses the user.
+    if not touchpoints and not touchpoints_extracted and not icps and not icp_struct:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -420,15 +556,25 @@ async def analyze(
     return {
         "source_filename": file.filename,
         "extracted": {
+            "document_summary": document_summary,
+            "icp": icp_struct,
             "icps": icps,
             "lead_sources": lead_sources,
+            "lead_sources_struct": lead_sources_objs,
             "recommended_integrations": recommended_integrations,
             "sales_channels": sales_channels,
             "touchpoints": touchpoints,
+            "touchpoints_extracted": touchpoints_extracted,
+            "master_flow": master_flow,
+            "conditional_logic": conditional_logic,
+            "scoring_thresholds": scoring_thresholds,
+            "signal_scores": signal_scores,
             "qualification": qualification,
             "handoff": handoff,
+            "sales_handoff": sales_handoff,
             "not_found": not_found,
-            "summary": summary or f"Aria found {len(icps)} ICP(s), {len(lead_sources)} lead source(s), {len(touchpoints)} touchpoints.",
+            "needs_review": needs_review,
+            "summary": summary or f"Aria detected {len(touchpoints_extracted) or len(touchpoints)} touchpoint flow(s), {len(icps)} ICP(s), {len(lead_sources)} lead source(s).",
         },
         "doc_excerpt_chars": len(text),
     }
@@ -445,6 +591,10 @@ class PublishPayload(BaseModel):
     summary: Optional[str] = None
     overwrite_journey: bool = True   # if true, replaces the 32-touchpoint map
     apply_sales_channels: bool = True  # if true, saves sales_channels to /tenant/sales-channels prefs
+    # Iter 71 safety: when extraction returns 0 touchpoints AND the tenant
+    # already has a journey, refuse to overwrite unless the user explicitly
+    # confirms via this flag in the publish-anyway warning modal.
+    force_empty_overwrite: bool = False
 
 
 @router.post("/publish")
@@ -465,6 +615,27 @@ async def publish(
         raise HTTPException(status_code=403, detail="Owner/Admin only")
 
     tenant_id = tenant["id"]
+
+    # Iter 71 — safety guard: never let the user accidentally erase a real
+    # workflow by publishing an empty extraction.
+    if payload.overwrite_journey and not payload.touchpoints and not payload.force_empty_overwrite:
+        existing = maps_col.find_one({"tenant_id": tenant_id}, {"touchpoints": 1, "_id": 0})
+        existing_count = len((existing or {}).get("touchpoints") or [])
+        if existing_count > 0:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "empty_overwrite_blocked",
+                    "message": (
+                        f"This upload contains 0 mapped touchpoints. Your current workspace "
+                        f"already has {existing_count} touchpoints. Publishing would erase the "
+                        "current journey. Set force_empty_overwrite=true to confirm."
+                    ),
+                    "existing_touchpoint_count": existing_count,
+                    "new_touchpoint_count": 0,
+                },
+            )
+
     created_icp_ids: List[str] = []
     skipped_icps: List[str] = []
 
