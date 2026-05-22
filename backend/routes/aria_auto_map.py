@@ -771,6 +771,23 @@ async def publish(
     }
 
 
+# Iter 76 — return the last-published automap_summary so the AI Setup Assistant
+# can re-hydrate user-edited touchpoints_extracted on revisit, instead of
+# forcing the founder to re-upload the GTM doc.
+@router.get("/summary")
+async def get_summary(tenant: dict = Depends(get_active_tenant)):
+    """Fetch this workspace's last-published automap summary (lead_sources,
+    qualification, handoff, summary string, recommended_integrations, and the
+    user-edited touchpoints_extracted array). Returns 200 with `{summary: null}`
+    if the workspace has never published a workflow yet."""
+    doc = db["tenants"].find_one(
+        {"id": tenant["id"]},
+        {"settings.automap_summary": 1, "_id": 0},
+    )
+    automap = ((doc or {}).get("settings") or {}).get("automap_summary")
+    return {"summary": automap}
+
+
 class ImprovePayload(BaseModel):
     """The user-edited workflow snapshot (preview); we ask Claude for gaps."""
     icps: List[Dict[str, Any]] = []

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../config/api';
 import { useAuth } from '../context/AuthContext';
-import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt, Megaphone, Buildings } from '@phosphor-icons/react';
+import { User, Gear, Robot, FileArrowUp, Trash, ToggleLeft, ToggleRight, CloudArrowUp, File, Key, Code, Copy, CheckCircle, Paperclip, LinkSimple, UserPlus, Database, Globe, Bell, Receipt, Megaphone, Buildings, Heartbeat } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import PageHeader from '../components/PageHeader';
 import InviteTeamModal, { PendingInvitesList } from '../components/InviteTeamModal';
@@ -11,6 +11,7 @@ import LeadCaptureSettings from '../components/settings/LeadCaptureSettings';
 import NotificationsTab from '../components/settings/NotificationsTab';
 import BillingAddressTab from '../components/settings/BillingAddressTab';
 import SalesChannelsTab from '../components/settings/SalesChannelsTab';
+import AriaHealthTab from '../components/settings/AriaHealthTab';
 import AuditLogPanel from '../components/AuditLogPanel';
 
 /**
@@ -354,6 +355,7 @@ const Settings = () => {
       >
         {[
           { id: 'team', label: 'Team', icon: User },
+          { id: 'health', label: 'Aria Health', icon: Heartbeat },
           { id: 'aria', label: 'ARIA Agent', icon: Robot },
           { id: 'assets', label: 'Asset Library', icon: FileArrowUp },
           { id: 'integrations', label: 'API & Forms', icon: Key },
@@ -437,6 +439,11 @@ const Settings = () => {
 
           <PendingInvitesList refreshKey={inviteRefreshKey} />
         </div>
+      )}
+
+      {/* Aria Health Tab — Iter 76 */}
+      {activeTab === 'health' && (
+        <AriaHealthTab />
       )}
 
       {/* ARIA Agent Tab */}

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -30,7 +30,42 @@ export default function AISetupAssistant() {
   const [publishResult, setPublishResult] = useState(null);
   const [overwriteWarning, setOverwriteWarning] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // Iter 76 — last-published automap_summary fetched on mount.
+  // Lets founders pick up where they left off instead of re-uploading.
+  const [lastSummary, setLastSummary] = useState(null);
   const fileRef = useRef();
+
+  // Fetch last-published summary on mount (only on the upload step).
+  useEffect(() => {
+    let alive = true;
+    api.get('/api/aria/auto-map/summary').then((r) => {
+      if (!alive) return;
+      const s = r.data?.summary;
+      if (s && (s.touchpoints_extracted || []).length > 0) {
+        setLastSummary(s);
+      }
+    }).catch(() => { /* non-blocking */ });
+    return () => { alive = false; };
+  }, []);
+
+  const resumeLast = () => {
+    if (!lastSummary) return;
+    // Re-hydrate the review stage with the last-published state.
+    setExtracted({
+      icps: [],
+      touchpoints: [],
+      touchpoints_extracted: lastSummary.touchpoints_extracted || [],
+      lead_sources: lastSummary.lead_sources || [],
+      recommended_integrations: lastSummary.recommended_integrations || [],
+      sales_channels: [],
+      qualification: lastSummary.qualification || {},
+      handoff: lastSummary.handoff || {},
+      summary: lastSummary.summary || 'Resumed your last published workflow — edit any row and re-publish to overwrite.',
+    });
+    setFilename(`Resumed from last publish (${lastSummary.applied_at?.slice(0, 10) || 'previous session'})`);
+    setStage('review');
+    setLastSummary(null);
+  };
 
   const currentStepIdx = stage === 'upload' ? 0 : stage === 'extracting' ? 1 : stage === 'review' ? 2 : 3;
 
@@ -186,6 +221,39 @@ export default function AISetupAssistant() {
       </ol>
 
       {/* Stage panels */}
+      {stage === 'upload' && lastSummary && (
+        <div
+          data-testid="auto-map-resume-banner"
+          className="mb-4 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-2xl p-4 flex items-center justify-between gap-4"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-violet-700 mb-1">Resume your last setup</p>
+            <p className="text-sm text-slate-700">
+              You previously published a workflow with{' '}
+              <strong>{lastSummary.touchpoints_extracted.length}</strong> edited touchpoint
+              {lastSummary.touchpoints_extracted.length === 1 ? '' : 's'}
+              {lastSummary.applied_at && <> on <strong>{lastSummary.applied_at.slice(0, 10)}</strong></>}. Pick up where you left off.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLastSummary(null)}
+              data-testid="auto-map-resume-dismiss"
+              className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg"
+            >
+              Start fresh
+            </button>
+            <button
+              onClick={resumeLast}
+              data-testid="auto-map-resume-btn"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 text-white text-xs font-bold hover:bg-violet-700"
+            >
+              <PencilSimple size={14} weight="bold" /> Resume last edit
+            </button>
+          </div>
+        </div>
+      )}
+
       {stage === 'upload' && (
         <UploadPanel
           onDrop={handleFile}

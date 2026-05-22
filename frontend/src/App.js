@@ -269,6 +269,7 @@ function App() {
                         <Route path="/outreach" element={<OutreachCampaigns />} />
                         <Route path="/outreach/:campaignId" element={<OutreachCampaigns />} />
                         <Route path="/ai-setup" element={<AISetupAssistant />} />
+                        <Route path="/ai-setup-assistant" element={<AISetupAssistant />} />
                         <Route path="/billing/success" element={<BillingSuccess />} />
                         <Route path="/billing/cancel" element={<BillingCancel />} />
                         <Route path="*" element={<NotFound />} />
