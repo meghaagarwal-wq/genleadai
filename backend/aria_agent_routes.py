@@ -209,8 +209,6 @@ async def get_default_journey(current_user: dict = Depends(get_current_user)):
 # 4. Founder Brief
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-training_collection_ref = training_collection
-
 async def _ai_founder_brief(lead: dict, activities: List[dict], training: dict) -> dict:
     """Use Claude to generate a founder brief grounded in lead data, activity history, and workspace training."""
     first_name = lead.get("first_name") or "Lead"
@@ -337,7 +335,7 @@ async def generate_founder_brief(lead_id: str, current_user: dict = Depends(get_
     lead["id"] = str(lead["_id"])
     lead.pop("_id", None)
     recent = list(activities_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).limit(12))
-    training = training_collection_ref.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+    training = training_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
 
     icp = lead.get("icp_score") or 0
     source = (lead.get("source_channel") or "—").replace("_", " ").title()
@@ -803,7 +801,7 @@ async def ask_aria_reply(lead_id: str, payload: AskReplyPayload, current_user: d
         raise HTTPException(404, "Lead not found")
     lead["id"] = str(lead["_id"]); lead.pop("_id", None)
     recent = list(activities_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).limit(6))
-    training = training_collection_ref.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+    training = training_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
 
     # Multi-tenant: pull onboarding config to enrich prompt with tenant-specific persona
     onboarding_cfg = {}
@@ -1257,7 +1255,7 @@ FIELD_LABELS = {
 
 @router.get("/brain")
 async def aria_brain(current_user: dict = Depends(get_current_user)):
-    training = training_collection_ref.find_one({"scope": "workspace"}, {"_id": 0}) or {}
+    training = training_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
     training.pop("scope", None)
     training.pop("updated_at", None)
 
