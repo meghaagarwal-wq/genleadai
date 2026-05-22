@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="4" failures="0" skipped="0" tests="60" time="24.016" timestamp="2026-05-22T11:28:06.978226+00:00" hostname="agent-env-0ba9a290-1bd1-435d-b5fb-f5291b2cace4"><testcase classname="tests.test_iter77_quickwin" name="test_icp_list_reports_no_cap" time="0.001"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">tests/test_iter77_quickwin.py:30: in auth
+    r = requests.post(f"{API_URL}/api/auth/login", json={
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:578: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:487: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:369: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:440: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_iter77_quickwin" name="test_icp_create_past_old_cap" time="0.000"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">tests/test_iter77_quickwin.py:30: in auth
+    r = requests.post(f"{API_URL}/api/auth/login", json={
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:578: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:487: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:369: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:440: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_iter77_quickwin" name="test_weekly_recap_pdf_export" time="0.000"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">tests/test_iter77_quickwin.py:30: in auth
+    r = requests.post(f"{API_URL}/api/auth/login", json={
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:578: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:487: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:369: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:440: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_iter77_quickwin" name="test_auth_me_returns_tenant_name" time="0.000"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">tests/test_iter77_quickwin.py:30: in auth
+    r = requests.post(f"{API_URL}/api/auth/login", json={
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:578: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:487: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:369: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:440: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_create_then_list" time="0.748" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_invalid_tone" time="0.116" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_tier_limit_starter_capped_at_2" time="0.457" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_tier_unlimited_on_dwy" time="0.457" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_update_partial" time="0.226" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_delete_with_no_tagged_records" time="0.238" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_delete_blocked_when_tagged" time="0.340" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_assign_contact_happy_path" time="0.358" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_icp_assign_contact_missing_contact" time="0.225" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_campaign_create_and_list" time="0.241" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_touchpoint_upsert_with_valid_conditions" time="0.331" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_touchpoint_invalid_conditions" time="0.445" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_campaign_map" time="0.573" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_enroll_idempotent" time="0.589" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_pause_resume_cascade" time="0.446" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_render_template_all_tokens_present" time="0.287" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_render_template_missing_tokens_become_empty" time="0.002" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_render_template_no_tokens" time="0.002" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_render_template_malformed_tokens_left_literal" time="0.002" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_validate_conditions_accepts_all_branches" time="0.002" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_handle_inbound_reply_keyword_match_tags_hot_lead" time="0.353" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_handle_inbound_reply_negative_keyword_stops" time="0.339" /><testcase classname="tests.test_iter52_multi_icp_outreach" name="test_outreach_analytics_endpoint" time="0.457" /><testcase classname="tests.test_iter73_touchpoints_extracted_persistence.TestTouchpointsExtractedPersistence" name="test_publish_includes_touchpoints_extracted_count" time="0.426" /><testcase classname="tests.test_iter73_touchpoints_extracted_persistence.TestTouchpointsExtractedPersistence" name="test_persisted_in_tenant_settings_automap_summary" time="0.003" /><testcase classname="tests.test_iter73_touchpoints_extracted_persistence.TestTouchpointsExtractedPersistence" name="test_publish_with_empty_touchpoints_extracted_resets" time="0.048" /><testcase classname="tests.test_iter73_touchpoints_extracted_persistence.TestTouchpointsExtractedPersistence" name="test_publish_payload_accepts_user_edits" time="0.053" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/training]" time="0.568" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/playbooks]" time="0.116" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/journeys/default]" time="0.107" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/handoff/rules]" time="0.107" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/handoff/alerts]" time="0.110" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/revival/segments]" time="0.124" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/agent-activity]" time="0.117" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/insights]" time="0.119" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/assets/catalog]" time="0.111" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/assets]" time="0.100" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/brain]" time="0.106" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/weekly-recap]" time="0.124" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/workspace/stories]" time="0.115" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/workspace/feed]" time="0.114" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/workspace/pipeline-mood]" time="0.111" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_get_endpoint_200[/api/aria-agent/workspace/morning-brief]" time="0.102" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_put_training_persists" time="0.250" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_playbook_activate_deactivate_roundtrip" time="0.342" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_asset_crud_flow" time="0.554" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_workspace_story_card" time="0.232" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_founder_brief" time="10.923" /><testcase classname="tests.test_iter74_aria_agent_refactor" name="test_aria_read" time="0.142" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAriaHealth" name="test_health_endpoint_returns_200_and_shape" time="0.445" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAriaHealth" name="test_health_cards_have_all_required_keys" time="0.127" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAriaHealth" name="test_health_has_all_7_expected_capabilities" time="0.127" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAriaHealth" name="test_health_training_card_action_points_to_settings" time="0.112" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAutoMapSummary" name="test_summary_endpoint_returns_200" time="0.116" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAutoMapSummary" name="test_summary_returns_populated_object_when_published" time="0.243" /><testcase classname="tests.test_iter76_aria_health_and_summary.TestAutoMapSummary" name="test_summary_requires_auth" time="0.094" /></testsuite></testsuites>

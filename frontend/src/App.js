@@ -31,7 +31,7 @@ import OnboardingWizard from './pages/OnboardingWizard';
 import Billing from './pages/Billing';
 import Invoices from './pages/Invoices';
 import Troubleshooting from './pages/Troubleshooting';
-import Tutorials from './pages/Tutorials';
+import AISetupAssistant from './pages/AISetupAssistant';
 import Limits from './pages/Limits';
 import Contacts from './pages/Contacts';
 import FollowUps from './pages/FollowUps';
@@ -53,7 +53,6 @@ import MasterAdmin from './pages/MasterAdmin';
 import TouchpointJourney from './pages/TouchpointJourney';
 import ICPManager from './pages/ICPManager';
 import OutreachCampaigns from './pages/OutreachCampaigns';
-import AISetupAssistant from './pages/AISetupAssistant';
 import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
 import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
@@ -247,7 +246,6 @@ function App() {
                         <Route path="/billing/invoices" element={<Invoices />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/troubleshooting" element={<Troubleshooting />} />
-                        <Route path="/tutorials" element={<Tutorials />} />
                         <Route path="/limits" element={<Limits />} />
                         <Route path="/contacts" element={<Contacts />} />
                         {/* AI Sales Agent additive routes */}

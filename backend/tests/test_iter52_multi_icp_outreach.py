@@ -113,19 +113,21 @@ def test_icp_invalid_tone(auth):
 
 
 def test_icp_tier_limit_starter_capped_at_2(auth):
-    """On 'diy'/'trial' plan, 3rd ICP must 403 with tier_limit_reached."""
+    """Iter77 — GenLeadAI is a managed deployment; ICP caps were removed.
+    Validate the cap is NO LONGER enforced: a 3rd ICP on a 'diy' tenant
+    must now succeed (201) and the /list response must report
+    `can_create_more: True` with `limit: null`."""
     _bump_plan(auth["tenant_id"], "diy")
-    for i in range(2):
+    for i in range(3):
         r = requests.post(f"{API_URL}/api/icps/create", headers=auth["headers"], json={
             "label": f"ICP {i+1}", "tone": "professional",
         }, timeout=10)
         assert r.status_code == 201, r.text
-    r = requests.post(f"{API_URL}/api/icps/create", headers=auth["headers"], json={
-        "label": "ICP 3 should fail", "tone": "professional",
-    }, timeout=10)
-    assert r.status_code == 403
-    assert "tier_limit_reached" in r.text
-    _bump_plan(auth["tenant_id"], "dwy")  # restore unlimited
+    lst = requests.get(f"{API_URL}/api/icps/list", headers=auth["headers"], timeout=10).json()
+    assert lst["count"] >= 3
+    assert lst["limit"] is None
+    assert lst["can_create_more"] is True
+    _bump_plan(auth["tenant_id"], "dwy")  # restore unlimited for downstream tests
 
 
 def test_icp_tier_unlimited_on_dwy(auth):

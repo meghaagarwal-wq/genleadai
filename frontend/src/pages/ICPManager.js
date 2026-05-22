@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
-  Target, Plus, PencilSimple, Trash, X, Crown, Sparkle,
+  Target, Plus, PencilSimple, Trash, X, Sparkle,
   Buildings, Briefcase, Lightning, Heart, CurrencyInr, Tag,
 } from '@phosphor-icons/react';
 import api from '../config/api';
-import PlanUpgradeModal from '../components/PlanUpgradeModal';
 
 const TONES = [
   { value: 'professional', label: 'Professional', tint: 'bg-slate-100 text-slate-700 border-slate-300' },
@@ -26,18 +25,17 @@ const EMPTY_FORM = {
 
 export default function ICPManager() {
   const [icps, setIcps] = useState([]);
-  const [meta, setMeta] = useState({ count: 0, limit: null, can_create_more: true });
+  const [meta, setMeta] = useState({ count: 0 });
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await api.get('/api/icps/list');
       setIcps(r.data.icps || []);
-      setMeta({ count: r.data.count, limit: r.data.limit, can_create_more: r.data.can_create_more });
+      setMeta({ count: r.data.count });
     } catch (e) {
       toast.error('Could not load ICPs');
     } finally {
@@ -48,10 +46,6 @@ export default function ICPManager() {
   useEffect(() => { load(); }, [load]);
 
   const openCreate = () => {
-    if (!meta.can_create_more) {
-      setUpgradeOpen(true);
-      return;
-    }
     setEditing({ ...EMPTY_FORM, isNew: true });
     setModalOpen(true);
   };
@@ -77,12 +71,7 @@ export default function ICPManager() {
       load();
     } catch (e) {
       const detail = e.response?.data?.detail;
-      if (typeof detail === 'string' && detail.includes('tier_limit_reached')) {
-        setModalOpen(false);
-        setUpgradeOpen(true);
-      } else {
-        toast.error(typeof detail === 'string' ? detail : 'Save failed');
-      }
+      toast.error(typeof detail === 'string' ? detail : 'Save failed');
     }
   };
 
@@ -127,43 +116,20 @@ export default function ICPManager() {
         </div>
         <div className="flex items-center gap-3">
           <div data-testid="icp-tier-meter" className="text-right">
-            <div className="text-xs text-slate-500 uppercase tracking-wider">ICPs in use</div>
-            <div className="text-2xl font-semibold text-slate-900">
-              {meta.count}
-              <span className="text-base text-slate-400 font-normal"> / {meta.limit === null ? '∞' : meta.limit}</span>
-            </div>
+            <div className="text-xs text-slate-500 uppercase tracking-wider">ICPs defined</div>
+            <div className="text-2xl font-semibold text-slate-900">{meta.count}</div>
           </div>
           <button
             type="button"
             onClick={openCreate}
-            disabled={!meta.can_create_more}
             data-testid="icp-create-btn"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition-colors"
           >
             <Plus size={16} weight="bold" />
             New ICP
           </button>
         </div>
       </div>
-
-      {/* Tier limit banner */}
-      {!meta.can_create_more && (
-        <div data-testid="icp-tier-limit-banner" className="mb-6 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-4 flex items-center gap-3">
-          <Crown size={20} weight="duotone" className="text-amber-600 flex-shrink-0" />
-          <div className="flex-1 text-sm text-amber-900">
-            You've hit the <strong>{meta.limit} ICP cap</strong> for your plan.
-            Upgrade to <strong>DWY</strong> or <strong>DFY</strong> for unlimited ICPs.
-          </div>
-          <button
-            type="button"
-            onClick={() => setUpgradeOpen(true)}
-            data-testid="icp-tier-upgrade-btn"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800"
-          >
-            <Crown size={12} weight="fill" /> Upgrade now
-          </button>
-        </div>
-      )}
 
       {/* Grid */}
       {loading ? (
@@ -186,13 +152,6 @@ export default function ICPManager() {
           onSave={handleSave}
         />
       )}
-
-      <PlanUpgradeModal
-        open={upgradeOpen}
-        onClose={() => setUpgradeOpen(false)}
-        targetPlan="dwy"
-        reason={`Your plan allows ${meta.limit} ICPs. Upgrade to unlock unlimited ICPs and multi-channel automation.`}
-      />
     </div>
   );
 }

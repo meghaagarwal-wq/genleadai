@@ -98,6 +98,7 @@ const Dashboard = ({ demo = false }) => {
   }
 
   const firstName = user?.full_name?.split(' ')[0] || 'there';
+  const workspaceName = user?.tenant_name || 'your business';
 
   return (
     <div data-testid="dashboard-page" className="space-y-6 max-w-[1280px] mx-auto aria-fade-up">
@@ -118,8 +119,8 @@ const Dashboard = ({ demo = false }) => {
           <h1 className="text-3xl md:text-4xl font-extrabold text-[#1A0A2E] leading-tight" style={{ letterSpacing: '-0.01em' }}>
             Your workspace today
           </h1>
-          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl">
-            Who needs attention, what's happening, and what to do next — at a glance.
+          <p className="text-sm md:text-base text-[#5A4A7A] mt-2 max-w-2xl" data-testid="dashboard-subheading">
+            Aria is working your leads for <strong className="text-[#1A0A2E]">{workspaceName}</strong> — who needs attention, what's happening, and what to do next.
           </p>
         </div>
         <div className="flex gap-2">

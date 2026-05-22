@@ -15,7 +15,6 @@ import AriaAvatar from './AriaAvatar';
 import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
-import TrialBanner from './TrialBanner';
 import AriaModeChip from './AriaModeChip';
 import AriaTourModal from './AriaTourModal';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
@@ -203,7 +202,6 @@ const Layout = ({ children }) => {
     { icon: BookOpen, label: 'Sales Playbooks', path: '/aria-agent/playbooks' },
     { icon: CalendarCheck, label: 'Weekly Recap', path: '/aria-agent/weekly-recap' },
     { icon: Wrench, label: 'Troubleshooting', path: '/troubleshooting' },
-    { icon: GraduationCap, label: 'Tutorials', path: '/tutorials' },
   ];
 
   const NavContent = ({ mobile = false }) => (
@@ -354,7 +352,6 @@ const Layout = ({ children }) => {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>ARIA</span>
-                  <span data-testid="beta-badge-sidebar" className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#FDE68A] border border-[#F59E0B]/40" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
                 </div>
                 <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
               </div>
@@ -399,7 +396,6 @@ const Layout = ({ children }) => {
                 <div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans' }}>ARIA</span>
-                    <span data-testid="beta-badge-mobile" className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#FDE68A] border border-[#F59E0B]/40" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
                   </div>
                   <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
                 </div>
@@ -435,7 +431,7 @@ const Layout = ({ children }) => {
             <NotificationsBell />
           </div>
         </header>
-        <main className="flex-1 overflow-auto"><TrialBanner /><div className="p-4 md:p-6">{children}</div></main>
+        <main className="flex-1 overflow-auto"><div className="p-4 md:p-6">{children}</div></main>
       </div>
       <AriaToastWatcher />
       <AriaTourModal />

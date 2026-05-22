@@ -149,17 +149,8 @@ async def create_icp(payload: IcpCreate, tenant: dict = Depends(get_active_tenan
             detail=f"invalid_tone: must be one of {sorted(ALLOWED_TONES)}",
         )
 
-    limit = _icp_limit(tenant)
-    if limit is not None:
-        current = _icp_count(tenant["id"])
-        if current >= limit:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"tier_limit_reached: your plan allows up to {limit} ICPs. "
-                    "Upgrade to DWY or DFY for unlimited ICPs."
-                ),
-            )
+    # Iter77 — GenLeadAI-managed deployment: no plan-based ICP caps. ICPs are
+    # operational sales segments; agency owners decide how many.
 
     now = _now_iso()
     doc = {
@@ -185,12 +176,11 @@ async def list_icps(tenant: dict = Depends(get_active_tenant)):
     """List all ICPs for the active tenant. Newest first."""
     cursor = icps_col.find({"tenant_id": tenant["id"]}).sort("created_at", -1)
     items = [_scrub(d) for d in cursor]
-    limit = _icp_limit(tenant)
     return {
         "icps": items,
         "count": len(items),
-        "limit": limit,        # null = unlimited
-        "can_create_more": (limit is None or len(items) < limit),
+        "limit": None,             # iter77 — caps removed; deployment-managed
+        "can_create_more": True,
     }
 
 

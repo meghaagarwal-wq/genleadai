@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   CalendarCheck, TrendUp, TrendDown, Trophy, Snowflake, Lightning,
-  ArrowRight, Sparkle, Target, ChatCircle, PhoneCall, CheckCircle,
+  ArrowRight, Sparkle, Target, ChatCircle, PhoneCall, CheckCircle, DownloadSimple,
 } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import api from '../config/api';
 import PageHeader from '../components/PageHeader';
 
@@ -14,10 +15,32 @@ const STAT_ICONS = {
 
 const WeeklyRecap = () => {
   const [data, setData] = useState(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     api.get('/api/aria-agent/weekly-recap').then(r => setData(r.data)).catch(() => setData(null));
   }, []);
+
+  const downloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const r = await api.get('/api/aria-agent/weekly-recap/export.pdf', { responseType: 'blob' });
+      const blob = new Blob([r.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Aria-Weekly-Recap-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Weekly recap downloaded');
+    } catch (e) {
+      toast.error("Couldn't generate the PDF — try again in a moment.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (!data) return <div className="text-sm text-[#9B8AB0] p-6">Loading weekly recap…</div>;
 
@@ -27,6 +50,17 @@ const WeeklyRecap = () => {
         eyebrow="ARIA · Weekly recap"
         title="Your sales week at a glance"
         subtitle="What ARIA ran, what moved, what's at risk. Read this before your Monday planning — it's faster than scrolling the pipeline."
+        actions={
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={downloading}
+            data-testid="weekly-recap-download-btn"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#7C35DC] to-[#C044E0] text-white text-sm font-bold shadow-sm hover:opacity-95 disabled:opacity-50"
+          >
+            <DownloadSimple size={14} weight="bold" /> {downloading ? 'Generating…' : 'Download Report'}
+          </button>
+        }
       />
 
       {/* Hero narrative */}
