@@ -838,8 +838,9 @@ function ExtractedTouchpointRow({ index, tp, onUpdate, onRemove }) {
 
   React.useEffect(() => {
     // If parent reloads the extraction (e.g. user re-uploads), refresh the draft.
-    setDraft(tp);
-  }, [tp]);
+    // Guard: don't clobber the user's in-progress edits while editor is open.
+    if (!editing) setDraft(tp);
+  }, [tp, editing]);
 
   const save = () => {
     // Clean up step strings — drop empties.
