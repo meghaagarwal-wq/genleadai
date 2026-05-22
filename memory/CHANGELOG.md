@@ -1,5 +1,33 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 77 (Quick-win subset of the 11-section managed-deployment spec)
+- **S1 — Tutorials + Billing UI removal**: `/tutorials` route + sidebar
+  nav item removed; `TrialBanner` ripped out of `Layout.js`; BETA badge
+  removed from desktop + mobile sidebar headers.
+- **S3 partial — ICP cap removal**: `ICP_LIMIT_BY_PLAN` + `_icp_limit()` +
+  `_icp_count()` helpers deleted from `routes/icps.py`; `POST /create` no
+  longer 403s on tier cap; `GET /list` always returns
+  `{limit: null, can_create_more: true}`. `PlanUpgradeModal` import +
+  tier-limit banner stripped from `ICPManager.js`. ICP-campaign linking
+  (`icp_campaign_id`) is deferred to a follow-up iteration.
+- **S7 — Weekly Recap PDF**: new `GET /api/aria-agent/weekly-recap/export.pdf`
+  (ReportLab-rendered A4 with header band, narrative, 6 KPI tiles, 3
+  highlight boxes, focus plan, footer). `WeeklyRecap.js` now has a
+  "Download Report" button (`data-testid='weekly-recap-download-btn'`).
+- **S9 partial — Dashboard personalization**: subheading now reads
+  "Aria is working your leads for **<workspace>**", pulling the name from
+  `localStorage.active_tenant.name`. BETA badge gone.
+- **Test housekeeping**: `test_iter52_multi_icp_outreach.test_icp_tier_limit_starter_capped_at_2`
+  updated to assert the new no-cap behavior. New
+  `test_iter77_quickwin.py` adds 4 tests for the iter77 surfaces.
+- Verified: 59/59 backend tests pass; frontend smoke confirms all four
+  S1/S3/S7/S9 acceptance criteria.
+- **NOT in scope this turn (queued):** S2 (conversation delete + cascade),
+  S3 remainder (campaign linking), S4 (touchpoint kanban view), S5
+  (Train Aria merge — spec needed), S6 (playbook injection into Claude),
+  S8 (Master Admin Deployments tab + simplified onboarding + sidebar
+  ARIA status), S9.5 (full security sweep).
+
 ## 2026-02 — Iter 76 (Backlog wrap-up + Aria Health badges)
 - **Route alias**: `/ai-setup-assistant` now resolves to the AISetupAssistant
   page (alongside the canonical `/ai-setup`) — fixes the share-link friction

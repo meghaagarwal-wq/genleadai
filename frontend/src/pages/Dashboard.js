@@ -98,7 +98,15 @@ const Dashboard = ({ demo = false }) => {
   }
 
   const firstName = user?.full_name?.split(' ')[0] || 'there';
-  const workspaceName = user?.tenant_name || 'your business';
+  // Iter77 fix — workspace name comes from active_tenant in localStorage, not from /auth/me.
+  let workspaceName = user?.tenant_name;
+  if (!workspaceName) {
+    try {
+      const activeTenant = JSON.parse(localStorage.getItem('active_tenant') || 'null');
+      workspaceName = activeTenant?.name;
+    } catch (_e) { /* ignore */ }
+  }
+  workspaceName = workspaceName || 'your business';
 
   return (
     <div data-testid="dashboard-page" className="space-y-6 max-w-[1280px] mx-auto aria-fade-up">

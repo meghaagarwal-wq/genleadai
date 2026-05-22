@@ -45,18 +45,10 @@ icps_col = db["icps"]
 # ─── Constants ──────────────────────────────────────────────────────────────
 ALLOWED_TONES = {"professional", "casual", "bold"}
 
-ICP_LIMIT_BY_PLAN = {
-    "trial": 2,
-    "diy": 2,
-    "dwy": None,    # unlimited
-    "dfy": None,    # unlimited
-    "free": 2,
-    # legacy plan names — generous fallback so existing customers aren't blocked
-    "starter": 2,
-    "growth": None,
-    "pro": None,
-    "scale": None,
-}
+# Iter77 — GenLeadAI is a managed-deployment platform; ICP caps were removed.
+# The previous ICP_LIMIT_BY_PLAN dict + _icp_limit() / _icp_count() helpers are
+# intentionally gone. If billing-tier caps are ever re-introduced, restore via
+# a Stripe-managed feature flag rather than hardcoded plan thresholds.
 
 
 def _now_iso() -> str:
@@ -76,15 +68,6 @@ def _scrub(doc: dict) -> dict:
 
 def _tenant_plan(tenant: dict) -> str:
     return (tenant.get("plan") or "trial").lower()
-
-
-def _icp_limit(tenant: dict) -> Optional[int]:
-    """Return the ICP cap for this tenant's plan. None = unlimited."""
-    return ICP_LIMIT_BY_PLAN.get(_tenant_plan(tenant), 2)
-
-
-def _icp_count(tenant_id: str) -> int:
-    return icps_col.count_documents({"tenant_id": tenant_id})
 
 
 # ─── Pydantic models ────────────────────────────────────────────────────────
