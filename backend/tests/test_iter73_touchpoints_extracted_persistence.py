@@ -18,7 +18,7 @@ from pymongo import MongoClient
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
-DB_NAME = os.environ.get("DB_NAME", "aria_db")
+DB_NAME = os.environ.get("DB_NAME", "genleadai_lms")
 
 ADMIN_EMAIL = "admin@demo.com"
 ADMIN_PASSWORD = "Demo1234!"

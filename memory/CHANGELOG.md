@@ -1,17 +1,35 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 75 (P2 organizational refactors)
+- **Backend split**: `aria_agent_routes.py` (1464 lines) → package
+  `aria_agent_routes/` with 12 feature submodules
+  (training, playbooks, journeys, briefs, workspace, handoff, revival,
+  agent_activity, insights, assets, brain, weekly_recap) + `_shared.py`
+  (router, collections, AriaTrainingPayload, deps import) +
+  `__init__.py` (orchestrator, exposes `attach_aria_agent_routes`).
+  Public surface preserved — `from aria_agent_routes import attach_aria_agent_routes`
+  still works for `server.py:5245`. Largest submodule = 424 lines (workspace).
+- **Frontend split**: `AISetupAssistant.js` (1010 lines) → 227-line
+  orchestrator + `frontend/src/components/ai-setup/`
+  (`UploadPanel`, `ExtractingPanel`, `ReviewPanel`, `DonePanel`,
+  `ExtractedTouchpointRow`, `atoms`). Largest component = 425 lines
+  (ReviewPanel). All data-testid attributes preserved.
+- Test hygiene: `test_iter73_touchpoints_extracted_persistence.py` default
+  `DB_NAME` corrected from `aria_db` → `genleadai_lms` (matches real env).
+- Verified: 26/26 backend regression tests still pass (22 iter74 + 4 iter73).
+  All 27 `/api/aria-agent/*` routes resolve. Frontend `/ai-setup` renders
+  with no console errors. Zero behavior change.
+
 ## 2026-02 — Iter 74 (P1 refactor: aria_agent_routes.py)
 - Eliminated the 1392-line `_aria_agent_endpoints(app, get_current_user, db)`
-  wrapper. All 27 `/api/aria-agent/*` routes now live at module level on a
-  single `APIRouter`. `db` + `get_current_user` are imported directly from
+  wrapper. All 27 `/api/aria-agent/*` routes lifted to module level on a
+  single `APIRouter`. `db` + `get_current_user` imported directly from
   `deps`.
 - `attach_aria_agent_routes(app, get_current_user, db)` kept as a thin
-  compatibility shim (positional args accepted & ignored) so `server.py`
-  call site (`server.py:5246`) didn't need to change.
+  compatibility shim.
 - Removed redundant `training_collection_ref` alias.
 - Tests: `/app/backend/tests/test_iter74_aria_agent_refactor.py` (22 tests,
-  100% pass) + iter73 suite re-validated (4/4 pass). Zero behavioral
-  regressions — all routes return same status codes + shapes as iter71.
+  100% pass). Zero regressions.
 
 ## 2026-02 — Iter 73 (AI Setup Assistant: inline edit before publish)
 - Added `ExtractedTouchpointRow` inline editor to `AISetupAssistant.js` so
