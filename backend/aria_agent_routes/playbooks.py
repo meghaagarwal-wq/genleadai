@@ -129,10 +129,11 @@ async def activate_playbook(playbook_id: str, current_user: dict = Depends(get_c
     try:
         from routes.audit_log import audit_write
         audit_write(
-            actor_email=current_user["email"],
-            action="playbook.activate",
-            target_id=playbook_id,
             tenant_id=tid,
+            user=current_user,
+            action="playbook.activate",
+            resource_type="playbook",
+            resource_id=playbook_id,
             metadata={"playbook_name": playbook["name"]},
         )
     except Exception:
@@ -150,10 +151,11 @@ async def deactivate_playbook(playbook_id: str, current_user: dict = Depends(get
     try:
         from routes.audit_log import audit_write
         audit_write(
-            actor_email=current_user["email"],
-            action="playbook.deactivate",
-            target_id=playbook_id,
             tenant_id=tid,
+            user=current_user,
+            action="playbook.deactivate",
+            resource_type="playbook",
+            resource_id=playbook_id,
         )
     except Exception:
         pass

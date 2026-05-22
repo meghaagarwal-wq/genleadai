@@ -583,7 +583,9 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
     try:
         oid = ObjectId(lead_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid lead ID")
+        # Iter78 — consistent with cross-tenant lookup: just say "not found" so
+        # callers can't probe for the existence of foreign leads by id format.
+        raise HTTPException(status_code=404, detail="Lead not found")
 
     tid = current_user.get("tenant_id")
     lead = leads_collection.find_one({"_id": oid, "tenant_id": tid})
@@ -605,10 +607,11 @@ async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_use
     try:
         from routes.audit_log import audit_write
         audit_write(
-            actor_email=current_user.get("email"),
-            action="lead.delete",
-            target_id=lead_id,
             tenant_id=tid,
+            user=current_user,
+            action="lead.delete",
+            resource_type="lead",
+            resource_id=lead_id,
             metadata={"cascade": casc, "lead_name": lead.get("name")},
         )
     except Exception:
@@ -653,10 +656,11 @@ async def bulk_delete_leads(
     try:
         from routes.audit_log import audit_write
         audit_write(
-            actor_email=current_user.get("email"),
-            action="lead.bulk_delete",
-            target_id=f"{deleted}_leads",
             tenant_id=tid,
+            user=current_user,
+            action="lead.bulk_delete",
+            resource_type="lead",
+            resource_id=f"{deleted}_leads",
             metadata={"requested": len(payload.lead_ids), "deleted": deleted, "failed": failed, "cascade": cascades},
         )
     except Exception:
@@ -678,10 +682,11 @@ async def delete_conversation(lead_id: str, current_user: dict = Depends(get_cur
     try:
         from routes.audit_log import audit_write
         audit_write(
-            actor_email=current_user.get("email"),
-            action="conversation.delete",
-            target_id=lead_id,
             tenant_id=tid,
+            user=current_user,
+            action="conversation.delete",
+            resource_type="conversation",
+            resource_id=lead_id,
             metadata={"messages_deleted": deleted},
         )
     except Exception:

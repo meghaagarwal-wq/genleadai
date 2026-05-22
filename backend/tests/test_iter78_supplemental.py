@@ -42,7 +42,7 @@ def test_audit_log_lead_delete(auth, db):
     assert r.status_code == 200
     entry = db.audit_log.find_one({"action": "lead.delete", "tenant_id": "ten_demo"}, sort=[("_id", -1)])
     assert entry is not None, "no audit_log entry for lead.delete"
-    assert entry.get("actor_email") == "admin@demo.com"
+    assert entry.get("user_id") == "admin@demo.com"
 
 
 def test_audit_log_lead_bulk_delete(auth, db):
@@ -51,7 +51,7 @@ def test_audit_log_lead_bulk_delete(auth, db):
     assert r.status_code == 200
     entry = db.audit_log.find_one({"action": "lead.bulk_delete", "tenant_id": "ten_demo"}, sort=[("_id", -1)])
     assert entry is not None
-    assert entry.get("actor_email") == "admin@demo.com"
+    assert entry.get("user_id") == "admin@demo.com"
 
 
 def test_audit_log_conversation_delete(auth, db):
@@ -66,7 +66,7 @@ def test_audit_log_playbook_activate_and_deactivate(auth, db):
     assert r.status_code == 200
     a = db.audit_log.find_one({"action": "playbook.activate", "tenant_id": "ten_demo"}, sort=[("_id", -1)])
     assert a is not None
-    assert a.get("actor_email") == "admin@demo.com"
+    assert a.get("user_id") == "admin@demo.com"
 
     r = requests.post(f"{BASE_URL}/api/aria-agent/playbooks/saas_trial/deactivate", headers=auth["headers"], timeout=10)
     assert r.status_code == 200

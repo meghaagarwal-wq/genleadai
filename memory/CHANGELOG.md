@@ -1,5 +1,46 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 78 (S2 + S3 + S5 + S6 + S4 + S9.5 focused slice)
+- **S2 — Lead + Conversation cascade delete**: `DELETE /api/leads/{id}`
+  now hard-cascades activities, conversations, touchpoint_logs,
+  classification_logs (all tenant-scoped). New `POST /api/leads/bulk-delete`
+  for batch delete. New `DELETE /api/conversations/{lead_id}` removes the
+  Aria thread without touching the lead. All three are owner/admin only
+  and write to audit_log. Lead Inbox UI gained a `Delete selected` bulk
+  button (`data-testid='bulk-delete-btn'`).
+- **S3 — ICP ↔ Campaign linking**: new `POST /api/icps/{icp_id}/link-campaign`
+  sets `icp.icp_campaign_id` AND mirrors `campaign.linked_icp_id` (clears
+  the old reverse link on rebinds). `IcpCreate` / `IcpUpdate` accept the
+  new field. ICPManager UI shows a green "Linked: <campaign>" chip on
+  each card + `Link a campaign` button → modal w/ campaign dropdown.
+- **S5 — Train Aria ← AI Setup merge**: new
+  `POST /api/aria-agent/training/import-from-automap` pulls
+  `tenants.settings.automap_summary` and fills BLANK Train Aria fields
+  only — never clobbers founder-supplied answers. 404 with
+  `no_automap_summary` when nothing has been published yet.
+- **S6 — Playbook + assets injection into Claude**: playbook activation
+  now (a) single-active-per-tenant semantics, (b) mirrors onto
+  `tenant.settings.active_playbook`. New `_shared.get_active_playbook_block()`
+  + `get_relevant_assets_block()` helpers inject the playbook + matching
+  objection/pricing/case-study assets into every Aria conversational
+  Claude system prompt (`founder-brief`, `workspace/ask-reply`).
+- **S4 — Touchpoint Pipeline view (5 stages)**: new
+  `JourneyPipelineView` swimlane component (First Contact 1-4 / Education
+  5-10 / Nurture 11-18 / Conversion 19-26 / Revival 27-32). Now the
+  default `/touchpoint-journey` rendering. Timeline + Flowchart remain
+  via 3-way toggle. `Add to <stage>` buttons drop a new touchpoint
+  pre-anchored to that stage's day range.
+- **S9.5 focused slice — audit_log everywhere**: `audit_write()` called
+  on `lead.delete`, `lead.bulk_delete`, `conversation.delete`,
+  `playbook.activate`, `playbook.deactivate`. Owner/admin role gating
+  added on all destructive endpoints (`403 forbidden` for non-owners).
+  Invalid-ObjectId on lead delete now returns 404 (was 400) to avoid
+  cross-tenant existence probes.
+- **Tests**: new `test_iter78_managed_deployment.py` (12 tests) +
+  `test_iter78_supplemental.py` (9 tests covering audit_log + cross-
+  tenant safety + `get_active_playbook_block()`). 70/70 backend tests
+  passing including iter52/iter73/iter74 regression.
+
 ## 2026-02 — Iter 77 (Quick-win subset of the 11-section managed-deployment spec)
 - **S1 — Tutorials + Billing UI removal**: `/tutorials` route + sidebar
   nav item removed; `TrialBanner` ripped out of `Layout.js`; BETA badge
