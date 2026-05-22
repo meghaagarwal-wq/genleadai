@@ -783,6 +783,20 @@ const TouchpointJourney = () => {
 
   // Iter78 — S4: pipeline stage adds a new touchpoint anchored at a day midway
   // through the stage's range. We append + sort by day so it lands in the right column.
+  // Iter79 — S4 enhancement: drag a card to another stage → resnap day.
+  const moveTpToStage = (movedIdx, targetDay) => {
+    if (movedIdx < 0 || movedIdx >= draft.length) return;
+    const updated = [...draft];
+    updated[movedIdx] = { ...updated[movedIdx], day: targetDay };
+    const sorted = reindex(updated.sort((a, b) => (a.day || 0) - (b.day || 0)));
+    setDraft(sorted);
+    // Track the moved touchpoint's new index after sort.
+    const movedTpRef = updated[movedIdx];
+    const newIdx = sorted.findIndex((t) => t === movedTpRef);
+    setSelectedIdx(newIdx >= 0 ? newIdx : null);
+    markDirty();
+  };
+
   const addRowAtDay = (day) => {
     if (draft.length >= MAX_TOUCHPOINTS) { toast.error(`Max ${MAX_TOUCHPOINTS} touchpoints`); return; }
     const newTp = {
@@ -1009,6 +1023,7 @@ const TouchpointJourney = () => {
                 selectedIdx={selectedIdx}
                 onSelect={setSelectedIdx}
                 onAddAtDay={addRowAtDay}
+                onMoveTpToStage={moveTpToStage}
               />
             )}
           </div>

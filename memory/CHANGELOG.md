@@ -1,5 +1,41 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 79 (S8 + S6 enhancement + S4 enhancement + S9.5 focused slice)
+- **S8 — Master Admin Deployments tab** *(largest item in this iter)*:
+  • New `/api/admin/deployments` router with `GET /` (rollup + grid),
+    `GET /{tenant_id}` (single, masked API keys), `POST /{tenant_id}/toggle`
+    (pause/resume + audit log), `POST /onboard` (4-step wizard launches a
+    tenant + ICP + default 3-step touchpoint map), `GET /_/sidebar-status`
+    (cheap per-tenant status indicator).
+  • Status logic: **LIVE** when ≥1 channel + ≥1 ICP + ≥1 touchpoint;
+    **PAUSED** when the operator hit pause; otherwise **SETUP**.
+  • New `MasterAdmin → Deployments` tab (default tab) with rollup tiles,
+    cards (status chip, channel chips, leads/touchpoints/last-activity,
+    Pause / Manage), and a new `OnboardingWizard` modal.
+  • Sidebar — new `AriaStatusIndicator` shows live status under the
+    ARIA logo on every page (green/amber/red pulsing dot + popover with
+    leads_today, touchpoints_today, last activity, and a master-admin-only
+    pause toggle).
+  • Seed data: `admin@demo.com` promoted to `master_admin` role.
+- **S4 enhancement — drag-drop across pipeline stages**: every
+  `PipelineCard` is now HTML5-draggable; each `pipeline-stage-*` column
+  is a drop target. Dropping a card resnaps its `day` to the middle of
+  the target stage's range, sorts the journey, and follows selection.
+- **S6 enhancement — Suggested Asset widget**: new
+  `GET /api/aria-agent/suggested-assets/{lead_id}?q=...` returns up to 3
+  workspace assets keyword-matched to the lead's last inbound message.
+  New `SuggestedAssetWidget` rendered under `AriaReadPanel` on Lead
+  Detail. Each match surfaces the trigger keyword so founders see *why*
+  Aria leans on that asset.
+- **S9.5 focused — safe validation errors**: new
+  `RequestValidationError` handler returns a single human-readable
+  string instead of the Pydantic error array, eliminating the leak of
+  field types / model structure to the frontend.
+- **Tests**: `test_iter79_managed_deployment.py` (8 tests) covering
+  S8 happy path + cross-tenant + S6 endpoint + S9.5 safe-error shape.
+  Full regression: 54/54 backend tests passing including iter73 / iter74
+  / iter78 suites.
+
 ## 2026-02 — Iter 78 (S2 + S3 + S5 + S6 + S4 + S9.5 focused slice)
 - **S2 — Lead + Conversation cascade delete**: `DELETE /api/leads/{id}`
   now hard-cascades activities, conversations, touchpoint_logs,

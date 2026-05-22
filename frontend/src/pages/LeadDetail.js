@@ -10,6 +10,7 @@ import IcpPickerForLead from '../components/IcpPickerForLead';
 import AriaConfidenceDial from '../components/AriaConfidenceDial';
 import CrmSyncBadge from '../components/CrmSyncBadge';
 import DpdpDeleteButton from '../components/DpdpDeleteButton';
+import SuggestedAssetWidget from '../components/SuggestedAssetWidget';
 import {
   ArrowLeft,
   Phone,
@@ -346,6 +347,9 @@ const LeadDetail = () => {
 
           {/* ARIA's Read — conversation intelligence (additive) */}
           <AriaReadPanel leadId={lead.id} />
+
+          {/* Iter79 — S6: Suggested workspace assets Aria draws from */}
+          <SuggestedAssetWidget leadId={lead.id} contextQuery={lead.last_inbound_text} />
 
           {/* Touchpoint Progress (X of 32) — pairs with the Journey tab in the main column */}
           <TouchpointProgressCard leadId={lead.id} onOpenJourney={() => setActiveTab('journey')} />

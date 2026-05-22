@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ChartLineUp, ShieldCheck, Users, Heartbeat, Clock, Receipt } from '@phosphor-icons/react';
+import { ChartLineUp, ShieldCheck, Users, Heartbeat, Clock, Receipt, Rocket } from '@phosphor-icons/react';
 import RevenueTab from '../components/admin/RevenueTab';
 import WorkspacesTab from '../components/admin/WorkspacesTab';
 import HealthMonitorTab from '../components/admin/HealthMonitorTab';
@@ -9,8 +9,10 @@ import PlatformStatsTab from '../components/admin/PlatformStatsTab';
 import ContactRequestsTab from '../components/admin/ContactRequestsTab';
 import AuditLogAdminTab from '../components/admin/AuditLogAdminTab';
 import BillingConfigTab from '../components/admin/BillingConfigTab';
+import DeploymentsTab from '../components/admin/DeploymentsTab';
 
 const TABS = [
+  { key: 'deployments', label: 'Deployments', icon: Rocket, component: DeploymentsTab },
   { key: 'revenue', label: 'Revenue', icon: ChartLineUp, component: RevenueTab },
   { key: 'workspaces', label: 'All Workspaces', icon: Users, component: WorkspacesTab },
   { key: 'trials', label: 'Trial Expiries', icon: Clock, component: TrialExpiriesTab },
@@ -23,9 +25,10 @@ const TABS = [
 
 const MasterAdmin = () => {
   const { user } = useAuth();
-  const [active, setActive] = useState('revenue');
+  const [active, setActive] = useState('deployments');
 
-  if ((user?.role || '').toLowerCase() !== 'admin') {
+  const role = (user?.role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'master_admin') {
     return (
       <div className="p-8" data-testid="master-admin-denied">
         <div className="bg-[#FEE2E2] border border-[#DC2626]/30 rounded-xl p-6 max-w-xl">

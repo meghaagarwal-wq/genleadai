@@ -23,7 +23,7 @@ users = [
         "email": "admin@demo.com",
         "password_hash": pwd_context.hash("Demo1234!"),
         "full_name": "Megha Agarwal",
-        "role": "admin",
+        "role": "master_admin",
         "avatar_url": "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?w=100&h=100&fit=crop&crop=face",
         "team": "Leadership",
         "is_active": True,

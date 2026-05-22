@@ -19,6 +19,7 @@ from . import assets        # noqa: F401
 from . import brain         # noqa: F401
 from . import weekly_recap  # noqa: F401
 from . import health        # noqa: F401
+from . import suggested_assets  # noqa: F401
 
 
 def attach_aria_agent_routes(app, get_current_user=None, db=None):

@@ -16,6 +16,7 @@ import NotificationsBell from './NotificationsBell';
 import AriaToastWatcher from './AriaToastWatcher';
 import BetaFeedbackButton from './BetaFeedbackButton';
 import AriaModeChip from './AriaModeChip';
+import AriaStatusIndicator from './AriaStatusIndicator';
 import AriaTourModal from './AriaTourModal';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
@@ -354,6 +355,7 @@ const Layout = ({ children }) => {
                   <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>ARIA</span>
                 </div>
                 <div className="text-[9px] font-medium uppercase tracking-[0.2em] text-[var(--sidebar-text-muted)] mt-0.5">AI Sales PA · GenLeadAI</div>
+                <div className="mt-1.5"><AriaStatusIndicator collapsed={false} /></div>
               </div>
             )}
           </div>

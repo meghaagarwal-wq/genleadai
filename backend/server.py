@@ -56,6 +56,7 @@ from routes.contacts import router as contacts_router
 from routes.classification import router as classification_router, classify_inbound
 from routes.aria_confidence import router as aria_confidence_router
 from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
+from routes.admin_deployments import router as admin_deployments_router
 from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
 from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, admin_audit_router, audit_write
 from routes.data_deletion import router as data_deletion_router
@@ -121,6 +122,7 @@ app.include_router(contacts_router)
 app.include_router(classification_router)
 app.include_router(aria_confidence_router)
 app.include_router(admin_revenue_router)
+app.include_router(admin_deployments_router)
 app.include_router(admin_invoice_router)
 app.include_router(crm_sync_router)
 app.include_router(audit_log_router)
@@ -151,6 +153,26 @@ app.include_router(failed_messages_router)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Iter79 — S9.5: short, safe Pydantic validation errors (drop the noisy array).
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+
+@app.exception_handler(RequestValidationError)
+async def _safe_validation_handler(request, exc: RequestValidationError):
+    """Return a single human-readable string instead of the raw Pydantic
+    error array (which leaks model structure + value types)."""
+    msgs: list[str] = []
+    for e in exc.errors():
+        loc = ".".join(str(x) for x in (e.get("loc") or []) if x not in ("body", "query"))
+        msg = e.get("msg", "invalid")
+        msgs.append(f"{loc}: {msg}" if loc else msg)
+    detail = "; ".join(msgs)[:300] or "Invalid request payload"
+    return JSONResponse(status_code=422, content={"detail": detail})
+
+
 register_pietential_startup(app)
 
 

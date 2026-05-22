@@ -25,16 +25,22 @@ const CHANNEL_ICON = {
   analytics:ChartLine,
 };
 
-function PipelineCard({ tp, idx, onSelect, isSelected }) {
+function PipelineCard({ tp, idx, onSelect, isSelected, onDragStart }) {
   const Icon = CHANNEL_ICON[tp.channel] || EnvelopeSimple;
   const condCount = Object.keys(tp.conditions || {}).length || (tp.condition_count || 0);
   const preview = (tp.message_template || tp.subject || '').slice(0, 80);
   return (
     <button
       type="button"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+        if (onDragStart) onDragStart(idx);
+      }}
       onClick={() => onSelect(idx)}
       data-testid={`pipeline-tp-${idx}`}
-      className={`w-full text-left bg-white border rounded-xl p-3 hover:shadow-md transition-all ${
+      className={`w-full text-left bg-white border rounded-xl p-3 hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${
         isSelected ? 'border-violet-500 ring-2 ring-violet-300' : 'border-slate-200'
       }`}
     >
@@ -61,7 +67,8 @@ function PipelineCard({ tp, idx, onSelect, isSelected }) {
   );
 }
 
-export default function JourneyPipelineView({ touchpoints, selectedIdx, onSelect, onAddAtDay }) {
+export default function JourneyPipelineView({ touchpoints, selectedIdx, onSelect, onAddAtDay, onMoveTpToStage }) {
+  const [dragOverStage, setDragOverStage] = React.useState(null);
   return (
     <div data-testid="pipeline-view" className="grid grid-cols-1 lg:grid-cols-5 gap-3">
       {STAGES.map((stage) => {
@@ -75,7 +82,18 @@ export default function JourneyPipelineView({ touchpoints, selectedIdx, onSelect
           <div
             key={stage.key}
             data-testid={`pipeline-stage-${stage.key}`}
-            className={`rounded-2xl border ${stage.border} bg-gradient-to-b ${stage.tint} p-3 flex flex-col min-h-[200px]`}
+            onDragOver={(e) => { e.preventDefault(); setDragOverStage(stage.key); }}
+            onDragLeave={() => setDragOverStage((s) => s === stage.key ? null : s)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverStage(null);
+              const movedIdx = Number(e.dataTransfer.getData('text/plain'));
+              if (!Number.isNaN(movedIdx) && onMoveTpToStage) {
+                const targetDay = from + Math.floor((to - from) / 2);
+                onMoveTpToStage(movedIdx, targetDay);
+              }
+            }}
+            className={`rounded-2xl border ${stage.border} bg-gradient-to-b ${stage.tint} p-3 flex flex-col min-h-[200px] transition-all ${dragOverStage === stage.key ? 'ring-4 ring-violet-400 ring-offset-1' : ''}`}
           >
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/40">
               <div>
