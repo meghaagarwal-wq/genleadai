@@ -583,6 +583,10 @@ async def analyze(
 class PublishPayload(BaseModel):
     icps: List[Dict[str, Any]] = []
     touchpoints: List[Dict[str, Any]] = []
+    # Iter 73 — doc-shape touchpoints (entry_point + flow_steps + outcome).
+    # Persisted to tenant.settings.automap_summary so the AI Setup Assistant
+    # can re-display the founder's edits on revisit.
+    touchpoints_extracted: List[Dict[str, Any]] = []
     lead_sources: List[str] = []
     recommended_integrations: List[str] = []
     sales_channels: List[str] = []
@@ -720,6 +724,9 @@ async def publish(
                 "qualification": payload.qualification or {},
                 "handoff": payload.handoff or {},
                 "summary": payload.summary or "",
+                # Iter 73 — preserve doc-shape touchpoints (incl. user edits)
+                # so the AI Setup Assistant can re-display them on revisit.
+                "touchpoints_extracted": payload.touchpoints_extracted or [],
                 "applied_at": _now_iso(),
                 "applied_by": current_user.get("email"),
             },
@@ -757,6 +764,7 @@ async def publish(
         "icps_skipped": skipped_icps,
         "created_icp_ids": created_icp_ids,
         "touchpoints_saved": saved_touchpoint_count,
+        "touchpoints_extracted_saved": len(payload.touchpoints_extracted or []),
         "lead_sources_count": len(payload.lead_sources or []),
         "recommended_integrations": payload.recommended_integrations or [],
         "sales_channels_saved": saved_channels,
