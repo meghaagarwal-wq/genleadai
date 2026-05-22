@@ -260,6 +260,27 @@ const LeadInbox = () => {
             </button>
             <button
               type="button"
+              data-testid="bulk-delete-btn"
+              onClick={async () => {
+                const n = selectedLeadIds.size;
+                if (!window.confirm(`Permanently delete ${n} lead${n === 1 ? '' : 's'} and ALL related activity, conversations, and touchpoint history? This cannot be undone.`)) return;
+                try {
+                  const r = await api.post('/api/leads/bulk-delete', { lead_ids: Array.from(selectedLeadIds) });
+                  toast.success(`${r.data?.deleted || 0} lead${(r.data?.deleted || 0) === 1 ? '' : 's'} deleted`);
+                  setSelectedLeadIds(new Set());
+                  if (typeof fetchLeads === 'function') fetchLeads();
+                  else window.location.reload();
+                } catch (e) {
+                  const d = e?.response?.data?.detail;
+                  toast.error(typeof d === 'string' ? d : 'Bulk delete failed');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700"
+            >
+              Delete selected
+            </button>
+            <button
+              type="button"
               onClick={() => setSelectedLeadIds(new Set())}
               className="text-xs text-slate-500 hover:text-slate-900"
             >

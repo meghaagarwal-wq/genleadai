@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react';
 import ConditionsInspector from '../components/ConditionsInspector';
 import JourneyFlowchart from '../components/JourneyFlowchart';
+import JourneyPipelineView from '../components/JourneyPipelineView';
 import { useChannelEnabled } from '../hooks/useChannelEnabled';
 
 // Touchpoint `channel` field uses internal slugs (e.g. `linkedin_nudge`) while
@@ -721,7 +722,7 @@ const TouchpointJourney = () => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [viewMode, setViewMode] = useState('timeline');   // 'timeline' | 'flowchart'
+  const [viewMode, setViewMode] = useState('pipeline');   // 'pipeline' | 'timeline' | 'flowchart'
 
   const [scoring, setScoring] = useState(null);   // { items: [...], journey: {...} }
   const [ai, setAi] = useState(null);             // { items: [...] }
@@ -777,6 +778,28 @@ const TouchpointJourney = () => {
     }]);
     setDraft(next);
     setSelectedIdx(next.length - 1);
+    markDirty();
+  };
+
+  // Iter78 — S4: pipeline stage adds a new touchpoint anchored at a day midway
+  // through the stage's range. We append + sort by day so it lands in the right column.
+  const addRowAtDay = (day) => {
+    if (draft.length >= MAX_TOUCHPOINTS) { toast.error(`Max ${MAX_TOUCHPOINTS} touchpoints`); return; }
+    const newTp = {
+      index: draft.length,
+      day: Number(day) || 1,
+      hour: 9,
+      channel: 'whatsapp',
+      message_type: 'follow_up',
+      aria_role: 'autonomous',
+      trigger: '',
+      message_template: '',
+    };
+    const next = reindex([...draft, newTp].sort((a, b) => (a.day || 0) - (b.day || 0)));
+    setDraft(next);
+    // Find the new touchpoint's idx after sort
+    const newIdx = next.findIndex((t) => t === newTp || (t.day === newTp.day && !t.message_template));
+    setSelectedIdx(newIdx >= 0 ? newIdx : next.length - 1);
     markDirty();
   };
   const updateRow = (idx, nextTp) => { setDraft(reindex(draft.map((tp, i) => i === idx ? nextTp : tp))); markDirty(); };
@@ -928,8 +951,16 @@ const TouchpointJourney = () => {
           <span><strong className={counterTone}>{draft.length}</strong> / {MAX_TOUCHPOINTS} touchpoints — drag to reorder, click any card to edit</span>
         </div>
         <div className="flex items-center gap-3">
-          {/* View mode toggle — Timeline / Flowchart */}
+          {/* View mode toggle — Pipeline / Timeline / Flowchart */}
           <div className="inline-flex bg-white border border-[#E0D4F7] rounded-lg p-0.5" data-testid="view-mode-toggle">
+            <button
+              type="button"
+              onClick={() => setViewMode('pipeline')}
+              data-testid="view-mode-pipeline"
+              className={`px-3 py-1.5 text-xs font-semibold rounded ${viewMode === 'pipeline' ? 'bg-[#7C35DC] text-white shadow-sm' : 'text-[#5A4A7A] hover:bg-[#F4F0FF]'}`}
+            >
+              Pipeline
+            </button>
             <button
               type="button"
               onClick={() => setViewMode('timeline')}
@@ -960,6 +991,52 @@ const TouchpointJourney = () => {
       {viewMode === 'flowchart' && (
         <div className="bg-white border border-[#E8E0F5] rounded-2xl p-3 relative">
           <JourneyFlowchart touchpoints={draft} />
+        </div>
+      )}
+
+      {/* ─── Pipeline view (5-stage kanban — default) ─────────────────────── */}
+      {viewMode === 'pipeline' && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-5">
+          <div>
+            {draft.length === 0 ? (
+              <div className="bg-white border border-[#E8E0F5] rounded-xl p-10 text-center">
+                <Sparkle size={32} weight="duotone" className="text-[#7C35DC] mx-auto mb-3" />
+                <p className="text-sm text-[#5A4A7A]">No touchpoints yet. Start with a template, import from a document, or build from scratch.</p>
+              </div>
+            ) : (
+              <JourneyPipelineView
+                touchpoints={draft}
+                selectedIdx={selectedIdx}
+                onSelect={setSelectedIdx}
+                onAddAtDay={addRowAtDay}
+              />
+            )}
+          </div>
+
+          {/* Side drawer — shared with timeline view */}
+          <div>
+            {selectedTp ? (
+              <DetailDrawer
+                tp={selectedTp}
+                scoring={scoringByIdx[selectedTp.index]}
+                ai={aiByIdx[selectedTp.index]}
+                total={draft.length}
+                isFirst={selectedIdx === 0}
+                isLast={selectedIdx === draft.length - 1}
+                onChange={(next) => updateRow(selectedIdx, next)}
+                onDelete={() => deleteRow(selectedIdx)}
+                onDuplicate={() => duplicateRow(selectedIdx)}
+                onMove={moveRow}
+                onClose={() => setSelectedIdx(null)}
+                isEnabledFn={isChannelEnabled}
+              />
+            ) : (
+              <div className="bg-white border border-[#E8E0F5] rounded-2xl p-8 text-center sticky top-4" data-testid="drawer-empty-pipeline">
+                <Sparkle size={28} weight="duotone" className="text-[#7C35DC] mx-auto mb-2" />
+                <p className="text-sm text-[#5A4A7A]">Click any touchpoint card to edit it and view its performance, lead-fit and AI quality scores.</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

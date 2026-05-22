@@ -73,7 +73,8 @@ PLAYBOOKS = [
 
 @router.get("/playbooks")
 async def list_playbooks(current_user: dict = Depends(get_current_user)):
-    active = list(playbooks_collection.find({}, {"_id": 0}))
+    tid = current_user.get("tenant_id")
+    active = list(playbooks_collection.find({"tenant_id": tid}, {"_id": 0})) if tid else []
     active_ids = {a.get("playbook_id") for a in active}
     return {
         "playbooks": [{**p, "active": p["id"] in active_ids} for p in PLAYBOOKS],
@@ -82,18 +83,79 @@ async def list_playbooks(current_user: dict = Depends(get_current_user)):
 
 @router.post("/playbooks/{playbook_id}/activate")
 async def activate_playbook(playbook_id: str, current_user: dict = Depends(get_current_user)):
-    if not any(p["id"] == playbook_id for p in PLAYBOOKS):
+    """Iter78 — S6+S9.5:
+    - Single-active-playbook semantics: deactivate any prior active playbook.
+    - Mirror the active playbook onto tenant.settings.active_playbook so Claude
+      callers can inject it into their system prompt.
+    - Audit-log the action.
+    """
+    if current_user.get("role") not in ("owner", "admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="forbidden: owner/admin only")
+    playbook = next((p for p in PLAYBOOKS if p["id"] == playbook_id), None)
+    if not playbook:
         raise HTTPException(404, "Playbook not found")
     now = datetime.now(timezone.utc).isoformat()
-    playbooks_collection.update_one(
-        {"playbook_id": playbook_id},
-        {"$set": {"playbook_id": playbook_id, "activated_at": now, "activated_by": current_user["email"]}},
-        upsert=True,
+    tid = current_user.get("tenant_id")
+
+    # 1. Wipe any prior active playbook for this tenant.
+    playbooks_collection.delete_many({"tenant_id": tid})
+
+    # 2. Store the new activation.
+    playbooks_collection.insert_one({
+        "playbook_id": playbook_id,
+        "tenant_id": tid,
+        "activated_at": now,
+        "activated_by": current_user["email"],
+    })
+
+    # 3. Mirror onto tenant settings so the touchpoint engine + Aria reply
+    #    endpoints can read it cheaply without joining collections.
+    db["tenants"].update_one(
+        {"id": tid},
+        {"$set": {
+            "settings.active_playbook": {
+                "id": playbook_id,
+                "name": playbook["name"],
+                "what_aria_does": playbook["what_aria_does"],
+                "handoff_triggers": playbook.get("handoff_triggers") or [],
+                "channels": playbook.get("channels") or [],
+                "activated_at": now,
+                "activated_by": current_user["email"],
+            }
+        }},
     )
+
+    # 4. Audit.
+    try:
+        from routes.audit_log import audit_write
+        audit_write(
+            actor_email=current_user["email"],
+            action="playbook.activate",
+            target_id=playbook_id,
+            tenant_id=tid,
+            metadata={"playbook_name": playbook["name"]},
+        )
+    except Exception:
+        pass
+
     return {"playbook_id": playbook_id, "activated_at": now}
 
 @router.post("/playbooks/{playbook_id}/deactivate")
 async def deactivate_playbook(playbook_id: str, current_user: dict = Depends(get_current_user)):
-    playbooks_collection.delete_one({"playbook_id": playbook_id})
+    if current_user.get("role") not in ("owner", "admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="forbidden: owner/admin only")
+    tid = current_user.get("tenant_id")
+    playbooks_collection.delete_one({"playbook_id": playbook_id, "tenant_id": tid})
+    db["tenants"].update_one({"id": tid}, {"$unset": {"settings.active_playbook": ""}})
+    try:
+        from routes.audit_log import audit_write
+        audit_write(
+            actor_email=current_user["email"],
+            action="playbook.deactivate",
+            target_id=playbook_id,
+            tenant_id=tid,
+        )
+    except Exception:
+        pass
     return {"playbook_id": playbook_id, "active": False}
 

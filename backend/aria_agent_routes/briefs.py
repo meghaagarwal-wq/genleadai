@@ -4,6 +4,7 @@ Auto-split from aria_agent_routes.py (iter75).
 from ._shared import (
     router, training_collection, playbooks_collection, leads_collection,
     activities_collection, db, get_current_user, AriaTrainingPayload,
+    get_active_playbook_block, get_relevant_assets_block,
 )
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -95,6 +96,9 @@ RECENT ACTIVITY (most recent first):
         f"You ALWAYS represent {tenant_business_name} — never any other company, and never mention 'GenLeadAI' or 'Aria' as a platform. "
         "Tailor every section to THIS lead — no generic boilerplate."
     )
+    # Iter78 S6: inject the active sales playbook (if any) so the brief follows it.
+    tid = lead.get("tenant_id") or ""
+    system += get_active_playbook_block(tid)
 
     prompt = f"""{training_snippet}{lead_summary}
 

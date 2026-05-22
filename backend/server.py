@@ -572,15 +572,121 @@ async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict 
 
 @app.delete("/api/leads/{lead_id}")
 async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Iter78 — Hard cascade delete a single lead.
+
+    Removes the lead document plus every related record (activities,
+    conversations, touchpoint logs, classification logs). Tenant-scoped
+    and owner/admin-only.
+    """
+    if current_user.get("role") not in ("owner", "admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="forbidden: owner/admin only")
     try:
-        result = leads_collection.delete_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")})
-        if result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Lead not found")
-        return {"message": "Lead deleted successfully"}
-    except HTTPException:
-        raise
+        oid = ObjectId(lead_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid lead ID")
+
+    tid = current_user.get("tenant_id")
+    lead = leads_collection.find_one({"_id": oid, "tenant_id": tid})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    result = leads_collection.delete_one({"_id": oid, "tenant_id": tid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Cascade — all related records tagged by lead_id.
+    casc = {
+        "activities":            activities_collection.delete_many({"lead_id": lead_id, "tenant_id": tid}).deleted_count,
+        "aria_conversations":    aria_conversations_collection.delete_many({"lead_id": lead_id, "tenant_id": tid}).deleted_count,
+        "touchpoint_logs":       db["touchpoint_logs"].delete_many({"lead_id": lead_id, "tenant_id": tid}).deleted_count,
+        "classification_logs":   db["classification_logs"].delete_many({"lead_id": lead_id, "tenant_id": tid}).deleted_count,
+    }
+
+    try:
+        from routes.audit_log import audit_write
+        audit_write(
+            actor_email=current_user.get("email"),
+            action="lead.delete",
+            target_id=lead_id,
+            tenant_id=tid,
+            metadata={"cascade": casc, "lead_name": lead.get("name")},
+        )
+    except Exception:
+        pass
+
+    return {"deleted": True, "cascade": casc}
+
+
+class BulkLeadDeletePayload(BaseModel):
+    lead_ids: List[str] = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/leads/bulk-delete")
+async def bulk_delete_leads(
+    payload: BulkLeadDeletePayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """Iter78 — Hard cascade delete a batch of leads."""
+    if current_user.get("role") not in ("owner", "admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="forbidden: owner/admin only")
+    tid = current_user.get("tenant_id")
+    deleted = 0
+    cascades = {"activities": 0, "aria_conversations": 0, "touchpoint_logs": 0, "classification_logs": 0}
+    failed: List[str] = []
+
+    for raw_id in payload.lead_ids:
+        try:
+            oid = ObjectId(raw_id)
+        except Exception:
+            failed.append(raw_id)
+            continue
+        res = leads_collection.delete_one({"_id": oid, "tenant_id": tid})
+        if res.deleted_count == 0:
+            failed.append(raw_id)
+            continue
+        deleted += 1
+        cascades["activities"]          += activities_collection.delete_many({"lead_id": raw_id, "tenant_id": tid}).deleted_count
+        cascades["aria_conversations"]  += aria_conversations_collection.delete_many({"lead_id": raw_id, "tenant_id": tid}).deleted_count
+        cascades["touchpoint_logs"]     += db["touchpoint_logs"].delete_many({"lead_id": raw_id, "tenant_id": tid}).deleted_count
+        cascades["classification_logs"] += db["classification_logs"].delete_many({"lead_id": raw_id, "tenant_id": tid}).deleted_count
+
+    try:
+        from routes.audit_log import audit_write
+        audit_write(
+            actor_email=current_user.get("email"),
+            action="lead.bulk_delete",
+            target_id=f"{deleted}_leads",
+            tenant_id=tid,
+            metadata={"requested": len(payload.lead_ids), "deleted": deleted, "failed": failed, "cascade": cascades},
+        )
+    except Exception:
+        pass
+
+    return {"deleted": deleted, "requested": len(payload.lead_ids), "failed": failed, "cascade": cascades}
+
+
+@app.delete("/api/conversations/{lead_id}")
+async def delete_conversation(lead_id: str, current_user: dict = Depends(get_current_user)):
+    """Iter78 — Delete the entire Aria conversation thread for a lead WITHOUT
+    deleting the lead itself. Tenant-scoped and owner/admin-only.
+    """
+    if current_user.get("role") not in ("owner", "admin", "master_admin"):
+        raise HTTPException(status_code=403, detail="forbidden: owner/admin only")
+    tid = current_user.get("tenant_id")
+    # We accept either ObjectId (MongoDB-style) or lead_id-string (legacy).
+    deleted = aria_conversations_collection.delete_many({"lead_id": lead_id, "tenant_id": tid}).deleted_count
+    try:
+        from routes.audit_log import audit_write
+        audit_write(
+            actor_email=current_user.get("email"),
+            action="conversation.delete",
+            target_id=lead_id,
+            tenant_id=tid,
+            metadata={"messages_deleted": deleted},
+        )
+    except Exception:
+        pass
+    return {"deleted": True, "messages_deleted": deleted}
 
 # Activity Endpoints
 @app.post("/api/activities")

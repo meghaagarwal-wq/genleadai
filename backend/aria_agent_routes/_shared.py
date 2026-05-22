@@ -67,3 +67,73 @@ training_collection = db["aria_training"]
 playbooks_collection = db["aria_playbook_activations"]
 leads_collection = db["leads"]
 activities_collection = db["activities"]
+
+
+# ─── Iter78 S6: Playbook + assets prompt injection ──────────────────────────
+def get_active_playbook_block(tenant_id: str) -> str:
+    """Return a Claude-ready system-prompt snippet for the active playbook.
+    Empty string if no playbook is active for this tenant.
+    """
+    if not tenant_id:
+        return ""
+    tenant = db["tenants"].find_one(
+        {"id": tenant_id}, {"_id": 0, "settings.active_playbook": 1}
+    ) or {}
+    pb = (tenant.get("settings") or {}).get("active_playbook")
+    if not pb:
+        return ""
+    triggers = pb.get("handoff_triggers") or []
+    triggers_block = "\n".join(f"- {t}" for t in triggers) if triggers else "- (none configured)"
+    return (
+        "\n### ACTIVE SALES PLAYBOOK\n"
+        f"You MUST follow the playbook: **{pb.get('name', 'Active playbook')}**.\n"
+        f"Mode: {pb.get('what_aria_does', '')}\n"
+        "Handoff to a human when ANY of the following are true:\n"
+        f"{triggers_block}\n"
+    )
+
+
+def get_relevant_assets_block(tenant_id: str, lead_question: str = "") -> str:
+    """Return objection-response + pricing + case-study assets that match the
+    current lead question. Lightweight keyword routing for now — no Claude
+    embedding required. Empty string if no assets configured.
+    """
+    if not tenant_id:
+        return ""
+    assets_col = db["workspace_assets"]
+    docs = list(assets_col.find(
+        {"tenant_id": tenant_id, "asset_type": {"$in": [
+            "objection_response", "pricing_doc", "case_study", "message_template",
+        ]}},
+        {"_id": 0, "name": 1, "asset_type": 1, "content": 1, "tags": 1},
+    ).limit(20))
+    if not docs:
+        return ""
+
+    q = (lead_question or "").lower()
+    triggers = {
+        "objection_response": ["objection", "concern", "worried", "not sure", "expensive", "competitor"],
+        "pricing_doc":       ["price", "pricing", "cost", "how much", "fee", "rate"],
+        "case_study":        ["proof", "case study", "example", "customer", "success", "results"],
+        "message_template":  [],   # used by campaigns, not Aria — skip from prompt
+    }
+
+    matched = []
+    for d in docs:
+        kind = d.get("asset_type")
+        if kind == "message_template":
+            continue
+        keywords = triggers.get(kind, [])
+        if q and not any(kw in q for kw in keywords):
+            continue
+        matched.append(d)
+
+    if not matched:
+        return ""
+
+    out = ["\n### REFERENCE ASSETS (use only when relevant; never fabricate)"]
+    for d in matched[:5]:
+        snippet = (d.get("content") or "")[:400].replace("\n", " ")
+        out.append(f"- [{d.get('asset_type')}] **{d.get('name')}**: {snippet}")
+    return "\n".join(out) + "\n"
+

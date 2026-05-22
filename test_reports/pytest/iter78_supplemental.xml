@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="9" time="4.042" timestamp="2026-05-22T11:58:38.208350+00:00" hostname="agent-env-0ba9a290-1bd1-435d-b5fb-f5291b2cace4"><testcase classname="backend.tests.test_iter78_supplemental" name="test_audit_log_lead_delete" time="0.728"><failure message="AssertionError: no audit_log entry for lead.delete&#10;assert None is not None">backend/tests/test_iter78_supplemental.py:44: in test_audit_log_lead_delete
+    assert entry is not None, "no audit_log entry for lead.delete"
+E   AssertionError: no audit_log entry for lead.delete
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_iter78_supplemental" name="test_audit_log_lead_bulk_delete" time="0.343"><failure message="assert None is not None">backend/tests/test_iter78_supplemental.py:53: in test_audit_log_lead_bulk_delete
+    assert entry is not None
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_iter78_supplemental" name="test_audit_log_conversation_delete" time="0.106"><failure message="assert None is not None">backend/tests/test_iter78_supplemental.py:61: in test_audit_log_conversation_delete
+    assert entry is not None
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_iter78_supplemental" name="test_audit_log_playbook_activate_and_deactivate" time="0.137"><failure message="assert None is not None">backend/tests/test_iter78_supplemental.py:68: in test_audit_log_playbook_activate_and_deactivate
+    assert a is not None
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_iter78_supplemental" name="test_conversation_delete_does_not_delete_lead" time="0.366" /><testcase classname="backend.tests.test_iter78_supplemental" name="test_cross_tenant_lead_delete_returns_404" time="0.120"><failure message="AssertionError: expected 404, got 400: {&quot;detail&quot;:&quot;Invalid lead ID&quot;}&#10;assert 400 == 404&#10; +  where 400 = &lt;Response [400]&gt;.status_code">backend/tests/test_iter78_supplemental.py:103: in test_cross_tenant_lead_delete_returns_404
+    assert r.status_code == 404, f"expected 404, got {r.status_code}: {r.text}"
+E   AssertionError: expected 404, got 400: {"detail":"Invalid lead ID"}
+E   assert 400 == 404
+E    +  where 400 = &lt;Response [400]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter78_supplemental" name="test_cross_tenant_icp_link_returns_404" time="0.109" /><testcase classname="backend.tests.test_iter78_supplemental" name="test_get_active_playbook_block_non_empty_after_activate" time="1.712" /><testcase classname="backend.tests.test_iter78_supplemental" name="test_get_active_playbook_block_empty_after_deactivate" time="0.248" /></testsuite></testsuites>

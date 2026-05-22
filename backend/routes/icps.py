@@ -80,6 +80,8 @@ class IcpCreate(BaseModel):
     value_prop: Optional[str] = None
     tone: str = "professional"
     deal_size: Optional[str] = None
+    # Iter78 — S3: optional outreach-campaign link
+    icp_campaign_id: Optional[str] = None
 
 
 class IcpUpdate(BaseModel):
@@ -91,6 +93,11 @@ class IcpUpdate(BaseModel):
     value_prop: Optional[str] = None
     tone: Optional[str] = None
     deal_size: Optional[str] = None
+    icp_campaign_id: Optional[str] = None
+
+
+class IcpLinkCampaignPayload(BaseModel):
+    campaign_id: Optional[str] = None   # null = unlink
 
 
 class AssignContactPayload(BaseModel):
@@ -313,3 +320,59 @@ async def assign_contact(payload: AssignContactPayload, tenant: dict = Depends(g
         {"_id": 0},
     )
     return {"contact": fresh, "icp_id": payload.icp_id}
+
+
+# ─── Iter78 — S3: Link an ICP to an outreach campaign ──────────────────────
+@router.post("/{icp_id}/link-campaign")
+async def link_icp_to_campaign(
+    icp_id: str,
+    payload: IcpLinkCampaignPayload,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Attach (or detach with campaign_id=null) an outreach campaign to an
+    ICP. Mirrors the link on the campaign side via `linked_icp_id` so both
+    sides can render the relationship.
+    """
+    role = tenant.get("_member_role")
+    if role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Owner/Admin only")
+
+    tenant_id = tenant["id"]
+    icp = icps_col.find_one({"id": icp_id, "tenant_id": tenant_id})
+    if not icp:
+        raise HTTPException(status_code=404, detail="icp_not_found")
+
+    campaigns_col = db["outreach_campaigns"]
+    campaign_doc = None
+    if payload.campaign_id:
+        campaign_doc = campaigns_col.find_one(
+            {"id": payload.campaign_id, "tenant_id": tenant_id}, {"_id": 0}
+        )
+        if not campaign_doc:
+            raise HTTPException(status_code=404, detail="campaign_not_found")
+
+    # 1. Clear old reverse link on the previously-linked campaign (if any).
+    old_campaign_id = icp.get("icp_campaign_id")
+    if old_campaign_id and old_campaign_id != payload.campaign_id:
+        campaigns_col.update_one(
+            {"id": old_campaign_id, "tenant_id": tenant_id, "linked_icp_id": icp_id},
+            {"$set": {"linked_icp_id": None}},
+        )
+
+    # 2. Update ICP side.
+    icps_col.update_one(
+        {"id": icp_id, "tenant_id": tenant_id},
+        {"$set": {"icp_campaign_id": payload.campaign_id, "updated_at": _now_iso()}},
+    )
+    # 3. Mirror on campaign side.
+    if payload.campaign_id:
+        campaigns_col.update_one(
+            {"id": payload.campaign_id, "tenant_id": tenant_id},
+            {"$set": {"linked_icp_id": icp_id, "updated_at": _now_iso()}},
+        )
+
+    return {
+        "icp_id": icp_id,
+        "campaign_id": payload.campaign_id,
+        "campaign_name": (campaign_doc or {}).get("name") if campaign_doc else None,
+    }

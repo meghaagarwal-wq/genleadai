@@ -4,6 +4,7 @@ Auto-split from aria_agent_routes.py (iter75).
 from ._shared import (
     router, training_collection, playbooks_collection, leads_collection,
     activities_collection, db, get_current_user, AriaTrainingPayload,
+    get_active_playbook_block, get_relevant_assets_block,
 )
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -386,6 +387,10 @@ WORKSPACE CONTEXT:
         "You write like a seasoned sales operator — specific, confident, no AI-speak, no emoji spam, no 'I hope this finds you well'. "
         "Match the requested tone and channel exactly. Never explain the message or add commentary — just the message itself."
     )
+    # Iter78 S6: inject active playbook + relevant assets (objection / pricing / case study).
+    tid = lead.get("tenant_id") or ""
+    system += get_active_playbook_block(tid)
+    system += get_relevant_assets_block(tid, payload.user_note or "")
     prompt = f"""{training_snippet}
 LEAD:
 - Name: {first_name}

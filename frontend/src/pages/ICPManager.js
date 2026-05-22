@@ -27,6 +27,7 @@ export default function ICPManager() {
   const [icps, setIcps] = useState([]);
   const [meta, setMeta] = useState({ count: 0 });
   const [loading, setLoading] = useState(true);
+  const [linkingIcp, setLinkingIcp] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
@@ -139,7 +140,13 @@ export default function ICPManager() {
       ) : (
         <div data-testid="icp-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {icps.map((icp) => (
-            <ICPCard key={icp.id} icp={icp} onEdit={() => openEdit(icp)} onDelete={() => handleDelete(icp)} />
+            <ICPCard
+              key={icp.id}
+              icp={icp}
+              onEdit={() => openEdit(icp)}
+              onDelete={() => handleDelete(icp)}
+              onLinkCampaign={() => setLinkingIcp(icp)}
+            />
           ))}
         </div>
       )}
@@ -150,6 +157,14 @@ export default function ICPManager() {
           onChange={setEditing}
           onClose={() => { setModalOpen(false); setEditing(null); }}
           onSave={handleSave}
+        />
+      )}
+
+      {linkingIcp && (
+        <LinkCampaignModal
+          icp={linkingIcp}
+          onClose={() => setLinkingIcp(null)}
+          onLinked={async () => { setLinkingIcp(null); await load(); }}
         />
       )}
     </div>
@@ -183,8 +198,9 @@ function EmptyState({ onCreate }) {
   );
 }
 
-function ICPCard({ icp, onEdit, onDelete }) {
+function ICPCard({ icp, onEdit, onDelete, onLinkCampaign }) {
   const tone = TONES.find((t) => t.value === icp.tone) || TONES[0];
+  const hasCampaign = !!icp.icp_campaign_id;
   return (
     <div
       data-testid={`icp-card-${icp.id}`}
@@ -233,6 +249,28 @@ function ICPCard({ icp, onEdit, onDelete }) {
           <span className="text-emerald-600 font-semibold">Value:</span> {icp.value_prop}
         </div>
       )}
+
+      {/* Iter78 S3 — linked campaign chip + manage button */}
+      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+        {hasCampaign ? (
+          <div
+            data-testid={`icp-linked-campaign-${icp.id}`}
+            className="text-[10px] font-semibold inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200"
+          >
+            <Lightning size={10} weight="bold" /> Linked: {icp.icp_campaign_name || icp.icp_campaign_id}
+          </div>
+        ) : (
+          <div className="text-[10px] text-slate-400 italic">No campaign linked</div>
+        )}
+        <button
+          type="button"
+          onClick={onLinkCampaign}
+          data-testid={`icp-link-campaign-btn-${icp.id}`}
+          className="text-[10px] font-bold text-violet-700 hover:text-violet-900 hover:underline"
+        >
+          {hasCampaign ? 'Change campaign' : 'Link a campaign'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -402,6 +440,79 @@ function Field({ label, icon, hint, required, children }) {
         {hint && <span className="text-slate-400 font-normal ml-2 normal-case">{hint}</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+// Iter78 — S3: campaign-link modal
+function LinkCampaignModal({ icp, onClose, onLinked }) {
+  const [campaigns, setCampaigns] = useState([]);
+  const [selected, setSelected] = useState(icp.icp_campaign_id || '');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.get('/api/outreach/campaigns');
+        setCampaigns(r.data?.campaigns || []);
+      } catch (_e) {
+        toast.error('Could not load campaigns');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.post(`/api/icps/${icp.id}/link-campaign`, { campaign_id: selected || null });
+      toast.success(selected ? 'Campaign linked' : 'Campaign unlinked');
+      onLinked();
+    } catch (e) {
+      const d = e?.response?.data?.detail;
+      toast.error(typeof d === 'string' ? d : 'Link failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" data-testid="icp-link-campaign-modal">
+      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+        <h3 className="text-base font-bold text-slate-900 mb-1">Link a campaign to <span className="text-violet-700">{icp.label}</span></h3>
+        <p className="text-xs text-slate-500 mb-4">When a lead is tagged with this ICP, the linked campaign becomes its default enrollment target.</p>
+        {loading ? (
+          <p className="text-sm text-slate-400 text-center py-6">Loading campaigns…</p>
+        ) : campaigns.length === 0 ? (
+          <p className="text-sm text-slate-500 text-center py-6">No campaigns yet — create one first from <strong>Outreach Campaigns</strong>.</p>
+        ) : (
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            data-testid="icp-link-campaign-select"
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:border-violet-500"
+          >
+            <option value="">— Unlink / no campaign —</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="flex items-center justify-end gap-2 mt-5">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || loading}
+            data-testid="icp-link-campaign-save"
+            className="px-4 py-2 rounded-lg text-xs font-bold bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
