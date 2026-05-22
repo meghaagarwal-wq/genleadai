@@ -1,5 +1,26 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 76 (Backlog wrap-up + Aria Health badges)
+- **Route alias**: `/ai-setup-assistant` now resolves to the AISetupAssistant
+  page (alongside the canonical `/ai-setup`) — fixes the share-link friction
+  flagged in iter73.
+- **Resume last edit**: new GET `/api/aria/auto-map/summary` returns the
+  tenant's last-published automap_summary including the user-edited
+  `touchpoints_extracted`. The AI Setup Assistant now shows a "Resume last
+  edit" banner above the upload panel when a previous workflow exists, and
+  one click re-hydrates the Review stage with the editable rows — no
+  re-upload required.
+- **Aria Health tab**: new Settings → Aria Health surface backed by GET
+  `/api/aria-agent/health` (new submodule `aria_agent_routes/health.py`).
+  Renders a hero score (`N/7 muscles warmed up`) + 7 capability cards
+  (training, playbooks, journey, auto_setup, integrations, sales_channels,
+  brain) each with green/amber/red badge, hint text, and a deep-link button
+  to the relevant setup page. Soft orange→rose gradient for the partial
+  state so the empty-tenant case doesn't read as an error.
+- Verified: 33/33 backend tests pass (7 new iter76 + 22 iter74 + 4 iter73).
+  Frontend smoke + testing agent confirmed all 7 cards, banner, refresh,
+  and deep-links render with zero console errors.
+
 ## 2026-02 — Iter 75 (P2 organizational refactors)
 - **Backend split**: `aria_agent_routes.py` (1464 lines) → package
   `aria_agent_routes/` with 12 feature submodules

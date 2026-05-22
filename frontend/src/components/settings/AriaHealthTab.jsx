@@ -29,7 +29,7 @@ const LEVEL_META = {
 const OVERALL_META = {
   green: { bg: 'from-emerald-500 to-teal-600', label: 'Aria is firing on all cylinders' },
   amber: { bg: 'from-amber-500 to-orange-600', label: "Aria's ready to learn more" },
-  red: { bg: 'from-rose-500 to-pink-600', label: 'Set Aria up to start qualifying leads' },
+  red: { bg: 'from-orange-500 to-rose-500', label: "Let's get Aria set up to start qualifying leads" },
 };
 
 export default function AriaHealthTab() {
