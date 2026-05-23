@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Users, Fire, ThermometerSimple, Buildings, CalendarBlank, Pause, EnvelopeOpen, Download, ChatCircleDots, ArrowRight, Plugs, Lightning, MouseSimple, LinkedinLogo, Crown } from '@phosphor-icons/react';
+import { Users, Fire, ThermometerSimple, Buildings, CalendarBlank, Pause, EnvelopeOpen, Download, ChatCircleDots, ArrowRight, Plugs, Lightning, MouseSimple, LinkedinLogo, Crown, CheckCircle, Warning, XCircle, CircleNotch } from '@phosphor-icons/react';
 import { ptApi, PageHeader, fmtDateTime } from '../shared';
 
 const Tile = ({ icon: Icon, label, value, accent = '#7C35DC', testid }) => (
@@ -18,10 +18,14 @@ const Tile = ({ icon: Icon, label, value, accent = '#7C35DC', testid }) => (
 
 const PtOverview = () => {
   const [data, setData] = useState(null);
+  const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState(false);
 
-  const load = () => ptApi.get('/api/pt/overview').then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
+  const load = () => {
+    ptApi.get('/api/pt/overview').then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
+    ptApi.get('/api/pt/setup/health').then(r => setHealth(r.data)).catch(() => setHealth(null));
+  };
   useEffect(() => { load(); }, []);
 
   const replayDemo = async () => {
@@ -51,6 +55,9 @@ const PtOverview = () => {
           </button>
         }
       />
+
+      {/* iter86 — Setup health panel: 5-line "is this workspace live?" check */}
+      {health && <SetupHealthPanel health={health} />}
 
       {/* Connection state banner */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
@@ -120,5 +127,47 @@ const ConnBanner = ({ connected, platform, msg }) => (
     )}
   </div>
 );
+
+// iter86 — Setup health: surfaces a single "is Pietential live?" panel.
+const StatusIcon = ({ status }) => {
+  if (status === 'ok') return <CheckCircle size={16} weight="fill" className="text-[#16A34A] flex-shrink-0" />;
+  if (status === 'warn') return <Warning size={16} weight="fill" className="text-[#F59E0B] flex-shrink-0" />;
+  if (status === 'fail') return <XCircle size={16} weight="fill" className="text-[#DC2626] flex-shrink-0" />;
+  return <CircleNotch size={16} weight="bold" className="text-[#94A3B8] flex-shrink-0 animate-spin" />;
+};
+
+const SetupHealthPanel = ({ health }) => {
+  const pct = Math.round((health.ready_count / health.total) * 100);
+  const liveColor = health.live ? '#16A34A' : '#F59E0B';
+  return (
+    <div className="mb-6 bg-white border border-[#E2E8F0] rounded-xl overflow-hidden" data-testid="pt-setup-health">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E2E8F0]" style={{ background: health.live ? '#F0FDF4' : '#FEFCE8' }}>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ background: liveColor, boxShadow: `0 0 12px ${liveColor}` }} />
+          <span className="text-xs font-extrabold uppercase tracking-[0.18em]" style={{ color: liveColor, fontFamily: 'Space Grotesk, Inter' }}>
+            {health.live ? 'Workspace is live' : 'Setup incomplete'}
+          </span>
+        </div>
+        <div className="ml-auto text-[11px] font-bold uppercase tracking-wider text-[#475569]">{health.ready_count}/{health.total} ready · {pct}%</div>
+      </div>
+      <div className="divide-y divide-[#F1F5F9]">
+        {health.items.map((it) => (
+          <div key={it.id} className="flex items-start gap-3 px-4 py-2.5" data-testid={`pt-setup-${it.id}`}>
+            <StatusIcon status={it.status} />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-[#0F172A]" style={{ fontFamily: 'Space Grotesk, Inter' }}>{it.label}</div>
+              <div className="text-[11px] text-[#64748B] mt-0.5 line-clamp-2">{it.detail}</div>
+            </div>
+            {it.status !== 'ok' && it.cta_path && (
+              <Link to={it.cta_path} className="text-[11px] font-bold uppercase tracking-wider text-[#7C35DC] hover:underline flex-shrink-0">
+                {it.cta}
+              </Link>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 export default PtOverview;

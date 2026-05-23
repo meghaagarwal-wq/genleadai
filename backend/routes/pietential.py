@@ -1171,6 +1171,101 @@ async def list_integrations(current_user: dict = Depends(get_current_user)):
     return {"primary": primary, "future": future}
 
 
+@router.get("/setup/health")
+async def setup_health(current_user: dict = Depends(get_current_user)):
+    """iter86 — Pietential workspace setup completeness check.
+
+    Surfaces a single 5-bullet 'is this workspace live?' view for both the
+    founder and the GenLeadAI master_admin. Each item is structured so the
+    FE can render a green ✓ / amber ⚠ / red ✗ with a one-line next-step.
+    """
+    items: List[Dict[str, Any]] = []
+
+    # 1. Email sender
+    email_integ = integrations_col.find_one({"name": "email"}) or {}
+    has_workspace_key = bool(email_integ.get("api_key"))
+    has_global_key = bool(os.environ.get("RESEND_API_KEY"))
+    items.append({
+        "id": "email",
+        "label": "Email sender",
+        "status": "ok" if (has_workspace_key or has_global_key) else "fail",
+        "detail": (
+            f"Workspace Resend key + {email_integ.get('from_address')}"
+            if has_workspace_key
+            else ("Using platform default. Add a workspace Resend key for branded sender." if has_global_key else "No Resend key — outbound email will not work.")
+        ),
+        "cta": "Settings → Email Sender",
+        "cta_path": "/pt/settings",
+    })
+
+    # 2. Saleshandy
+    sh = integrations_col.find_one({"name": "saleshandy"}) or {}
+    sh_status = sh.get("status") or ("connected" if sh.get("api_key") else "not_connected")
+    items.append({
+        "id": "saleshandy",
+        "label": "Saleshandy (email outreach)",
+        "status": "ok" if sh_status == "connected" else ("warn" if sh.get("api_key") else "fail"),
+        "detail": sh.get("error_log") or (
+            f"Connected — last sync {sh.get('last_sync_at') or 'pending'}"
+            if sh_status == "connected" else "Not connected — Aria can't import or score email replies."
+        ),
+        "cta": "Integrations → Saleshandy",
+        "cta_path": "/pt/integrations",
+    })
+
+    # 3. Lemlist
+    ll = integrations_col.find_one({"name": "lemlist"}) or {}
+    ll_status = ll.get("status") or ("connected" if ll.get("api_key") else "not_connected")
+    items.append({
+        "id": "lemlist",
+        "label": "Lemlist (LinkedIn outreach)",
+        "status": "ok" if ll_status == "connected" else ("warn" if ll.get("api_key") else "fail"),
+        "detail": ll.get("error_log") or (
+            f"Connected — last sync {ll.get('last_sync_at') or 'pending'}"
+            if ll_status == "connected" else "Not connected — Aria can't import or score LinkedIn engagement."
+        ),
+        "cta": "Integrations → Lemlist",
+        "cta_path": "/pt/integrations",
+    })
+
+    # 4. Lead magnet
+    magnet = db["lead_magnets"].find_one({"scope": "workspace"}) or {}
+    magnet_ok = bool(magnet.get("enabled") and (magnet.get("file_id") or magnet.get("url")))
+    items.append({
+        "id": "lead_magnet",
+        "label": "Lead magnet asset",
+        "status": "ok" if magnet_ok else "warn",
+        "detail": (
+            f"{magnet.get('name') or 'Asset'} active ({magnet.get('type', '?')}). Sent {magnet.get('send_timing', 'post_booking')}."
+            if magnet_ok else "Optional. Upload a 2-pager Aria can attach to first emails."
+        ),
+        "cta": "AI Setup → Lead magnet",
+        "cta_path": "/ai-setup",
+    })
+
+    # 5. Touchpoint journey published
+    tp_count = db["touchpoints"].count_documents({"tenant_id": current_user.get("tenant_id")}) if current_user.get("tenant_id") else db["touchpoints"].count_documents({})
+    items.append({
+        "id": "touchpoints",
+        "label": "Touchpoint journey",
+        "status": "ok" if tp_count > 0 else "fail",
+        "detail": f"{tp_count} step(s) published." if tp_count else "Empty — run AI Setup against your GTM doc to seed the journey.",
+        "cta": "AI Setup → Touchpoints",
+        "cta_path": "/ai-setup",
+    })
+
+    score = sum(1 for it in items if it["status"] == "ok")
+    return {
+        "items": items,
+        "ready_count": score,
+        "total": len(items),
+        "live": score >= 3,
+        "checked_at": _now_iso(),
+    }
+
+
+
+
 @router.post("/integrations")
 async def upsert_integration(payload: IntegrationUpsert, current_user: dict = Depends(get_current_user)):
     _require_write(current_user)
@@ -1258,7 +1353,8 @@ class TestSendPayload(BaseModel):
     to: EmailStr
     subject: Optional[str] = "ARIA test send — your workspace can deliver mail"
     body: Optional[str] = None                  # HTML body; defaults to a polite test message
-    attachment_file_id: Optional[str] = None    # iter85 — file_id from /api/lead-magnets/upload
+    attachment_file_id: Optional[str] = None    # iter85 — single file_id from /api/lead-magnets/upload
+    attachment_file_ids: Optional[List[str]] = None  # iter86 — multi-attachment (list of file_ids)
     include_signature: bool = True              # iter85 — let founder preview signature toggle
 
 
@@ -1359,11 +1455,19 @@ async def test_send_email(payload: TestSendPayload, current_user: dict = Depends
     )
 
     try:
+        # iter86 — merge single + list. Dedupe while preserving order.
+        ids: List[str] = []
+        if payload.attachment_file_id:
+            ids.append(payload.attachment_file_id)
+        for fid in (payload.attachment_file_ids or []):
+            if fid and fid not in ids:
+                ids.append(fid)
+
         result = await send_workspace_email(
             to=payload.to,
             subject=payload.subject or "ARIA test send",
             html_body=html,
-            attachment_file_ids=[payload.attachment_file_id] if payload.attachment_file_id else None,
+            attachment_file_ids=ids or None,
             uploads_dir=UPLOADS_DIR,
             append_signature=payload.include_signature,
         )

@@ -3572,14 +3572,26 @@ async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: st
     )
     body = template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
     html = body.replace("\n", "<br>")
-    params = {
-        "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
-        "to": [lead.get("email")],
-        "subject": f"Before our call — quick read",
-        "html": f"<div style='font-family:Plus Jakarta Sans,Arial,sans-serif;color:#1A0A2E;'>{html}</div>",
-    }
+    html_body = f"<div style='font-family:Plus Jakarta Sans,Arial,sans-serif;color:#1A0A2E;line-height:1.6;'>{html}</div>"
+    # iter86 — route through the workspace-scoped helper so the founder's
+    # configured from-name/from-address/signature/attachment all apply
+    # automatically. Falls back to the platform default when the workspace
+    # has nothing configured.
     try:
-        await asyncio.to_thread(resend.Emails.send, params)
+        from routes.pt_email import send_workspace_email
+        # If the magnet is a file (PDF/PPTX), also attach it inline so the
+        # lead doesn't need to click through to the tracking URL.
+        attachment_ids = []
+        if magnet.get("type") == "file" and magnet.get("file_id"):
+            attachment_ids.append(magnet["file_id"])
+        await send_workspace_email(
+            to=lead.get("email"),
+            subject=magnet.get("subject") or "Before our call — quick read",
+            html_body=html_body,
+            attachment_file_ids=attachment_ids or None,
+            uploads_dir=UPLOADS_DIR,
+            append_signature=True,
+        )
     except Exception as e:
         print(f"Lead magnet email failed: {e}")
 
