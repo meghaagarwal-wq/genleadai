@@ -1179,10 +1179,47 @@ async def test_integration(name: str, current_user: dict = Depends(get_current_u
     _require_write(current_user)
     integ = integrations_col.find_one({"name": name})
     if not integ or not (integ.get("api_key") or integ.get("webhook_url")):
-        raise HTTPException(status_code=400, detail="Integration not configured")
-    # Mark last_sync_at (real handshake left to per-platform implementation)
-    integrations_col.update_one({"name": name}, {"$set": {"last_sync_at": _now_iso(), "status": "connected"}})
-    return {"ok": True, "tested_at": _now_iso(), "message": "Marked as connected. Per-platform live handshake will be added in webhook integration phase."}
+        raise HTTPException(status_code=400, detail="No API key saved yet. Paste the key, click Update, then Test connection.")
+    # iter82 — for Saleshandy + Lemlist do a REAL handshake against their API
+    # so the founder finds out about invalid/expired keys immediately. For
+    # other integrations (webhook-only) we still soft-mark as connected.
+    decrypted_key = _dec(integ.get("api_key") or "") if integ.get("api_key") else ""
+    handshake_done = False
+    found = 0
+    if name == "saleshandy" and decrypted_key:
+        try:
+            from routes.outreach_import import _saleshandy_list_sequences  # lazy import
+            seqs = await _saleshandy_list_sequences(decrypted_key)
+            found = len(seqs)
+            handshake_done = True
+        except HTTPException as e:
+            integrations_col.update_one(
+                {"name": name},
+                {"$set": {"status": "needs_setup", "error_log": str(e.detail)[:240], "updated_at": _now_iso()}},
+            )
+            raise HTTPException(e.status_code, e.detail)
+    elif name == "lemlist" and decrypted_key:
+        try:
+            from routes.outreach_import import _lemlist_list_campaigns  # lazy import
+            camps = await _lemlist_list_campaigns(decrypted_key)
+            found = len(camps)
+            handshake_done = True
+        except HTTPException as e:
+            integrations_col.update_one(
+                {"name": name},
+                {"$set": {"status": "needs_setup", "error_log": str(e.detail)[:240], "updated_at": _now_iso()}},
+            )
+            raise HTTPException(e.status_code, e.detail)
+    integrations_col.update_one(
+        {"name": name},
+        {"$set": {"last_sync_at": _now_iso(), "status": "connected", "error_log": None}},
+    )
+    msg = (
+        f"Connection verified — {found} {'sequences' if name == 'saleshandy' else 'campaigns'} reachable."
+        if handshake_done else
+        "Marked as connected. Live handshake for this integration is webhook-based; configure Make.com / n8n to hit the URLs above."
+    )
+    return {"ok": True, "tested_at": _now_iso(), "found": found, "handshake": handshake_done, "message": msg}
 
 
 # ─── Webhook endpoints — single dispatcher with optional signature check ───

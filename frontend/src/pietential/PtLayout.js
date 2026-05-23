@@ -67,7 +67,6 @@ const PtLayout = ({ children }) => {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-extrabold text-[#0F172A] leading-none tracking-tight" style={{ fontFamily: 'Space Grotesk, Inter' }}>GenLeadAI Aria</span>
-              <span className="px-1.5 py-[1px] rounded-[4px] text-[8px] font-bold uppercase tracking-[0.18em] text-[#B45309] border border-[#F59E0B]/50" style={{ background: 'rgba(245,158,11,0.12)' }}>Beta</span>
             </div>
             <div className="text-[10px] text-[#64748B] uppercase tracking-[0.16em] mt-0.5">Pietential Growth Intelligence</div>
           </div>

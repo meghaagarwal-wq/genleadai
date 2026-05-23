@@ -86,8 +86,27 @@ async def _saleshandy_list_sequences(api_key: str) -> List[dict]:
             f"{SALESHANDY_BASE}/sequences",
             headers=_saleshandy_headers(api_key),
         )
-        if r.status_code in (401, 403):
-            raise HTTPException(status_code=400, detail="Saleshandy API key invalid or missing permissions.")
+        # iter82 — Saleshandy returns 400 for auth failures too (with body
+        # {"type":"auth","code":1001,"message":"Invalid token"}). Detect that
+        # and surface a clean error instead of dumping their JSON.
+        body_low = (r.text or "").lower()
+        is_auth_error = (
+            r.status_code in (401, 403)
+            or ("\"type\":\"auth\"" in body_low)
+            or ("invalid token" in body_low)
+            or ("invalid api key" in body_low)
+        )
+        if is_auth_error:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Saleshandy rejected the API key. Double-check you copied the FULL key from "
+                    "Saleshandy → Settings → API and that it hasn't been revoked. Paste a fresh key, "
+                    "click Update, then Test connection again."
+                ),
+            )
+        if r.status_code == 429:
+            raise HTTPException(status_code=429, detail="Saleshandy is rate-limiting this workspace. Wait 60 seconds and try again.")
         if r.status_code != 200:
             raise HTTPException(status_code=502, detail=f"Saleshandy returned {r.status_code}: {r.text[:160]}")
         data = r.json() or {}
@@ -196,7 +215,16 @@ async def _lemlist_list_campaigns(api_key: str) -> List[dict]:
                 params={"offset": offset, "limit": limit},
             )
             if r.status_code in (401, 403):
-                raise HTTPException(status_code=400, detail="Lemlist API key invalid or missing permissions.")
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Lemlist rejected the API key. Double-check you copied the FULL key from "
+                        "Lemlist → Settings → Integrations → API and that it hasn't been revoked. "
+                        "Paste a fresh key, click Update, then Test connection again."
+                    ),
+                )
+            if r.status_code == 429:
+                raise HTTPException(status_code=429, detail="Lemlist is rate-limiting this workspace. Wait 60 seconds and try again.")
             if r.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"Lemlist returned {r.status_code}: {r.text[:160]}")
             data = r.json()

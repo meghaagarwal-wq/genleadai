@@ -148,7 +148,18 @@ export default function AISetupAssistant() {
         });
         return;
       }
-      toast.error(typeof d === 'string' ? d : (d?.message || 'Publish failed'));
+      // Surface the real backend reason — string, validation array, or 500 trace.
+      let msg = 'Publish failed';
+      if (typeof d === 'string') {
+        msg = d;
+      } else if (Array.isArray(d)) {
+        msg = d.map((x) => x?.msg || x?.detail || JSON.stringify(x)).filter(Boolean).join('; ');
+      } else if (d && typeof d === 'object') {
+        msg = d.message || d.detail || JSON.stringify(d);
+      } else if (e?.message) {
+        msg = `${msg}: ${e.message}`;
+      }
+      toast.error(msg, { duration: 8000 });
       setStage('review');
     }
   };

@@ -59,8 +59,15 @@ const PtIntegrations = () => {
   };
 
   const test = async (name) => {
-    try { await ptApi.post(`/api/pt/integrations/${name}/test`); load(); toast.success('Marked as connected'); }
-    catch (err) { toast.error(err.response?.data?.detail || 'Test failed'); }
+    try {
+      const r = await ptApi.post(`/api/pt/integrations/${name}/test`);
+      load();
+      toast.success(r.data?.message || 'Connection verified');
+    }
+    catch (err) {
+      const detail = err.response?.data?.detail || 'Test failed';
+      toast.error(detail, { duration: 8000 });
+    }
   };
 
   const copy = (txt) => { navigator.clipboard.writeText(txt); toast.success('Copied'); };

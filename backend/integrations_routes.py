@@ -46,6 +46,35 @@ def _mask(s: Optional[str]) -> Optional[str]:
     return f"••••{s[-4:]}" if len(s) >= 4 else "••••"
 
 
+def _humanise_provider_error(platform: str, raw: str, status_code: int) -> str:
+    """Convert a noisy provider JSON error into a founder-friendly hint.
+
+    iter82 — Saleshandy returns `{"error":true,"type":"auth","code":1001,"message":"Invalid token"}`
+    which is jargon-heavy. We map the most common failure modes to a single
+    actionable sentence so the founder knows exactly what to do next.
+    """
+    raw_low = (raw or "").lower()
+    name = platform.title()
+    # Auth failures — the most common case.
+    if any(needle in raw_low for needle in ("invalid token", "invalid api key", "unauthor", "401", "code\":1001", "code\":1003")):
+        return (
+            f"{name} rejected the API key. Double-check you copied the FULL key from "
+            f"{name}'s API settings page and that it hasn't been revoked. Paste a fresh key, "
+            "click Update, then Test connection again."
+        )
+    if "rate" in raw_low and ("limit" in raw_low or "429" in raw_low):
+        return f"{name} is rate-limiting this workspace. Wait 60 seconds and try again."
+    if "forbidden" in raw_low or "403" in raw_low:
+        return (
+            f"The {name} key is valid but lacks the right permissions/workspace scope. "
+            "Open the API key settings in {name} and grant access to the sequences/campaigns endpoint."
+        )
+    if status_code >= 500:
+        return f"{name} is having a server issue right now ({status_code}). Try again in a minute."
+    # Fallback — keep the raw message but trim provider scaffolding.
+    return f"{name} returned an error ({status_code}). {raw[:200]}"
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # API clients
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -221,7 +250,7 @@ def attach_integrations_routes(app, get_current_user, db):
         enc = (s.get("integrations") or {}).get(f"{platform}_api_key")
         key = _dec(enc) if enc else ""
         if not key:
-            raise HTTPException(400, "API key not set")
+            raise HTTPException(400, f"No {platform.title()} API key saved yet. Paste the key, click Update, then Test connection.")
         try:
             if platform == "saleshandy":
                 seqs = await SalesHandyClient(key).list_sequences()
@@ -231,9 +260,12 @@ def attach_integrations_routes(app, get_current_user, db):
                 raise HTTPException(400, "Invalid platform")
             return {"ok": True, "found": len(seqs)}
         except HTTPException as e:
-            raise HTTPException(e.status_code, e.detail)
+            # iter82 — convert raw provider JSON into a founder-friendly message.
+            raw = str(e.detail or "")
+            friendly = _humanise_provider_error(platform, raw, e.status_code)
+            raise HTTPException(e.status_code, friendly)
         except Exception as e:
-            raise HTTPException(502, f"Connection failed: {str(e)[:160]}")
+            raise HTTPException(502, f"Could not reach {platform.title()}. Network error: {str(e)[:120]}")
 
     # ─── Sequences / campaigns ───────────────────────────
     @router.get("/sequences/{platform}")
@@ -242,15 +274,22 @@ def attach_integrations_routes(app, get_current_user, db):
         enc = (s.get("integrations") or {}).get(f"{platform}_api_key")
         key = _dec(enc) if enc else ""
         if not key:
-            raise HTTPException(400, f"{platform} not connected")
-        if platform == "saleshandy":
-            data = await SalesHandyClient(key).list_sequences()
-            seqs = [{"id": d.get("id") or d.get("_id") or d.get("sequenceId"), "name": d.get("name") or d.get("title") or "Untitled"} for d in (data or [])]
-        elif platform == "lemlist":
-            data = await LemlistClient(key).list_campaigns()
-            seqs = [{"id": d.get("_id") or d.get("id"), "name": d.get("name") or "Untitled"} for d in (data or [])]
-        else:
-            raise HTTPException(400, "Invalid platform")
+            raise HTTPException(400, f"{platform.title()} not connected — paste an API key first.")
+        try:
+            if platform == "saleshandy":
+                data = await SalesHandyClient(key).list_sequences()
+                seqs = [{"id": d.get("id") or d.get("_id") or d.get("sequenceId"), "name": d.get("name") or d.get("title") or "Untitled"} for d in (data or [])]
+            elif platform == "lemlist":
+                data = await LemlistClient(key).list_campaigns()
+                seqs = [{"id": d.get("_id") or d.get("id"), "name": d.get("name") or "Untitled"} for d in (data or [])]
+            else:
+                raise HTTPException(400, "Invalid platform")
+        except HTTPException as e:
+            # iter82 — humanise upstream provider errors so the founder sees
+            # a clear next step instead of raw JSON.
+            raw = str(e.detail or "")
+            friendly = _humanise_provider_error(platform, raw, e.status_code)
+            raise HTTPException(e.status_code, friendly)
         # Drop entries without id
         seqs = [s for s in seqs if s.get("id")]
         return {"sequences": seqs, "platform": platform}

@@ -130,7 +130,6 @@ const AriaCommandRoom = ({ userName }) => {
               <span className="w-2 h-2 rounded-full bg-[#16A34A]"></span>
             </span>
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#16A34A]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Aria active</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#9A6F1A] border border-[#E2B96F]/40">BETA</span>
           </div>
           <div className="inline-flex items-center gap-1.5 text-[10px] text-[#5A4A7A]">
             <ShieldCheck size={11} weight="fill" className="text-[#16A34A]" /> Multi-tenant · DPDP-ready

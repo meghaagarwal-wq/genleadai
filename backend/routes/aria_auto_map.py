@@ -614,6 +614,29 @@ async def publish(
     - Stores the extracted lead_sources + qualification + handoff into the tenant's
       settings under `automap_summary` so the dashboard can render them.
     """
+    try:
+        return await _publish_impl(payload, tenant, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Never leak a 500 to the FE — convert to a structured 500 with the
+        # message so the AI Setup Assistant can show the real cause instead of
+        # the generic "Publish failed".
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[publish] unexpected error: {e}\n{tb}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Publish failed unexpectedly: {str(e)[:300]} — please retry or contact support.",
+        )
+
+
+async def _publish_impl(
+    payload: PublishPayload,
+    tenant: dict,
+    current_user: dict,
+):
+    """Inner publish impl — wrapped by publish() for catch-all error handling."""
     role = tenant.get("_member_role")
     if role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="Owner/Admin only")
@@ -679,9 +702,43 @@ async def publish(
         # canonical clamp for channel / message_type / aria_role / day / hour /
         # conditions / index, so the publish endpoint stays 4xx-only even if a
         # user edited a touchpoint to an out-of-range value in the review UI.
-        sanitized = _sanitize_touchpoints([dict(tp) for tp in payload.touchpoints])
-        pydantic_tps = [Touchpoint(**tp) for tp in sanitized]
-        _validate_touchpoints(pydantic_tps)
+        try:
+            sanitized = _sanitize_touchpoints([dict(tp) for tp in payload.touchpoints])
+        except Exception as e:
+            print(f"[publish] _sanitize_touchpoints failed: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not normalise touchpoints for publishing: {str(e)[:300]}",
+            )
+        # Drop any individual touchpoint that can't be coerced into the
+        # Pydantic schema instead of failing the whole publish. The /analyze
+        # endpoint is the strict gate; /publish should ship whatever passed.
+        pydantic_tps: List[Touchpoint] = []
+        dropped: List[int] = []
+        for i, tp in enumerate(sanitized):
+            try:
+                pydantic_tps.append(Touchpoint(**tp))
+            except Exception as e:
+                print(f"[publish] dropping touchpoint #{i}: {e} — {tp}")
+                dropped.append(i)
+        if not pydantic_tps:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Every extracted touchpoint failed validation — none could be saved. "
+                    "Try re-uploading a cleaner doc, or contact support."
+                ),
+            )
+        try:
+            _validate_touchpoints(pydantic_tps)
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[publish] _validate_touchpoints unexpected error: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Touchpoint validation failed: {str(e)[:300]}",
+            )
         cleaned = []
         for i, t in enumerate(pydantic_tps):
             cleaned.append({
@@ -715,14 +772,18 @@ async def publish(
         saved_touchpoint_count = len(cleaned)
 
     # 3. Stash lead_sources + qualification + handoff + summary onto tenant.settings.automap_summary
+    # Defensive: only stash dict-shaped qualification/handoff so a malformed
+    # array doesn't crash the persist step.
+    qualification_safe = payload.qualification if isinstance(payload.qualification, dict) else {}
+    handoff_safe = payload.handoff if isinstance(payload.handoff, dict) else {}
     db["tenants"].update_one(
         {"id": tenant_id},
         {"$set": {
             "settings.automap_summary": {
                 "lead_sources": payload.lead_sources or [],
                 "recommended_integrations": payload.recommended_integrations or [],
-                "qualification": payload.qualification or {},
-                "handoff": payload.handoff or {},
+                "qualification": qualification_safe,
+                "handoff": handoff_safe,
                 "summary": payload.summary or "",
                 # Iter 73 — preserve doc-shape touchpoints (incl. user edits)
                 # so the AI Setup Assistant can re-display them on revisit.

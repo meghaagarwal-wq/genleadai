@@ -152,7 +152,7 @@ const AriaWorkspaceSwitcher = () => {
 
 const Layout = ({ children }) => {
   const { user, logout } = useAuth();
-  const { planName, planId, openUpgrade } = usePlan();
+  const { planName, planId, openUpgrade } = usePlan();  // eslint-disable-line no-unused-vars  -- iter82: kept in scope so feature flags can re-enable the badge later if billing returns.
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -304,25 +304,9 @@ const Layout = ({ children }) => {
         )}
       </nav>
       <div className="p-4 border-t border-[var(--sidebar-divider)]">
-        {/* Plan badge */}
-        <button
-          onClick={() => planId === 'custom' ? navigate('/billing') : openUpgrade(null, planId === 'starter' ? 'growth' : planId === 'growth' ? 'pro' : 'custom')}
-          className="w-full flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg border border-white/10 hover:bg-white/5 transition-all text-left"
-          style={{ background: 'rgba(192,68,224,0.08)' }}
-          data-testid="plan-badge"
-          title="Click to manage plan"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkle size={14} className="text-[#C044E0]" weight="fill" />
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--sidebar-text-muted)]">Current plan</div>
-              <div className="text-xs font-bold text-white truncate" style={{ fontFamily: 'Plus Jakarta Sans' }}>{planName}</div>
-            </div>
-          </div>
-          {planId !== 'custom' && (
-            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded text-white flex-shrink-0" style={{ background: 'var(--gradient-brand)' }}>Upgrade</span>
-          )}
-        </button>
+        {/* iter82 — Managed deployment: no self-serve plan badge / upgrade CTA.
+            The CURRENT PLAN block was removed because ARIA is now a fully
+            managed Sales PA — billing is handled by GenLeadAI off-platform. */}
         <div className="flex items-center gap-3">
           <SidebarUserAvatar user={user} />
           <div className="flex-1 min-w-0">
