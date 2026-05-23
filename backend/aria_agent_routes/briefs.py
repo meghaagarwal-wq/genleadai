@@ -8,7 +8,7 @@ from ._shared import (
 )
 from security.helpers import sanitise_for_prompt   # iter80 — S9.5
 from security.limiter import limiter as _limiter   # iter80 — rate limits
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -139,7 +139,8 @@ Make every word earn its place."""
     return json.loads(text)
 
 @router.post("/founder-brief/{lead_id}")
-async def generate_founder_brief(lead_id: str, current_user: dict = Depends(get_current_user)):
+@_limiter.limit("10/minute")  # iter80 — S9.5: cap LLM-heavy founder brief generation
+async def generate_founder_brief(lead_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     from bson import ObjectId
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
@@ -219,7 +220,8 @@ async def generate_founder_brief(lead_id: str, current_user: dict = Depends(get_
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.get("/aria-read/{lead_id}")
-async def aria_read(lead_id: str, current_user: dict = Depends(get_current_user)):
+@_limiter.limit("20/minute")  # iter80 — S9.5: cap Aria-read polling
+async def aria_read(lead_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     from bson import ObjectId
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})

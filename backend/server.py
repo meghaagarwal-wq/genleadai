@@ -84,6 +84,8 @@ from routes.health_engine import (
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from security.limiter import limiter  # iter80 — shared instance for route modules
+from security.helpers import safe_filter_value, safe_query_param  # iter80 — S9.5 NoSQL guards
+import re as _re_s95  # iter80 — S9.5: escape user input in $regex queries
 
 load_dotenv()
 
@@ -396,11 +398,13 @@ async def get_leads(
     if icp_tier:
         query["icp_tier"] = icp_tier
     if search:
+        # iter80 — S9.5: escape regex metacharacters to prevent ReDoS / injection
+        _safe = _re_s95.escape(safe_query_param(search, max_len=120))
         query["$or"] = [
-            {"first_name": {"$regex": search, "$options": "i"}},
-            {"last_name": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}},
-            {"company_name": {"$regex": search, "$options": "i"}}
+            {"first_name": {"$regex": _safe, "$options": "i"}},
+            {"last_name": {"$regex": _safe, "$options": "i"}},
+            {"email": {"$regex": _safe, "$options": "i"}},
+            {"company_name": {"$regex": _safe, "$options": "i"}}
         ]
     
     total = leads_collection.count_documents(query)
@@ -1845,12 +1849,14 @@ class BroadcastRequest(BaseModel):
 async def create_broadcast(request: BroadcastRequest, current_user: dict = Depends(get_current_user)):
     """Create and send a personalized broadcast to a filtered segment."""
     query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}}
-    if request.filters.get("lead_type"):
-        query["lead_type"] = request.filters["lead_type"]
-    if request.filters.get("icp_tier"):
-        query["icp_tier"] = request.filters["icp_tier"]
-    if request.filters.get("status"):
-        query["status"] = request.filters["status"]
+    # iter80 — S9.5: strip Mongo operators from user-controlled filter values
+    _safe_filters = safe_filter_value(request.filters or {})
+    if _safe_filters.get("lead_type"):
+        query["lead_type"] = _safe_filters["lead_type"]
+    if _safe_filters.get("icp_tier"):
+        query["icp_tier"] = _safe_filters["icp_tier"]
+    if _safe_filters.get("status"):
+        query["status"] = _safe_filters["status"]
 
     leads = list(leads_collection.find(query).limit(100))
     results = {"total_targeted": len(leads), "sent": 0, "failed": 0, "channel": request.channel}
@@ -1896,10 +1902,12 @@ async def create_broadcast(request: BroadcastRequest, current_user: dict = Depen
 async def preview_broadcast(request: BroadcastRequest, current_user: dict = Depends(get_current_user)):
     """Preview personalized messages for 5 random leads from the segment."""
     query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}}
-    if request.filters.get("lead_type"):
-        query["lead_type"] = request.filters["lead_type"]
-    if request.filters.get("icp_tier"):
-        query["icp_tier"] = request.filters["icp_tier"]
+    # iter80 — S9.5: strip Mongo operators from user-controlled filter values
+    _safe_filters = safe_filter_value(request.filters or {})
+    if _safe_filters.get("lead_type"):
+        query["lead_type"] = _safe_filters["lead_type"]
+    if _safe_filters.get("icp_tier"):
+        query["icp_tier"] = _safe_filters["icp_tier"]
 
     leads = list(leads_collection.find(query).limit(5))
     previews = []

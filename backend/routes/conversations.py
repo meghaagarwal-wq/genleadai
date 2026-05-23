@@ -1,5 +1,6 @@
 """Conversations endpoint — thread list for /conversations page."""
 from __future__ import annotations
+import re
 from datetime import datetime, timezone
 from typing import Optional, List
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from deps import db
 from routes.tenants import get_active_tenant
+from security.helpers import safe_query_param  # iter80 — S9.5
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -36,11 +38,13 @@ async def threads(
     if assigned_to:
         base["assigned_to"] = assigned_to
     if search:
+        # iter80 — S9.5: escape regex metacharacters & cap length (ReDoS guard)
+        _safe = re.escape(safe_query_param(search, max_len=120))
         base["$or"] = [
-            {"first_name": {"$regex": search, "$options": "i"}},
-            {"last_name": {"$regex": search, "$options": "i"}},
-            {"phone": {"$regex": search}},
-            {"email": {"$regex": search, "$options": "i"}},
+            {"first_name": {"$regex": _safe, "$options": "i"}},
+            {"last_name": {"$regex": _safe, "$options": "i"}},
+            {"phone": {"$regex": _safe}},
+            {"email": {"$regex": _safe, "$options": "i"}},
         ]
 
     rows = list(leads_col.find(base, {"_id": 0}).sort("updated_at", -1).limit(int(limit)))

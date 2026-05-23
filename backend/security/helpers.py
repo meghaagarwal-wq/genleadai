@@ -55,8 +55,7 @@ _INJECTION_PATTERNS = [
     re.compile(r"<\s*/?\s*system\s*>", re.IGNORECASE),
     re.compile(r"<\s*/?\s*assistant\s*>", re.IGNORECASE),
     re.compile(r"<\s*/?\s*user\s*>", re.IGNORECASE),
-    re.compile(r"\bignore\s+(?:all|previous|prior)\s+(?:instructions?|prompts?)\b", re.IGNORECASE),
-    re.compile(r"\bdisregard\s+(?:all|previous|prior)\s+(?:instructions?|prompts?)\b", re.IGNORECASE),
+    re.compile(r"\b(?:ignore|disregard|forget)\s+(?:all\s+|the\s+|your\s+)?(?:previous|prior|earlier|above)?\s*(?:instructions?|prompts?|directives?|rules?|context)\b", re.IGNORECASE),
     re.compile(r"###\s*new\s+instructions\b", re.IGNORECASE),
     re.compile(r"\[\[\s*SYSTEM\s*\]\]", re.IGNORECASE),
 ]
