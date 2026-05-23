@@ -1,6 +1,23 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 86 (Setup health + multi-attach + workspace identity in lead-magnet sends)
+- **New `GET /api/pt/setup/health`** — 5-bullet workspace completeness check
+  (email sender, Saleshandy, Lemlist, lead magnet, touchpoints) with
+  status/detail/CTA per item + `live` flag (true when ≥3 ok). Surfaced as a
+  banner on Pietential Overview.
+- **Multi-attachment** on `/api/pt/email/test-send`: `attachment_file_ids:
+  List[str]` added. Merges + dedupes the single + list inputs preserving
+  order. Missing files silently dropped (no 404/500).
+- **Workspace identity in lead-magnet sends**: `_send_lead_magnet_via_email`
+  now routes through `send_workspace_email` — from-name / from-address /
+  signature all apply to auto-sent magnets. File-type magnets are now
+  attached inline (base64) instead of just linked.
+- **Tests**: 17/17 backend pass, zero issues. 3 real Resend test sends +
+  1 real lead-magnet manual send all confirmed provider_id.
+
+
+
 ## 2026-02 — Iter 85 (Email signatures + lead-magnet attachments + auto-handshake)
 - **New shared helper `routes/pt_email.py`**: `send_workspace_email()`
   resolves workspace from-name/from-address/Resend-key/signature in one

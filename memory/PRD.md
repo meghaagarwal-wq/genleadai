@@ -1,3 +1,47 @@
+## Iter 86 — Setup Health + Multi-Attachment + Workspace Identity in Lead-Magnet Sends (Feb 2026)
+
+### What landed
+
+**Backend**
+- `GET /api/pt/setup/health` (NEW) — single 5-bullet completeness check
+  surfaced to both the founder and the GenLeadAI master_admin. Each item
+  has `{id, label, status: ok/warn/fail, detail, cta, cta_path}`. Returns
+  `ready_count` + `live` flag (true when ≥3 items are ok). Five items:
+  email sender, Saleshandy, Lemlist, lead magnet, touchpoint journey.
+- `_send_lead_magnet_via_email` (server.py) refactored to delegate to
+  `routes.pt_email.send_workspace_email` — so the workspace from-address +
+  signature now apply to auto-sent lead magnets too. When the magnet
+  `type='file'`, the PDF/PPTX is now base64-attached to the email body
+  (not just linked via the tracking URL).
+- `TestSendPayload.attachment_file_ids: Optional[List[str]]` added. The
+  endpoint merges + dedupes the single + list inputs, preserving order.
+
+**Frontend — `pietential/pages/PtOverview.js`**
+- New `SetupHealthPanel` rendered above the connection banners. Green
+  banner header `WORKSPACE IS LIVE` + score (`N/5 READY · X%`) when 3+
+  items are ok; amber `SETUP INCOMPLETE` otherwise. Each non-ok row has
+  an inline link to the right config screen.
+
+### Tests
+- `backend/tests/test_iter86_setup_health_multiattach_leadmagnet.py` —
+  17 tests covering setup-health shape + clean-state + post-config
+  branches, multi-attachment with valid+missing+path-traversal mix, single+
+  list dedupe, legacy lead-magnet send regression, iter80-85 light smoke.
+- **Result: 17/17 PASS** (zero issues from testing agent).
+- 3 real Resend sends + 1 real lead-magnet send all returned provider_id.
+
+### Not in scope (next iteration)
+- Tenant-scoped `lead_magnets` queries inside `/setup/health` (would
+  matter once multiple tenants share the workspace pool — today everyone
+  on Pietential shares one workspace doc).
+- Returning `(sent: bool, error: str | None)` from `_send_lead_magnet_via_email`
+  so the manual endpoint can echo a 4xx when Resend rejects.
+- Aria-drafted reply send wiring (still uses platform default; would
+  benefit from `send_workspace_email` but the surface is complex).
+
+---
+
+
 ## Iter 85 — Email Signatures + Lead-Magnet Attachments + Auto-Handshake (Feb 2026)
 
 ### What landed

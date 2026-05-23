@@ -1185,12 +1185,15 @@ async def setup_health(current_user: dict = Depends(get_current_user)):
     email_integ = integrations_col.find_one({"name": "email"}) or {}
     has_workspace_key = bool(email_integ.get("api_key"))
     has_global_key = bool(os.environ.get("RESEND_API_KEY"))
+    # iter86 nit fix — fall back to SENDER_EMAIL / sandbox sender when the
+    # founder hasn't yet typed a from_address (avoids 'Workspace Resend key + None').
+    effective_from = email_integ.get("from_address") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev"
     items.append({
         "id": "email",
         "label": "Email sender",
         "status": "ok" if (has_workspace_key or has_global_key) else "fail",
         "detail": (
-            f"Workspace Resend key + {email_integ.get('from_address')}"
+            f"Workspace Resend key + {effective_from}"
             if has_workspace_key
             else ("Using platform default. Add a workspace Resend key for branded sender." if has_global_key else "No Resend key — outbound email will not work.")
         ),
