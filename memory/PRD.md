@@ -1,3 +1,58 @@
+## Iter 84 — Pietential Email-Send Flow + AI Setup Nav (Feb 2026)
+
+### What landed
+
+**Backend — `routes/pietential.py`**
+- New `_can_admin_workspace()` / `_require_admin_workspace()` role gate
+  (admin / master_admin / owner / pietential_owner). Stricter than the
+  general `_can_write` so sales_rep can't rotate Resend keys or trigger
+  outbound test emails.
+- `GET /api/pt/email/config` — returns `{from_name, from_address,
+  resend_api_key_masked, using_global_fallback}`. Falls back to platform
+  `RESEND_API_KEY` + `SENDER_EMAIL` until a workspace key is saved.
+- `POST /api/pt/email/config` (workspace-admin only) — persists sender
+  name/address; blank Resend key keeps the existing one (so the founder can
+  update from_address without re-pasting the secret). Stored encrypted via
+  `_enc()`.
+- `POST /api/pt/email/test-send` (workspace-admin only) — sends a real
+  Resend-powered email to verify the workspace can deliver. Wired to detect:
+  • **Sandbox limitation** (Resend's "you can only send to your account
+    email" — surfaces as friendly "Resend is in sandbox mode" message).
+  • **Unverified domain** → "Verify it in Resend → Domains."
+  • **Invalid API key** → "Resend rejected the API key."
+  • **Pydantic 422** for malformed recipient.
+  Returns `{ok, to, from, provider_id, message}` on success.
+
+**Frontend**
+- `pietential/PtLayout.js` — added `AI Setup` nav entry pointing to
+  `/ai-setup` (existing AI Setup Assistant) so the GTM doc → touchpoints
+  flow is one click from inside the Pietential workspace.
+- `pietential/pages/PtSettings.js` — rebuilt with a new **Email Sender**
+  card at top featuring `pt-email-from-name`, `pt-email-from-address`,
+  `pt-email-resend-key` (with current masked fingerprint), `pt-email-save-btn`,
+  and a sub-row with `pt-email-test-to` + `pt-email-test-send-btn`. Shows
+  a `USING PLATFORM DEFAULT` chip while no workspace key is set, flips to
+  green `WORKSPACE KEY` chip once one is saved.
+
+### Tests
+- `backend/tests/test_iter84_email_send_flow.py` — 16 tests covering
+  GET/POST config, blank-key preservation, master_admin allow + sales_rep
+  block, real Resend success-path (1 send to account owner), sandbox-friendly
+  error, no-raw-JSON leak, Pydantic 422, header-independence + iter82-83
+  regression.
+- **Result: 15/16 PASS + 1 SKIP** (skipped test depends on clearing
+  `RESEND_API_KEY` env from inside pytest, which is process-bound).
+
+### Not in scope (yet)
+- Hooking the workspace's per-tenant Resend key + from_address into the
+  Aria-drafted reply send path (currently uses platform defaults). Tracked
+  as P1 for next iteration.
+- Auto-flip on-save → test-handshake (the "verify key on save" UX nicety
+  suggested in iter83 finish).
+
+---
+
+
 ## Iter 82–83 — Bug Fixes from User Screenshots + Pietential Wiring (Feb 2026)
 
 ### Reported issues (from user screenshots)

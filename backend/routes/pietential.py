@@ -172,6 +172,22 @@ def _can_write(user: dict) -> bool:
     )
 
 
+def _can_admin_workspace(user: dict) -> bool:
+    """iter84 — stricter gate for actions that touch billable/security-sensitive
+    workspace config (email sender, Resend key, future: webhooks).
+
+    sales_rep + content_vista are deliberately NOT allowed here. Only the
+    GenLeadAI operator (master_admin) and the tenant's own admin/owner can
+    rotate sender credentials or trigger live outbound emails.
+    """
+    return _role_of(user) in ("admin", "master_admin", "owner", "pietential_owner")
+
+
+def _require_admin_workspace(user: dict):
+    if not _can_admin_workspace(user):
+        raise HTTPException(status_code=403, detail="Workspace-admin role required for this action.")
+
+
 def _require_write(user: dict):
     if not _can_write(user):
         raise HTTPException(status_code=403, detail="Read-only role")
@@ -1270,8 +1286,12 @@ async def get_email_config(current_user: dict = Depends(get_current_user)):
 async def save_email_config(payload: EmailConfigPayload, current_user: dict = Depends(get_current_user)):
     """Save the workspace's sender config. Blank resend_api_key keeps the
     existing one (so the founder can update from_address without re-pasting
-    the secret)."""
-    _require_write(current_user)
+    the secret).
+
+    iter84 — gated to workspace-admin only (sales_rep can't rotate the
+    workspace's Resend key).
+    """
+    _require_admin_workspace(current_user)
     update: Dict[str, Any] = {"name": "email", "updated_at": _now_iso()}
     if payload.from_name is not None:
         update["from_name"] = payload.from_name
@@ -1287,8 +1307,12 @@ async def save_email_config(payload: EmailConfigPayload, current_user: dict = De
 async def test_send_email(payload: TestSendPayload, current_user: dict = Depends(get_current_user)):
     """Send a real test email so the founder confirms their sender is wired
     correctly before going live. Uses the workspace's Resend key + from_address
-    if configured; otherwise falls back to the platform default."""
-    _require_write(current_user)
+    if configured; otherwise falls back to the platform default.
+
+    iter84 — gated to workspace-admin only (sales_rep can't trigger
+    outbound emails using the workspace's Resend key).
+    """
+    _require_admin_workspace(current_user)
     cfg = _get_email_config()
     if not cfg["resend_api_key"]:
         raise HTTPException(

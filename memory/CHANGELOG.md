@@ -1,6 +1,29 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 84 (Pietential email-send flow + AI Setup nav)
+- **Per-workspace email sender config**: 3 new endpoints on the Pietential
+  router — `GET /api/pt/email/config`, `POST /api/pt/email/config`,
+  `POST /api/pt/email/test-send`. From-name / from-address persisted to
+  `pt_integrations` (name='email'); Resend API key encrypted via Fernet.
+  Falls back to platform `RESEND_API_KEY` + `SENDER_EMAIL` until a workspace
+  key is set.
+- **Real Resend test send**: workspace-admin clicks "Send test email", we
+  hit Resend's API for real, return `provider_id` on success and friendly
+  errors (sandbox / unverified domain / bad key) on failure.
+- **New role gate `_can_admin_workspace`**: admin / master_admin / owner /
+  pietential_owner only. sales_rep + content_vista are deliberately blocked
+  from rotating Resend keys or triggering outbound test emails.
+- **AI Setup nav** added to Pietential sidebar → links to existing
+  `/ai-setup` (AISetupAssistant) so the GTM doc → touchpoints flow is one
+  click from the dashboard.
+- **PtSettings rebuilt** with Email Sender card on top featuring inputs +
+  test-send sub-row. Shows USING PLATFORM DEFAULT vs WORKSPACE KEY chip.
+- **Tests**: 15/16 pass + 1 skip (env-var process-bound). 1 real Resend
+  call confirmed `provider_id` returned for account-owner inbox.
+
+
+
 ## 2026-02 — Iter 82–83 (Bug fixes from user screenshots + Pietential wiring)
 - **AI Setup publish robustness**: `/api/aria/auto-map/publish` wrapped with
   catch-all so unexpected 500s become structured detail; per-touchpoint
