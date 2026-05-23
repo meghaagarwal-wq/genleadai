@@ -15,6 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from deps import db, get_current_user, leads_collection, activities_collection
+from security.encryption import encrypt as _encrypt   # iter80 — encrypt API keys at rest
+from security.helpers import mask_key
 
 router = APIRouter(prefix="/api/admin/deployments", tags=["admin-deployments"])
 
@@ -30,12 +32,9 @@ def _require_master(current_user: dict):
 
 
 def _mask(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    v = str(value)
-    if len(v) <= 8:
-        return "•" * len(v)
-    return f"{v[:4]}{'•' * 6}{v[-4:]}"
+    """Module-local alias around `security.helpers.mask_key` (so the rest
+    of this module reads as `_mask(...)`)."""
+    return mask_key(value)
 
 
 def _deployment_status(tenant: dict) -> str:
@@ -258,7 +257,8 @@ async def onboard_new_deployment(
         integrations["whatsapp"] = {
             "provider": s2.whatsapp_provider or "meta_cloud_api",
             "phone_number_id": s2.whatsapp_phone_number_id,
-            "access_token": s2.whatsapp_access_token,
+            # Iter80 — S9.5: encrypt API tokens at rest. mask_key on read.
+            "access_token": _encrypt(s2.whatsapp_access_token),
             "display_phone": s2.whatsapp_display_phone,
             "connected": True,
             "connected_at": now,
@@ -269,7 +269,7 @@ async def onboard_new_deployment(
             "from_address": s2.email_from_address,
         }
     if s2.resend_api_key:
-        integrations["resend"] = {"api_key": s2.resend_api_key, "connected_at": now}
+        integrations["resend"] = {"api_key": _encrypt(s2.resend_api_key), "connected_at": now}
     if s2.crm_webhook_url:
         integrations["crm"] = {"webhook_url": s2.crm_webhook_url}
     if s2.calendly_link:

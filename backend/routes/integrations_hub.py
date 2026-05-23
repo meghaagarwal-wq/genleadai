@@ -525,6 +525,41 @@ def _verify_saleshandy_signature(request: Request, body_bytes: bytes, cfg: dict)
     return hmac.compare_digest(expected, sig_header.strip().lower())
 
 
+# Iter80 — S9.5: webhook replay protection. Reject signatures seen within
+# the configurable window (default 5 min). Backed by a TTL-indexed Mongo
+# collection so it's stateless across pod restarts.
+_WEBHOOK_REPLAY_TTL_SECONDS = 300
+
+
+def _is_webhook_replay(provider: str, tenant_id: str, signature: str) -> bool:
+    """Returns True if we've seen this signature for this (provider, tenant)
+    in the last 5 minutes. Records new signatures atomically."""
+    if not signature:
+        return False
+    from datetime import datetime, timezone
+    from pymongo.errors import DuplicateKeyError
+    coll = db["webhook_replay_seen"]
+    # Ensure the TTL index exists (cheap idempotent call).
+    try:
+        coll.create_index("expires_at", expireAfterSeconds=0, background=True)
+        coll.create_index([("provider", 1), ("tenant_id", 1), ("signature", 1)], unique=True, background=True)
+    except Exception:
+        pass
+    now = datetime.now(timezone.utc)
+    expires = now.replace(microsecond=0).timestamp() + _WEBHOOK_REPLAY_TTL_SECONDS
+    try:
+        coll.insert_one({
+            "provider": provider,
+            "tenant_id": tenant_id,
+            "signature": signature[:128],
+            "seen_at": now,
+            "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc),
+        })
+        return False
+    except DuplicateKeyError:
+        return True
+
+
 @public_router.post("/saleshandy/webhook/{tenant_id}")
 async def saleshandy_webhook(tenant_id: str, request: Request):
     raw_bytes = await request.body()
@@ -538,6 +573,11 @@ async def saleshandy_webhook(tenant_id: str, request: Request):
     cfg = cfg_doc.get("config") or {}
     if not _verify_saleshandy_signature(request, raw_bytes, cfg):
         return JSONResponse({"ok": False, "error": "bad_signature"}, status_code=401)
+
+    # Iter80 — S9.5: replay-protection guard.
+    sig = (request.headers.get("x-saleshandy-signature") or request.headers.get("X-Webhook-Signature") or "").strip()
+    if sig and _is_webhook_replay("saleshandy", tenant_id, sig):
+        return JSONResponse({"ok": False, "error": "replay_detected"}, status_code=409)
 
     # 1. Lead identification — accept the most common Saleshandy field names.
     raw_lead = {

@@ -19,6 +19,8 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
+from security.limiter import limiter as _limiter  # iter80 — S9.5 rate limits
+
 from deps import (
     users_collection,
     db,
@@ -124,6 +126,7 @@ async def register(user: UserRegister):
 
 
 @router.post("/login")
+@_limiter.limit("10/minute")  # iter80 — S9.5: 10 login attempts per IP per minute
 async def login(credentials: UserLogin, request: Request):
     email = (credentials.email or "").lower().strip()
     ip = _client_ip(request)

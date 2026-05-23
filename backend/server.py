@@ -81,9 +81,9 @@ from routes.health_engine import (
     stale_lead_loop as health_stale_loop,
     classify_sentiment as health_classify_sentiment,
 )
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from security.limiter import limiter  # iter80 — shared instance for route modules
 
 load_dotenv()
 
@@ -150,7 +150,7 @@ app.include_router(health_router)
 app.include_router(failed_messages_router)
 
 # Rate limiter — applied to sensitive auth & webhook endpoints
-limiter = Limiter(key_func=get_remote_address)
+limiter = limiter  # imported shared instance
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

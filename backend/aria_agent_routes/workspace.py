@@ -6,7 +6,9 @@ from ._shared import (
     activities_collection, db, get_current_user, AriaTrainingPayload,
     get_active_playbook_block, get_relevant_assets_block,
 )
-from fastapi import Depends, HTTPException
+from security.limiter import limiter as _limiter
+from security.helpers import sanitise_for_prompt
+from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -310,7 +312,8 @@ class AskReplyPayload(BaseModel):
     user_note: Optional[str] = ""     # optional additional context from user
 
 @router.post("/workspace/ask-reply/{lead_id}")
-async def ask_aria_reply(lead_id: str, payload: AskReplyPayload, current_user: dict = Depends(get_current_user)):
+@_limiter.limit("30/minute")  # iter80 — S9.5: cap Aria-generated replies
+async def ask_aria_reply(lead_id: str, payload: AskReplyPayload, request: Request, current_user: dict = Depends(get_current_user)):
     from bson import ObjectId
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
@@ -389,8 +392,10 @@ WORKSPACE CONTEXT:
     )
     # Iter78 S6: inject active playbook + relevant assets (objection / pricing / case study).
     tid = lead.get("tenant_id") or ""
+    # Iter80 — S9.5: sanitise user-controlled text before it enters the prompt.
+    safe_user_note = sanitise_for_prompt(payload.user_note or "")
     system += get_active_playbook_block(tid)
-    system += get_relevant_assets_block(tid, payload.user_note or "")
+    system += get_relevant_assets_block(tid, safe_user_note)
     prompt = f"""{training_snippet}
 LEAD:
 - Name: {first_name}
@@ -403,7 +408,7 @@ LEAD:
 RECENT ACTIVITY:
 {activities_text}
 
-USER NOTE (from founder): {payload.user_note or '(none)'}
+USER NOTE (from founder): {safe_user_note or '(none)'}
 
 Write ONE reply message.
 Channel: {payload.channel.upper()}

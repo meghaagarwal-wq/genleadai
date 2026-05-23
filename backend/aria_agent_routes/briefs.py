@@ -6,6 +6,8 @@ from ._shared import (
     activities_collection, db, get_current_user, AriaTrainingPayload,
     get_active_playbook_block, get_relevant_assets_block,
 )
+from security.helpers import sanitise_for_prompt   # iter80 — S9.5
+from security.limiter import limiter as _limiter   # iter80 — rate limits
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -72,10 +74,10 @@ LEAD:
 - Deal value: {lead.get('deal_value') or '—'}
 - Pipeline type: {lead.get('pipeline_type') or '—'}
 - Last contacted: {lead.get('last_contacted_at') or 'never'}
-- Notes: {(meta.get('notes') or lead.get('notes') or '')[:400]}
-- Known need (if captured): {meta.get('need') or '—'}
-- Known pain (if captured): {meta.get('pain') or '—'}
-- Known objection (if captured): {meta.get('objection') or '—'}
+- Notes: {sanitise_for_prompt((meta.get('notes') or lead.get('notes') or ''), max_len=400)}
+- Known need (if captured): {sanitise_for_prompt(meta.get('need') or '—', max_len=200)}
+- Known pain (if captured): {sanitise_for_prompt(meta.get('pain') or '—', max_len=200)}
+- Known objection (if captured): {sanitise_for_prompt(meta.get('objection') or '—', max_len=200)}
 
 RECENT ACTIVITY (most recent first):
 {activities_text}
