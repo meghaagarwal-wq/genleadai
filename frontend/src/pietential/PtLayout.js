@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
-  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse,
+  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse, Sparkle,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
@@ -9,6 +9,7 @@ import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 const NAV = [
   { to: '/pt',                  label: 'Overview',       icon: Gauge },
   { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
+  { to: '/ai-setup',            label: 'AI Setup',       icon: Sparkle, external: true },
   { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
   { to: '/pt/lemlist',          label: 'Lemlist',        icon: LinkedinLogo },
   { to: '/pt/campaigns',        label: 'Campaigns',      icon: Megaphone },

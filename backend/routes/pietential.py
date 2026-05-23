@@ -1228,6 +1228,135 @@ async def test_integration(name: str, current_user: dict = Depends(get_current_u
     return {"ok": True, "tested_at": _now_iso(), "found": found, "handshake": handshake_done, "message": msg}
 
 
+# ─── Email config + test send (iter84) ────────────────────────────────────
+class EmailConfigPayload(BaseModel):
+    """Optional per-workspace email sender config. Falls back to global
+    SENDER_EMAIL when not set."""
+    from_name: Optional[str] = None
+    from_address: Optional[EmailStr] = None
+    resend_api_key: Optional[str] = None       # leave blank to keep existing
+
+
+class TestSendPayload(BaseModel):
+    to: EmailStr
+    subject: Optional[str] = "ARIA test send — your workspace can deliver mail"
+    body: Optional[str] = None                  # HTML body; defaults to a polite test message
+
+
+def _get_email_config() -> Dict[str, Any]:
+    """Read the workspace's email sender config from pt_integrations.
+    Returns dict with from_name, from_address, resend_api_key (decrypted)."""
+    integ = integrations_col.find_one({"name": "email"}) or {}
+    return {
+        "from_name": integ.get("from_name") or "",
+        "from_address": integ.get("from_address") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev",
+        "resend_api_key": _dec(integ.get("api_key") or "") or os.environ.get("RESEND_API_KEY") or "",
+    }
+
+
+@router.get("/email/config")
+async def get_email_config(current_user: dict = Depends(get_current_user)):
+    """Read the current sender config (api key masked)."""
+    cfg = _get_email_config()
+    return {
+        "from_name": cfg["from_name"],
+        "from_address": cfg["from_address"],
+        "resend_api_key_masked": _mask_key(cfg["resend_api_key"]) if cfg["resend_api_key"] else None,
+        "using_global_fallback": not bool((integrations_col.find_one({"name": "email"}) or {}).get("api_key")),
+    }
+
+
+@router.post("/email/config")
+async def save_email_config(payload: EmailConfigPayload, current_user: dict = Depends(get_current_user)):
+    """Save the workspace's sender config. Blank resend_api_key keeps the
+    existing one (so the founder can update from_address without re-pasting
+    the secret)."""
+    _require_write(current_user)
+    update: Dict[str, Any] = {"name": "email", "updated_at": _now_iso()}
+    if payload.from_name is not None:
+        update["from_name"] = payload.from_name
+    if payload.from_address is not None:
+        update["from_address"] = payload.from_address
+    if payload.resend_api_key:
+        update["api_key"] = _enc(payload.resend_api_key)
+    integrations_col.update_one({"name": "email"}, {"$set": update}, upsert=True)
+    return {"ok": True, "saved_at": update["updated_at"]}
+
+
+@router.post("/email/test-send")
+async def test_send_email(payload: TestSendPayload, current_user: dict = Depends(get_current_user)):
+    """Send a real test email so the founder confirms their sender is wired
+    correctly before going live. Uses the workspace's Resend key + from_address
+    if configured; otherwise falls back to the platform default."""
+    _require_write(current_user)
+    cfg = _get_email_config()
+    if not cfg["resend_api_key"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No Resend API key available. Paste one in Settings → Email Sender, "
+                "or ask the platform admin to set RESEND_API_KEY."
+            ),
+        )
+    from_addr = cfg["from_address"]
+    from_name = (cfg["from_name"] or "ARIA").strip()
+    from_field = f"{from_name} <{from_addr}>" if from_addr and from_name else from_addr
+
+    html = payload.body or (
+        f"<div style='font-family:-apple-system,Inter,sans-serif;max-width:540px;margin:0 auto;padding:24px;background:#FAFAFA;border-radius:12px;'>"
+        f"<p style='color:#7C35DC;font-weight:700;letter-spacing:0.18em;font-size:11px;text-transform:uppercase;margin:0 0 8px;'>ARIA — Test send</p>"
+        f"<h2 style='color:#0F172A;margin:0 0 12px;font-weight:700;'>Your sender is wired ✓</h2>"
+        f"<p style='color:#475569;line-height:1.5;font-size:14px;margin:0 0 12px;'>"
+        f"This is a test email from your <strong>{from_name}</strong> Aria workspace. "
+        f"If you can read this, Aria can now deliver real outbound emails to your leads."
+        f"</p>"
+        f"<p style='color:#94A3B8;font-size:12px;margin:16px 0 0;'>"
+        f"Triggered by {current_user.get('email','—')} at {_now_iso()[:19].replace('T',' ')}."
+        f"</p>"
+        f"</div>"
+    )
+
+    try:
+        import resend as _resend
+        _resend.api_key = cfg["resend_api_key"]
+        result = await asyncio.to_thread(_resend.Emails.send, {
+            "from": from_field,
+            "to": [payload.to],
+            "subject": payload.subject or "ARIA test send",
+            "html": html,
+        })
+        _log("email_test_send", f"Test email sent to {payload.to}", "info", to=payload.to, from_field=from_field)
+        return {
+            "ok": True,
+            "to": payload.to,
+            "from": from_field,
+            "provider_id": (result or {}).get("id") if isinstance(result, dict) else None,
+            "message": f"Test email sent to {payload.to}. Check the inbox in a few seconds.",
+        }
+    except Exception as e:
+        msg = str(e)[:240]
+        _log("email_test_send", f"Test send FAILED: {msg}", "error", to=payload.to)
+        # Resend-specific error patterns
+        low = msg.lower()
+        if "you can only send testing emails to your own email" in low or "verify a domain at resend.com/domains" in low:
+            raise HTTPException(
+                400,
+                (
+                    "Resend is in sandbox mode for this account — it only delivers to your verified "
+                    "account email. Verify a sending domain at resend.com/domains and set the from_address "
+                    "to that domain (e.g. john@yourdomain.com) to send to anyone."
+                ),
+            )
+        if "domain" in low and ("not verified" in low or "unverified" in low):
+            raise HTTPException(400, "The from_address domain is not verified in Resend. Verify it in Resend → Domains, then retry.")
+        if "api key" in low or "unauthorized" in low or "401" in low:
+            raise HTTPException(400, "Resend rejected the API key. Paste a fresh key from Resend → API Keys and retry.")
+        raise HTTPException(502, f"Could not send test email: {msg}")
+
+
+
+
+
 # ─── Webhook endpoints — single dispatcher with optional signature check ───
 def _check_webhook_secret(integration_name: str, provided: Optional[str]):
     """If a webhook_secret is set on the integration, the inbound POST must
