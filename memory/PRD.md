@@ -1,3 +1,64 @@
+## Iter 85 — Email Signatures + Lead-Magnet Attachments + Auto-Handshake (Feb 2026)
+
+### What landed
+
+**Backend — `routes/pt_email.py` (NEW shared helper)**
+- `send_workspace_email()` — single entry point for Pietential outbound mail.
+  Resolves workspace `from_name` + `from_address` + Resend API key + HTML
+  signature in one place. Concurrent-safe key swap (snapshot → set → finally
+  restore around the `asyncio.to_thread` send).
+- `_resolve_attachment(file_id, uploads_dir)` — base64-encodes a file from
+  `UPLOADS_DIR` for Resend's `attachments[]`. Hardened with a `realpath +
+  startswith` check so `../../../etc/passwd` is silently dropped (verified).
+- `_append_signature(html, sig)` — wraps the signature in a styled `<div>`
+  with a top-border divider so it renders cleanly in every client.
+- `verify_resend_handshake(key)` — lightweight `GET /domains` ping that
+  returns `{ok, message, domains[]}`. Detects auth failures across HTTP
+  400/401/403 with body substring matching (Resend returns 400 for invalid
+  keys, not 401 — iter85 test agent finding).
+- `humanise_resend_error(exc)` — Resend SDK exception → friendly
+  HTTPException (sandbox / unverified domain / bad key / generic 502).
+
+**Backend — `routes/pietential.py`**
+- `EmailConfigPayload` gained `signature_html` (None = no change, ""  = clear).
+- `TestSendPayload` gained `attachment_file_id` (single upload file_id) and
+  `include_signature: bool = True`.
+- `POST /api/pt/email/config` now returns `{ok, saved_at, handshake}` with
+  the live `verify_resend_handshake` result on every save (so the FE flips
+  ✓ Connected immediately).
+- `POST /api/pt/email/test-send` delegates to `send_workspace_email`. Response
+  includes `signature_appended` + `attachments_count` + a composed `message`
+  telling the founder exactly what went out.
+
+**Frontend — `pietential/pages/PtSettings.js`**
+- New **Signature (HTML)** textarea (`pt-email-signature`) with an "active"
+  chip when a workspace signature is set.
+- New **Attach lead magnet** file picker (`pt-email-attachment-input`) that
+  reuses the existing `/api/lead-magnets/upload` endpoint (PDF / PPTX, 25MB).
+  Shows the attached filename + a `remove` link.
+- New **handshake status panel** (`pt-email-handshake`) — green
+  ✓ message + domain list, or amber ⚠ with the rejection reason.
+
+### Tests
+- `backend/tests/test_iter85_email_signature_attachment_handshake.py` —
+  17 tests covering signature persistence + flag flip, handshake ok+rejected
+  branches, signature-on / signature-off, attachment with valid file (real
+  Resend success), attachment silently dropped for nonexistent + path
+  traversal, concurrent-safe key swap doesn't break legacy lead-magnet send,
+  sales_rep still blocked, iter82-83 regression.
+- **Result: 31/31 PASS + 1 SKIP** across iter84+iter85 combined.
+
+### Not in scope (next iteration)
+- Wire `send_workspace_email` into the existing legacy lead-magnet send
+  path (`server.py::_send_lead_magnet_via_email`) so workspace identity +
+  signature also apply to auto-sends. Today only the explicit "Send test
+  email" + future Aria-drafted reply will use it.
+- Multi-attachment support (currently the API takes a single
+  `attachment_file_id` for simplicity; the helper already accepts a list).
+
+---
+
+
 ## Iter 84 — Pietential Email-Send Flow + AI Setup Nav (Feb 2026)
 
 ### What landed

@@ -1,6 +1,30 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 85 (Email signatures + lead-magnet attachments + auto-handshake)
+- **New shared helper `routes/pt_email.py`**: `send_workspace_email()`
+  resolves workspace from-name/from-address/Resend-key/signature in one
+  place, with a concurrent-safe key swap. `_resolve_attachment` includes
+  a path-traversal guard (verified live).
+- **Per-workspace HTML signature**: new `signature_html` field on
+  `pt_integrations.email`. Auto-appended to every send (styled `<div>`
+  with top-border divider). Founder can clear by passing empty string.
+- **Lead-magnet attachments on test send**: PDF/PPTX from
+  `/api/lead-magnets/upload` (existing endpoint) can be attached to test
+  sends via `attachment_file_id`. Resend `attachments[]` carries the file
+  base64-encoded. Path-traversal silently dropped. Nonexistent file silently
+  dropped (send still succeeds).
+- **Auto-handshake on save**: `POST /api/pt/email/config` now returns a
+  `handshake` object (`{ok, message, domains[]}`) from a live Resend
+  `GET /domains` ping. Detects auth failures across HTTP 400/401/403 with
+  body substring matching (Resend returns 400 for invalid keys).
+- **FE Settings UI**: signature textarea + attachment picker + handshake
+  status panel. Existing test-send button stays.
+- **Tests**: 31/31 backend pass + 1 skip (env-bound) across iter84+iter85.
+  5+ real Resend sends confirmed (provider_id returned).
+
+
+
 ## 2026-02 — Iter 84 (Pietential email-send flow + AI Setup nav)
 - **Per-workspace email sender config**: 3 new endpoints on the Pietential
   router — `GET /api/pt/email/config`, `POST /api/pt/email/config`,

@@ -190,7 +190,13 @@ async def verify_resend_handshake(api_key: str) -> Dict[str, Any]:
                 "https://api.resend.com/domains",
                 headers={"Authorization": f"Bearer {api_key}"},
             )
-        if r.status_code == 401:
+        body_low = (r.text or "").lower()
+        # iter85 — Resend returns 400 (not 401) for invalid keys with an
+        # 'api' / 'unauthorized' / 'restricted' substring in the body. Detect
+        # all three of (400, 401, 403) when the body looks auth-shaped.
+        if r.status_code in (400, 401) and (
+            "api" in body_low or "unauthor" in body_low or "restricted" in body_low or "invalid" in body_low
+        ):
             return {"ok": False, "message": "Resend rejected the API key. Paste a fresh key and retry.", "domains": []}
         if r.status_code == 403:
             return {"ok": False, "message": "API key is valid but lacks domain-read permission.", "domains": []}

@@ -1315,8 +1315,9 @@ async def save_email_config(payload: EmailConfigPayload, current_user: dict = De
         update["signature_html"] = payload.signature_html
     integrations_col.update_one({"name": "email"}, {"$set": update}, upsert=True)
 
-    # iter85 — auto-handshake (verify the key still works before we leave
-    # the founder thinking it's saved & live). Uses the freshly-resolved key.
+    # iter85 — auto-handshake on every save (verifies the resolved key still
+    # works against Resend). Keeps the FE handshake panel honest even when
+    # the founder only updates from_name / from_address using an existing key.
     from routes.pt_email import verify_resend_handshake
     cfg = _get_email_config()
     handshake = await verify_resend_handshake(cfg["resend_api_key"])
