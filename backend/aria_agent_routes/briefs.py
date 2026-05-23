@@ -145,7 +145,7 @@ async def generate_founder_brief(lead_id: str, request: Request, current_user: d
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
     except Exception:
-        raise HTTPException(400, "Invalid lead id")
+        raise HTTPException(404, "Lead not found")
     if not lead:
         raise HTTPException(404, "Lead not found")
     lead["id"] = str(lead["_id"])
@@ -226,7 +226,7 @@ async def aria_read(lead_id: str, request: Request, current_user: dict = Depends
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
     except Exception:
-        raise HTTPException(400, "Invalid lead id")
+        raise HTTPException(404, "Lead not found")
     if not lead:
         raise HTTPException(404, "Lead not found")
     lead["id"] = str(lead["_id"]); lead.pop("_id", None)

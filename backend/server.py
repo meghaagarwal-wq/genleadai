@@ -3723,7 +3723,7 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "first_name": 1, "email": 1, "phone": 1, "campaign_id": 1})
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid lead id")
+        raise HTTPException(status_code=404, detail="Lead not found")
     if not lead or not lead.get("email"):
         raise HTTPException(status_code=404, detail="Lead not found or missing email")
 
@@ -4288,7 +4288,7 @@ async def best_time_to_call_for_lead(lead_id: str, current_user: dict = Depends(
             {"_id": 0, "first_name": 1, "last_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1},
         )
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid lead id")
+        raise HTTPException(status_code=404, detail="Lead not found")
     if not lead_doc:
         raise HTTPException(status_code=404, detail="Lead not found")
     lead_doc["id"] = lead_id

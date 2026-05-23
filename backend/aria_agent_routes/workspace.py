@@ -145,7 +145,7 @@ async def workspace_story_card(lead_id: str, current_user: dict = Depends(get_cu
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
     except Exception:
-        raise HTTPException(400, "Invalid lead id")
+        raise HTTPException(404, "Lead not found")
     if not lead:
         raise HTTPException(404, "Lead not found")
     lead["id"] = str(lead["_id"]); lead.pop("_id", None)
@@ -318,7 +318,7 @@ async def ask_aria_reply(lead_id: str, payload: AskReplyPayload, request: Reques
     try:
         lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
     except Exception:
-        raise HTTPException(400, "Invalid lead id")
+        raise HTTPException(404, "Lead not found")
     if not lead:
         raise HTTPException(404, "Lead not found")
     lead["id"] = str(lead["_id"]); lead.pop("_id", None)
