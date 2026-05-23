@@ -1,6 +1,36 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 82–83 (Bug fixes from user screenshots + Pietential wiring)
+- **AI Setup publish robustness**: `/api/aria/auto-map/publish` wrapped with
+  catch-all so unexpected 500s become structured detail; per-touchpoint
+  Pydantic failures drop individually instead of failing the whole publish.
+- **Friendly provider errors**: Saleshandy returns its auth failures as 400s
+  with `{"type":"auth","code":1001,"message":"Invalid token"}` JSON. We now
+  detect that pattern inside both `routes/outreach_import._saleshandy_list_sequences`
+  AND `integrations_routes.SalesHandyClient._req`, and emit:
+  > "Saleshandy rejected the API key. Double-check you copied the FULL key
+  > from Saleshandy → Settings → API and that it hasn't been revoked."
+  Lemlist gets symmetric treatment for 401/403.
+- **SalesHandyClient SDK drift fixed**: switched from deprecated
+  `POST /v1/sequences/get-list` (404 since Saleshandy migrated) to canonical
+  `GET /v1/sequences`. Eliminates a raw-JSON leak path.
+- **Pietential write access**: `_can_write` + `_is_admin` now include
+  `master_admin` and `owner` so GenLeadAI operators can manage every client
+  workspace (was a 403 blocker on POST `/api/pt/integrations` and the
+  `/test` endpoint).
+- **Pietential test integration is now real**: `POST /api/pt/integrations/{name}/test`
+  does a live Saleshandy/Lemlist API handshake (via lazy import of the
+  outreach_import helpers). Failures set `pt_integrations.status = needs_setup`
+  with `error_log` so the FE can prompt reconnect.
+- **SaaS UI cleanup**:
+  • Removed `CURRENT PLAN / ARIA Starter / UPGRADE` block from main sidebar.
+  • Removed all `BETA` badges (Pietential dashboard, login, public layout,
+    Aria Command Room).
+- **Tests**: 27/27 backend pass (18 iter82 + 9 iter83 acceptance).
+
+
+
 ## 2026-02 — Iter 81 (S10 Regression Sweep + 400→404 ObjectId consistency)
 - **400 → 404 consistency** on six endpoints that previously returned 400 for
   invalid ObjectId format. They now uniformly return `404 Lead not found`:

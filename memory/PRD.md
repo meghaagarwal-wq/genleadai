@@ -1,3 +1,68 @@
+## Iter 82–83 — Bug Fixes from User Screenshots + Pietential Wiring (Feb 2026)
+
+### Reported issues (from user screenshots)
+1. Saleshandy modal showed raw `{"error":true,"type":"auth","code":1001,"message":"Invalid token"}` JSON instead of a friendly message.
+2. AI Setup Assistant "Publish Workflow" returned generic `Publish failed` toast on Pietential's complex GTM doc.
+3. Sidebar still displayed `CURRENT PLAN / ARIA Starter / UPGRADE` chip (SaaS UI leftover).
+4. `BETA` badge still visible on Pietential dashboard, login page, public layout, and Aria command room.
+
+### What landed
+
+**Backend**
+- `routes/aria_auto_map.py::publish` — wrapped the entire handler in a
+  catch-all that converts unexpected 500s into a structured 500 with detail
+  message. Per-touchpoint Pydantic instantiation now drops invalid touchpoints
+  individually instead of failing the whole publish.
+- `integrations_routes.py::SalesHandyClient.list_sequences` — switched from
+  the deprecated `POST /v1/sequences/get-list` (returns 404) to the canonical
+  `GET /v1/sequences`. Inner `_req` now detects auth-in-400-body Saleshandy
+  responses and emits a clean "Saleshandy rejected the API key" message
+  instead of leaking the raw provider JSON. New `_humanise_provider_error`
+  helper covers auth, rate-limit, forbidden, and server-error cases.
+- `routes/outreach_import.py::_saleshandy_list_sequences` — same auth-in-400
+  detection (Saleshandy returns 400 with `{"type":"auth","code":1001}` body).
+  `_lemlist_list_campaigns` likewise returns friendly auth messages.
+- `routes/pietential.py::test_integration` — now does a **real handshake**
+  against Saleshandy / Lemlist when their key is saved (was previously a fake
+  mark-as-connected). Status is set to `needs_setup` with `error_log` on
+  failure so the Manage modal can prompt reconnect.
+- `routes/pietential.py::_can_write` and `_is_admin` — added `master_admin`
+  and `owner` to the allow-list so the GenLeadAI operator can manage every
+  client workspace.
+
+**Frontend**
+- `components/Layout.js` — removed the entire `CURRENT PLAN / ARIA Starter /
+  UPGRADE` button block from the sidebar footer.
+- `pages/AISetupAssistant.js::handlePublish` — error display now surfaces
+  string, validation array, or object details (8s duration toast) instead of
+  swallowing them as "Publish failed".
+- `pietential/PtLayout.js` — removed inline `Beta` chip from brand.
+- `public/PublicLayout.js`, `pages/Login.js`, `components/AriaCommandRoom.js`
+  — `BETA` chips removed across the app.
+- `pietential/pages/PtIntegrations.js::test` — surfaces the backend success
+  message (e.g. "Connection verified — 5 sequences reachable") and shows
+  the friendly error toast with 8s duration on failure.
+
+### Tests
+- `backend/tests/test_iter82_publish_and_humanised_errors.py` — 18 tests
+  covering publish robustness (empty / valid / mixed / all-invalid TPs),
+  humanised auth-error path on 3 endpoint families, no raw-JSON leak.
+- `backend/tests/test_iter83_saleshandy_leak_and_rate_limit.py` — 9 tests
+  confirming master_admin write access to `/api/pt/*`, no raw JSON leak via
+  `/api/integrations/test/saleshandy` + `/api/integrations/sequences/saleshandy`
+  with a fake key, plus light regression on publish + pt overview + rate limit.
+- **Result: 27/27 backend tests PASS** in iter83.
+
+### Not in scope (yet)
+- Building end-to-end Pietential email-send flow (needs Pietential's own
+  Resend/SMTP key + journey publish + test send). Tracked as P1 for next
+  iteration.
+- Refactoring `pietential.py` style issues (56 ruff warnings, all
+  pre-existing).
+
+---
+
+
 ## Iter 80 — S9.5 Security Sweep COMPLETE (Feb 2026)
 
 ### What landed
