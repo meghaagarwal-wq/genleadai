@@ -1,6 +1,27 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 81 (S10 Regression Sweep + 400→404 ObjectId consistency)
+- **400 → 404 consistency** on six endpoints that previously returned 400 for
+  invalid ObjectId format. They now uniformly return `404 Lead not found`:
+  • `POST /api/aria-agent/founder-brief/{lead_id}`
+  • `GET  /api/aria-agent/aria-read/{lead_id}`
+  • `POST /api/aria-agent/workspace/ask-reply/{lead_id}`
+  • `GET  /api/aria-agent/workspace/story-card/{lead_id}`
+  • `POST /api/leads/{lead_id}/send-lead-magnet`
+  • `GET  /api/aria/best-time-to-call/{lead_id}`
+  Matches the existing `DELETE /api/leads/{lead_id}` pattern (already 404) so
+  attackers can't probe id-format vs id-existence.
+- **S10 full regression sweep**: 72/72 backend tests PASS (27 new S10 + 28
+  prior iter78/79 + 17 iter80 S9.5 smoke). Zero regressions across all 11
+  transformation sections (S1–S9.5).
+- **Canonical paths captured** in PRD (corrects two iter80 doc misalignments):
+  ICP create is `/api/icps/create` with `label` field; weekly recap PDF is
+  `/api/aria-agent/weekly-recap/export.pdf`. Touchpoint pipeline 5-stage
+  Kanban renders FE-side from `day` attribute on `/api/touchpoints/map`.
+
+
+
 ## 2026-02 — Iter 80 (S9.5 Security Sweep COMPLETE)
 - **Rate limiting via slowapi** — completed wiring across all sensitive endpoints:
   • `POST /api/auth/login` — 10/min per IP (already shipped in iter79)

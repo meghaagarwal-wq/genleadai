@@ -50,7 +50,48 @@ migrations.
 - Refactor `_ai_founder_brief()` complexity 56 → smaller helpers (P2).
 - Replace hardcoded secrets in `tests/` (P2).
 - Replace `is` with `==` in test assertions (~305 instances) (P3).
-- Align invalid-ObjectId responses to 404 (consistency, non-exploitable).
+
+---
+
+## Iter 81 — S10 Regression Sweep + 400→404 ObjectId Consistency (Feb 2026)
+
+### What landed
+**400 → 404 consistency** on 6 endpoints (invalid ObjectId previously returned 400,
+which leaked an "id-shape" signal and contradicted REST convention). Now all six
+return `404 Lead not found`:
+- `POST /api/aria-agent/founder-brief/{lead_id}`
+- `GET  /api/aria-agent/aria-read/{lead_id}`
+- `POST /api/aria-agent/workspace/ask-reply/{lead_id}`
+- `GET  /api/aria-agent/workspace/story-card/{lead_id}`
+- `POST /api/leads/{lead_id}/send-lead-magnet`
+- `GET  /api/aria/best-time-to-call/{lead_id}`
+
+### S10 regression sweep
+- **72/72 backend tests PASS** (27 new S10 + 28 prior iter78/79 regression + 17
+  iter80 S9.5 smoke). Zero regressions across all 11 transformation sections.
+- New test file: `/app/backend/tests/test_iter81_s10_regression.py`
+
+### Canonical endpoint paths (corrects iter80 PRD)
+- ICP create: `POST /api/icps/create` (payload requires `label`, optional
+  `icp_campaign_id`).
+- Weekly recap PDF: `GET /api/aria-agent/weekly-recap/export.pdf` (returns
+  `application/pdf` with valid `%PDF` magic bytes and a `Content-Disposition`
+  download header).
+- Touchpoint pipeline: `GET /api/touchpoints/map` returns touchpoints with a
+  `day` attribute. The 5-stage Kanban (awareness / engagement / consideration /
+  decision / retention) is rendered FE-side by grouping `day` ranges; no
+  dedicated `/journey/move` endpoint — FE patches the touchpoint's `day`
+  through `POST /api/touchpoints/map`.
+- Master admin grid: `GET /api/admin/deployments/list` is canonical (an alias
+  exists at `GET /api/admin/deployments`).
+
+### Known minor (not blocking)
+- `GET /api/audit-log` currently allows non-master-admin to read (possibly
+  scoped data). If the spec wants hard-403 for non-master-admin, add an
+  explicit role gate. Tracked for next iteration.
+- `GET /api/billing/upgrade-prompt` still exists with no hard block — kept
+  for legacy FE compatibility; consider removing in the next SaaS-cleanup
+  pass.
 
 ---
 
