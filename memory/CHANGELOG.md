@@ -1,5 +1,47 @@
 # ARIA / GenLeadAI — Changelog
 
+
+## 2026-02 — Iter 80 (S9.5 Security Sweep COMPLETE)
+- **Rate limiting via slowapi** — completed wiring across all sensitive endpoints:
+  • `POST /api/auth/login` — 10/min per IP (already shipped in iter79)
+  • `POST /api/aria-agent/founder-brief/{lead_id}` — 10/min (LLM-heavy)
+  • `GET  /api/aria-agent/aria-read/{lead_id}` — 20/min
+  • `POST /api/aria-agent/workspace/ask-reply/{lead_id}` — 30/min
+  • All return `429 Too Many Requests` after the threshold; verified via the
+    testing agent against the k8s preview URL.
+- **`security/limiter.py` hardened**:
+  • Custom `_client_key` reads `X-Forwarded-For` so the *actual* client IP is
+    rate-limited through the k8s ingress (the default `get_remote_address`
+    returns the proxy IP, which collapses every user into one bucket).
+  • Switched `headers_enabled=True → False` to bypass slowapi's
+    response-header injection (it raises when endpoints return a `dict` rather
+    than a `Response`, which was a 500 regression on the new limits).
+- **Prompt-injection sanitiser (`security/helpers.py`)**:
+  • Expanded `_INJECTION_PATTERNS` to catch `<system>/<assistant>/<user>` tags
+    AND any of `ignore|disregard|forget … (all|the|your|previous|prior|earlier|above)? (instructions|prompts|directives|rules|context)`.
+  • Applied to `ask-reply` user_note and to lead-metadata fields in
+    `founder-brief` (notes/need/pain/objection).
+- **NoSQL-injection guards**:
+  • `/api/broadcasts` + `/api/broadcasts/preview` — wrap user-controlled
+    `request.filters` with `safe_filter_value()` so any `$where / $ne / $regex`
+    operator keys are stripped before being merged into the Mongo query.
+  • `/api/leads?search=…` + `/api/conversations/threads?search=…` — wrap with
+    `safe_query_param()` + `re.escape()` so regex meta-chars can't trigger
+    ReDoS or smuggle Mongo operators.
+- **Fernet encryption** (existing in iter79) verified end-to-end via unit
+  tests — idempotent encrypt, graceful decrypt of legacy plaintext, masked
+  display via `mask_key()`.
+- **Tests**:
+  • New `/app/backend/tests/test_iter80_s95_security.py` — 13 unit tests
+    covering sanitiser, NoSQL guard, encryption.
+  • Testing agent added `/app/backend/tests/test_iter80_s95_integration.py`
+    — 20 integration tests against the live preview URL.
+  • **Result: 67/67 backend tests PASS** (33 S9.5 + 34 prior regression).
+- Known minor (non-exploitable, REST consistency only): invalid-ObjectId on
+  `/founder-brief/{id}` and `/aria-read/{id}` returns 400 instead of 404. Matches
+  the iter78 note for `DELETE /api/leads/{id}`. Tracked, not blocking.
+
+
 ## 2026-02 — Iter 79 (S8 + S6 enhancement + S4 enhancement + S9.5 focused slice)
 - **S8 — Master Admin Deployments tab** *(largest item in this iter)*:
   • New `/api/admin/deployments` router with `GET /` (rollup + grid),

@@ -1,3 +1,60 @@
+## Iter 80 — S9.5 Security Sweep COMPLETE (Feb 2026)
+
+### What landed
+**`backend/security/limiter.py`** — Shared slowapi `Limiter` with a custom
+`_client_key` that prefers `X-Forwarded-For` (k8s ingress). `headers_enabled=False`
+to avoid slowapi's dict-response 500 regression.
+
+**`backend/security/helpers.py`** — Three production-grade helpers:
+1. `sanitise_for_prompt(text, max_len=4000)` — strips `<system>`, `<assistant>`,
+   `<user>` tags + variants of "ignore/disregard/forget … previous/prior/all
+   instructions/prompts/directives/rules/context" + `###NEW INSTRUCTIONS` +
+   `[[SYSTEM]]`. Replaces matches with `[redacted-tag]` so Claude still sees
+   user intent but cannot be issued a forged role-tag instruction.
+2. `safe_filter_value(v)` — recursively strips Mongo `$`-prefixed operator
+   keys from any dict / list / scalar. Used on user-controlled filter dicts
+   before they enter `find()` / `update()`.
+3. `safe_query_param(s, max_len=256)` — coerces to string, caps length, strips
+   leading `$` so a query value can never act as an operator if accidentally
+   spread.
+
+**`backend/security/encryption.py`** — Fernet (AES-128-CBC + HMAC) for stored
+secrets. Idempotent `encrypt()` (already-encrypted values pass through),
+graceful `decrypt()` of legacy plaintext, `enc::` prefix marker for safe
+migrations.
+
+### Endpoints rate-limited
+| Endpoint                                                      | Limit       |
+|---------------------------------------------------------------|-------------|
+| `POST /api/auth/login`                                        | 10/min/IP   |
+| `POST /api/aria-agent/founder-brief/{lead_id}`                | 10/min/IP   |
+| `GET  /api/aria-agent/aria-read/{lead_id}`                    | 20/min/IP   |
+| `POST /api/aria-agent/workspace/ask-reply/{lead_id}`          | 30/min/IP   |
+
+### Endpoints NoSQL-guarded
+| Endpoint                                                      | Guard                                |
+|---------------------------------------------------------------|---------------------------------------|
+| `POST /api/broadcasts`                                        | `safe_filter_value(request.filters)`  |
+| `POST /api/broadcasts/preview`                                | `safe_filter_value(request.filters)`  |
+| `GET  /api/leads?search=…`                                    | `re.escape(safe_query_param(search))` |
+| `GET  /api/conversations/threads?search=…`                    | `re.escape(safe_query_param(search))` |
+
+### Tests
+- `/app/backend/tests/test_iter80_s95_security.py` — 13 unit tests, all pass.
+- `/app/backend/tests/test_iter80_s95_integration.py` — 20 live tests, all pass
+  (added by testing agent).
+- **Total: 67/67 backend tests PASS** (33 S9.5 + 34 prior regression).
+
+### Out of scope (tracked for later)
+- Refactor `server.py` import bloat → `routes/__init__.py` aggregator (P2).
+- Refactor `_ai_founder_brief()` complexity 56 → smaller helpers (P2).
+- Replace hardcoded secrets in `tests/` (P2).
+- Replace `is` with `==` in test assertions (~305 instances) (P3).
+- Align invalid-ObjectId responses to 404 (consistency, non-exploitable).
+
+---
+
+
 ## Iter 72 — AI Setup Assistant: strict-extraction prompt + safety guard (Feb 2026)
 
 ### Reported bug
