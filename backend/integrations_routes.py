@@ -89,17 +89,32 @@ class SalesHandyClient:
         async with httpx.AsyncClient(timeout=30) as c:
             r = await c.request(method, f"{self.BASE}{path}", headers=self.headers, **kw)
             if r.status_code >= 400:
-                raise HTTPException(r.status_code, f"SalesHandy: {r.text[:200]}")
+                # iter82 — detect Saleshandy's auth-in-400 quirk and emit a clean
+                # detail instead of dumping their raw JSON. The outer caller
+                # (_humanise_provider_error) still gets first dibs, but this is
+                # the inner safety net.
+                body_low = (r.text or "").lower()
+                if (
+                    r.status_code in (401, 403)
+                    or "\"type\":\"auth\"" in body_low
+                    or "invalid token" in body_low
+                    or "invalid api key" in body_low
+                ):
+                    raise HTTPException(400, "Saleshandy rejected the API key (auth). Paste a fresh key from Saleshandy → Settings → API.")
+                raise HTTPException(r.status_code, f"Saleshandy returned {r.status_code}.")
             return r.json() if r.content else {}
 
     async def list_sequences(self) -> List[Dict]:
-        # SalesHandy v1 lists sequences via POST with filter — fall back to GET if available.
-        try:
-            data = await self._req("GET", "/sequences?limit=200")
-        except HTTPException:
-            data = await self._req("POST", "/sequences/get-list", json={"limit": 200, "page": 1})
+        # iter82 — Saleshandy migrated to GET /v1/sequences with no params
+        # (POST /sequences/get-list is deprecated and returns 404). Match the
+        # canonical implementation in routes/outreach_import.py to keep both
+        # call paths in sync.
+        data = await self._req("GET", "/sequences")
         if isinstance(data, dict):
-            return data.get("data", {}).get("data") or data.get("data") or []
+            items = (data.get("data") or {}).get("sequences") if isinstance(data.get("data"), dict) else None
+            if items is None:
+                items = data.get("sequences") or data.get("data") or []
+            return items if isinstance(items, list) else []
         return data or []
 
     async def add_prospect(self, sequence_id: str, lead: Dict) -> Dict:

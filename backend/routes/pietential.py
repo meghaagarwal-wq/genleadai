@@ -159,11 +159,17 @@ def _role_of(user: dict) -> str:
 
 
 def _is_admin(user: dict) -> bool:
-    return _role_of(user) in ("admin",)
+    return _role_of(user) in ("admin", "master_admin", "owner")
 
 
 def _can_write(user: dict) -> bool:
-    return _role_of(user) in ("admin", "content_vista", "pietential_owner", "sales_rep")
+    # iter82 — master_admin (GenLeadAI operator) and tenant owner can always
+    # write to the Pietential workspace. This unblocks the AI Setup +
+    # integration test handshake flows.
+    return _role_of(user) in (
+        "admin", "master_admin", "owner",
+        "content_vista", "pietential_owner", "sales_rep",
+    )
 
 
 def _require_write(user: dict):
