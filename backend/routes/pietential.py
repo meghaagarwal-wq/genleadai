@@ -1244,29 +1244,37 @@ async def test_integration(name: str, current_user: dict = Depends(get_current_u
     return {"ok": True, "tested_at": _now_iso(), "found": found, "handshake": handshake_done, "message": msg}
 
 
-# ─── Email config + test send (iter84) ────────────────────────────────────
+# ─── Email config + test send (iter84-85) ──────────────────────────────
 class EmailConfigPayload(BaseModel):
     """Optional per-workspace email sender config. Falls back to global
     SENDER_EMAIL when not set."""
     from_name: Optional[str] = None
     from_address: Optional[EmailStr] = None
     resend_api_key: Optional[str] = None       # leave blank to keep existing
+    signature_html: Optional[str] = None       # iter85 — auto-appended to every send
 
 
 class TestSendPayload(BaseModel):
     to: EmailStr
     subject: Optional[str] = "ARIA test send — your workspace can deliver mail"
     body: Optional[str] = None                  # HTML body; defaults to a polite test message
+    attachment_file_id: Optional[str] = None    # iter85 — file_id from /api/lead-magnets/upload
+    include_signature: bool = True              # iter85 — let founder preview signature toggle
 
 
 def _get_email_config() -> Dict[str, Any]:
     """Read the workspace's email sender config from pt_integrations.
-    Returns dict with from_name, from_address, resend_api_key (decrypted)."""
+    Returns dict with from_name, from_address, resend_api_key (decrypted),
+    signature_html.
+    """
     integ = integrations_col.find_one({"name": "email"}) or {}
     return {
         "from_name": integ.get("from_name") or "",
         "from_address": integ.get("from_address") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev",
         "resend_api_key": _dec(integ.get("api_key") or "") or os.environ.get("RESEND_API_KEY") or "",
+        "signature_html": integ.get("signature_html") or "",
+        "_has_workspace_key": bool(integ.get("api_key")),
+        "_has_workspace_signature": bool(integ.get("signature_html")),
     }
 
 
@@ -1278,7 +1286,9 @@ async def get_email_config(current_user: dict = Depends(get_current_user)):
         "from_name": cfg["from_name"],
         "from_address": cfg["from_address"],
         "resend_api_key_masked": _mask_key(cfg["resend_api_key"]) if cfg["resend_api_key"] else None,
-        "using_global_fallback": not bool((integrations_col.find_one({"name": "email"}) or {}).get("api_key")),
+        "signature_html": cfg["signature_html"],
+        "using_global_fallback": not cfg["_has_workspace_key"],
+        "using_workspace_signature": cfg["_has_workspace_signature"],
     }
 
 
@@ -1290,6 +1300,8 @@ async def save_email_config(payload: EmailConfigPayload, current_user: dict = De
 
     iter84 — gated to workspace-admin only (sales_rep can't rotate the
     workspace's Resend key).
+    iter85 — also persists signature_html; after save, kicks off a live
+    handshake against Resend so the FE can show ✓ Connected immediately.
     """
     _require_admin_workspace(current_user)
     update: Dict[str, Any] = {"name": "email", "updated_at": _now_iso()}
@@ -1299,33 +1311,38 @@ async def save_email_config(payload: EmailConfigPayload, current_user: dict = De
         update["from_address"] = payload.from_address
     if payload.resend_api_key:
         update["api_key"] = _enc(payload.resend_api_key)
+    if payload.signature_html is not None:
+        update["signature_html"] = payload.signature_html
     integrations_col.update_one({"name": "email"}, {"$set": update}, upsert=True)
-    return {"ok": True, "saved_at": update["updated_at"]}
+
+    # iter85 — auto-handshake (verify the key still works before we leave
+    # the founder thinking it's saved & live). Uses the freshly-resolved key.
+    from routes.pt_email import verify_resend_handshake
+    cfg = _get_email_config()
+    handshake = await verify_resend_handshake(cfg["resend_api_key"])
+    return {
+        "ok": True,
+        "saved_at": update["updated_at"],
+        "handshake": handshake,
+    }
 
 
 @router.post("/email/test-send")
 async def test_send_email(payload: TestSendPayload, current_user: dict = Depends(get_current_user)):
     """Send a real test email so the founder confirms their sender is wired
     correctly before going live. Uses the workspace's Resend key + from_address
-    if configured; otherwise falls back to the platform default.
+    + signature + optional lead-magnet attachment.
 
     iter84 — gated to workspace-admin only (sales_rep can't trigger
     outbound emails using the workspace's Resend key).
+    iter85 — supports signature_html + attachment_file_id (lead magnet).
     """
     _require_admin_workspace(current_user)
-    cfg = _get_email_config()
-    if not cfg["resend_api_key"]:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No Resend API key available. Paste one in Settings → Email Sender, "
-                "or ask the platform admin to set RESEND_API_KEY."
-            ),
-        )
-    from_addr = cfg["from_address"]
-    from_name = (cfg["from_name"] or "ARIA").strip()
-    from_field = f"{from_name} <{from_addr}>" if from_addr and from_name else from_addr
+    from routes.pt_email import send_workspace_email, humanise_resend_error
+    from server import UPLOADS_DIR  # lazy import to avoid circular import at module load
 
+    cfg = _get_email_config()
+    from_name = (cfg["from_name"] or "ARIA").strip()
     html = payload.body or (
         f"<div style='font-family:-apple-system,Inter,sans-serif;max-width:540px;margin:0 auto;padding:24px;background:#FAFAFA;border-radius:12px;'>"
         f"<p style='color:#7C35DC;font-weight:700;letter-spacing:0.18em;font-size:11px;text-transform:uppercase;margin:0 0 8px;'>ARIA — Test send</p>"
@@ -1341,41 +1358,34 @@ async def test_send_email(payload: TestSendPayload, current_user: dict = Depends
     )
 
     try:
-        import resend as _resend
-        _resend.api_key = cfg["resend_api_key"]
-        result = await asyncio.to_thread(_resend.Emails.send, {
-            "from": from_field,
-            "to": [payload.to],
-            "subject": payload.subject or "ARIA test send",
-            "html": html,
-        })
-        _log("email_test_send", f"Test email sent to {payload.to}", "info", to=payload.to, from_field=from_field)
+        result = await send_workspace_email(
+            to=payload.to,
+            subject=payload.subject or "ARIA test send",
+            html_body=html,
+            attachment_file_ids=[payload.attachment_file_id] if payload.attachment_file_id else None,
+            uploads_dir=UPLOADS_DIR,
+            append_signature=payload.include_signature,
+        )
+        _log(
+            "email_test_send",
+            f"Test email sent to {payload.to} (signature={'on' if result.get('signature_appended') else 'off'}, attachments={result.get('attachments_count',0)})",
+            "info",
+            to=payload.to,
+            from_field=result.get("from"),
+        )
         return {
-            "ok": True,
-            "to": payload.to,
-            "from": from_field,
-            "provider_id": (result or {}).get("id") if isinstance(result, dict) else None,
-            "message": f"Test email sent to {payload.to}. Check the inbox in a few seconds.",
+            **result,
+            "message": (
+                f"Test email sent to {payload.to}. Check the inbox in a few seconds."
+                + (f" Attachment: included." if result.get("attachments_count") else "")
+                + (f" Signature: appended." if result.get("signature_appended") else "")
+            ),
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        msg = str(e)[:240]
-        _log("email_test_send", f"Test send FAILED: {msg}", "error", to=payload.to)
-        # Resend-specific error patterns
-        low = msg.lower()
-        if "you can only send testing emails to your own email" in low or "verify a domain at resend.com/domains" in low:
-            raise HTTPException(
-                400,
-                (
-                    "Resend is in sandbox mode for this account — it only delivers to your verified "
-                    "account email. Verify a sending domain at resend.com/domains and set the from_address "
-                    "to that domain (e.g. john@yourdomain.com) to send to anyone."
-                ),
-            )
-        if "domain" in low and ("not verified" in low or "unverified" in low):
-            raise HTTPException(400, "The from_address domain is not verified in Resend. Verify it in Resend → Domains, then retry.")
-        if "api key" in low or "unauthorized" in low or "401" in low:
-            raise HTTPException(400, "Resend rejected the API key. Paste a fresh key from Resend → API Keys and retry.")
-        raise HTTPException(502, f"Could not send test email: {msg}")
+        _log("email_test_send", f"Test send FAILED: {str(e)[:240]}", "error", to=payload.to)
+        raise humanise_resend_error(e)
 
 
 
