@@ -946,7 +946,7 @@ async def execute_aria_action(lead_id: str, action: str, action_data: dict, mess
             convo_summary = "\n".join([f"[{m['role']}]: {m['content'][:100]}" for m in convo[-5:]])
             params = {
                 "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
-                "to": ["admin@demo.com"],
+                "to": [os.getenv("MASTER_ADMIN_EMAIL", "admin@demo.com")],
                 "subject": f"ARIA Handoff: {lead.get('first_name', '')} {lead.get('last_name', '')} needs human attention",
                 "html": f"<h2>Lead Escalated by ARIA</h2><p><b>Lead:</b> {lead.get('first_name')} {lead.get('last_name')}</p><p><b>Email:</b> {lead.get('email')}</p><p><b>ICP Score:</b> {lead.get('icp_score')}</p><h3>Recent Conversation:</h3><pre>{convo_summary}</pre>"
             }
@@ -2030,7 +2030,7 @@ Source: {lead.get('source_channel', 'unknown')}"""
     try:
         params = {
             "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
-            "to": ["admin@demo.com"],
+            "to": [os.getenv("MASTER_ADMIN_EMAIL", "admin@demo.com")],
             "subject": f"Pre-call brief: {lead.get('first_name')} {lead.get('last_name')} — {lead.get('company_name', 'N/A')}",
             "html": email_html,
         }
@@ -2318,7 +2318,7 @@ async def get_weekly_summary(current_user: dict = Depends(get_current_user)):
 </div></div>"""
         params = {
             "from": os.getenv("SENDER_EMAIL", "onboarding@resend.dev"),
-            "to": ["admin@demo.com"],
+            "to": [os.getenv("MASTER_ADMIN_EMAIL", "admin@demo.com")],
             "subject": f"Weekly Sales Summary — {founder}",
             "html": html,
         }
