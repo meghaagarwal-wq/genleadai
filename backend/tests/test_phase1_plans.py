@@ -5,11 +5,9 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 SALES_EMAIL = "sarah@demo.com"
-SALES_PASSWORD = "Demo1234!"
-
-
+SALES_PASSWORD = os.environ.get("TEST_SALES_PASSWORD", "Demo1234!")
 def _login(email: str, password: str) -> str:
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": email, "password": password}, timeout=15)
     assert r.status_code == 200, f"login failed for {email}: {r.status_code} {r.text}"

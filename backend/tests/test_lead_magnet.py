@@ -6,7 +6,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PWD = "Demo1234!"
+ADMIN_PWD = os.environ.get("TEST_ADMIN_PWD", "Demo1234!")
 EXISTING_LEAD_ID = "69e081b5cd724a3d376691c4"
 
 

@@ -10,10 +10,9 @@ from pymongo import MongoClient
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASS = "Demo1234!"
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASS", "Demo1234!")
 SALES_EMAIL = "sarah@demo.com"
-SALES_PASS = "Demo1234!"
-
+SALES_PASS = os.environ.get("TEST_SALES_PASS", "Demo1234!")
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.environ.get("DB_NAME", "genleadai_lms")
 _mc = MongoClient(MONGO_URL)

@@ -21,9 +21,7 @@ MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.environ.get("DB_NAME", "genleadai_lms")
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
-
-
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 @pytest.fixture(scope="module")
 def session():
     s = requests.Session()

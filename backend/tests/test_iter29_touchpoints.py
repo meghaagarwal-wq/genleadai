@@ -10,7 +10,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 DEMO_EMAIL = "admin@demo.com"
-DEMO_PASSWORD = "Demo1234!"
+DEMO_PASSWORD = os.environ.get("TEST_DEMO_PASSWORD", "Demo1234!")
 DEMO_TENANT = "ten_demo"
 
 EXPECTED_TEMPLATES = {

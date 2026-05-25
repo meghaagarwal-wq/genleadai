@@ -24,9 +24,9 @@ if not _BURL:
 BASE_URL = (_BURL or "").rstrip("/")
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 REP_EMAIL = "sarah@demo.com"
-REP_PASSWORD = "Demo1234!"
+REP_PASSWORD = os.environ.get("TEST_REP_PASSWORD", "Demo1234!")
 TENANT_ID = "ten_demo"
 
 

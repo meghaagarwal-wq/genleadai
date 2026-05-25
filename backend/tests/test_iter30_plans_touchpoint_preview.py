@@ -28,9 +28,7 @@ BASE_URL = _load_backend_url()
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
-
-
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 # ─── Auth helpers ───────────────────────────────────────────────────────────
 def _login(email: str, password: str) -> dict:
     r = requests.post(f"{API}/auth/login", json={"email": email, "password": password}, timeout=15)

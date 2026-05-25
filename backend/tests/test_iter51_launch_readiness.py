@@ -7,9 +7,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASS = "Demo1234!"
-
-
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASS", "Demo1234!")
 # ---------- shared fixtures ----------
 @pytest.fixture(scope="module")
 def client():

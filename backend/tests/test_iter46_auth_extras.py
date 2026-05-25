@@ -18,9 +18,7 @@ MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "genleadai_lms"
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PWD = "Demo1234!"
-
-
+ADMIN_PWD = os.environ.get("TEST_ADMIN_PWD", "Demo1234!")
 # ─── Fixtures ────────────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def db():
@@ -117,7 +115,7 @@ class TestResetHappyPath:
         assert upd.matched_count == 1
 
         # 3. POST reset with new password
-        new_pwd = "NewPass123!"
+        new_pwd = "NewPass123!"  # noqa: S105 — local test password, not a secret
         r = api.post(
             f"{BASE_URL}/api/auth/password/reset",
             json={"email": ADMIN_EMAIL, "code": known_code, "new_password": new_pwd},

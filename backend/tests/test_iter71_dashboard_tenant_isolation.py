@@ -10,9 +10,7 @@ import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
-
-
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 def _login(email, password):
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": email, "password": password}, timeout=20)
     if r.status_code != 200:
@@ -38,7 +36,7 @@ def fresh_user():
     """Signup a brand new tenant via /api/auth/signup."""
     uid = uuid.uuid4().hex[:10]
     email = f"TEST_iter71_{uid}@example.com"
-    password = "Demo1234!"
+    password = "Demo1234!"  # noqa: S105 — signup test fixture, not a real secret
     payload = {"email": email, "password": password, "full_name": "Iter71 Test", "workspace_name": f"Iter71 Co {uid}"}
     r = requests.post(f"{BASE_URL}/api/auth/signup", json=payload, timeout=30)
     if r.status_code not in (200, 201):

@@ -23,7 +23,7 @@ def _read_frontend_env():
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or _read_frontend_env() or "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL not configured"
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASS = "Demo1234!"
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASS", "Demo1234!")
 TENANT_ID = "ten_demo"
 
 

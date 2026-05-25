@@ -34,50 +34,21 @@ from deps import (
     verify_password, get_password_hash, create_access_token, get_current_user,
     serialize_doc,
 )
-# Modular routers
-from routes.auth import router as auth_router
-from routes.auth_extras import router as auth_extras_router
-from routes.contact import router as contact_router, admin_router as contact_admin_router
-from routes.user_profile import router as user_profile_router
-from routes.meta import router as meta_router
-from routes.campaigns import router as campaigns_router
-from routes.ai import router as ai_router
-from routes.analytics import router as analytics_router
-from routes.beta_feedback import router as beta_feedback_router
-from routes.pietential import router as pietential_router, register_pietential_startup
-from routes.tenants import router as tenants_router
-from routes.billing import router as billing_router, webhook_router as stripe_webhook_router
-from routes.touchpoints import router as touchpoints_router
-from routes.touchpoint_preview import router as touchpoint_preview_router
-from routes.touchpoint_engine import router as touchpoint_engine_router, engine_loop, instantiate_for_lead, pause_lead, cancel_lead
-from routes.billing_plans import router as billing_plans_router
-from routes.compliance import router as compliance_router, is_stop_keyword, opt_out_phone, auto_opt_in_on_inbound
-from routes.contacts import router as contacts_router
-from routes.classification import router as classification_router, classify_inbound
-from routes.aria_confidence import router as aria_confidence_router
-from routes.admin_revenue import router as admin_revenue_router, invoice_router as admin_invoice_router
-from routes.admin_deployments import router as admin_deployments_router
-from routes.crm_sync import router as crm_sync_router, fire_event as crm_fire_event, crm_sync_loop
-from routes.audit_log import router as audit_log_router, admin_router as admin_workspaces_router, admin_audit_router, audit_write
-from routes.data_deletion import router as data_deletion_router
-from routes.reports import router as reports_router
-from routes.lead_capture import router as lead_capture_router, public_router as lead_capture_public_router, widget_public_router as lead_capture_widget_public_router
-from routes.integrations_hub import router as integrations_hub_router, public_router as integrations_hub_public_router, fire_lifecycle_event
-from routes.conversations import router as conversations_router
-from routes.notifications import router as notifications_router
-from routes.icps import router as icps_router
-from routes.outreach import router as outreach_router, outreach_engine_loop, handle_inbound_reply as outreach_handle_reply
-from routes.aria_auto_map import router as aria_auto_map_router
-from routes.billing_upgrade import router as billing_upgrade_router
-from routes.billing_profile import router as billing_profile_router
-from routes.integrations_catalog import router as integrations_catalog_router
-from routes.sales_channels import router as sales_channels_router
-from routes.simulate_inbound import router as simulate_inbound_router
-from routes.outreach_import import router as outreach_import_router
+# Modular routers — registered via routes/__init__.py blueprint aggregator (iter91)
+from routes import register_all_routes
+# Non-router symbols still needed in server.py (background loops, helpers, startup hooks)
+from routes.pietential import register_pietential_startup
+from routes.touchpoint_engine import (
+    engine_loop, instantiate_for_lead, pause_lead, cancel_lead,
+)
+from routes.compliance import is_stop_keyword, opt_out_phone, auto_opt_in_on_inbound
+from routes.classification import classify_inbound
+from routes.crm_sync import fire_event as crm_fire_event, crm_sync_loop
+from routes.audit_log import audit_write
+from routes.integrations_hub import fire_lifecycle_event
+from routes.outreach import outreach_engine_loop, handle_inbound_reply as outreach_handle_reply
 from routes.retention import retention_loop
 from routes.health_engine import (
-    router as health_router,
-    failed_router as failed_messages_router,
     stale_lead_loop as health_stale_loop,
     classify_sentiment as health_classify_sentiment,
 )
@@ -100,56 +71,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register modular routers
-app.include_router(auth_router)
-app.include_router(auth_extras_router)
-app.include_router(contact_router)
-app.include_router(contact_admin_router)
-app.include_router(user_profile_router)
-app.include_router(meta_router)
-app.include_router(campaigns_router)
-app.include_router(ai_router)
-app.include_router(analytics_router)
-app.include_router(beta_feedback_router)
-app.include_router(pietential_router)
-app.include_router(tenants_router)
-app.include_router(billing_router)
-app.include_router(stripe_webhook_router)
-app.include_router(touchpoints_router)
-app.include_router(touchpoint_preview_router)
-app.include_router(touchpoint_engine_router)
-app.include_router(billing_plans_router)
-app.include_router(compliance_router)
-app.include_router(contacts_router)
-app.include_router(classification_router)
-app.include_router(aria_confidence_router)
-app.include_router(admin_revenue_router)
-app.include_router(admin_deployments_router)
-app.include_router(admin_invoice_router)
-app.include_router(crm_sync_router)
-app.include_router(audit_log_router)
-app.include_router(admin_workspaces_router)
-app.include_router(admin_audit_router)
-app.include_router(data_deletion_router)
-app.include_router(reports_router)
-app.include_router(lead_capture_router)
-app.include_router(lead_capture_public_router)
-app.include_router(lead_capture_widget_public_router)
-app.include_router(integrations_hub_router)
-app.include_router(integrations_hub_public_router)
-app.include_router(outreach_import_router)
-app.include_router(conversations_router)
-app.include_router(notifications_router)
-app.include_router(icps_router)
-app.include_router(outreach_router)
-app.include_router(aria_auto_map_router)
-app.include_router(billing_upgrade_router)
-app.include_router(billing_profile_router)
-app.include_router(integrations_catalog_router)
-app.include_router(sales_channels_router)
-app.include_router(simulate_inbound_router)
-app.include_router(health_router)
-app.include_router(failed_messages_router)
+# Register modular routers — single entry point (iter91 — blueprint aggregator)
+register_all_routes(app)
 
 # Rate limiter — applied to sensitive auth & webhook endpoints
 limiter = limiter  # imported shared instance

@@ -35,7 +35,7 @@ BASE_URL = _load_backend_url()
 assert BASE_URL, "REACT_APP_BACKEND_URL not set"
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 SALES_EMAIL = "sarah@demo.com"
 
 

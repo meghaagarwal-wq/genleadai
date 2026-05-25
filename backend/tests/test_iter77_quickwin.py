@@ -21,8 +21,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", ".en
 API_URL = os.getenv("REACT_APP_BACKEND_URL")
 assert API_URL, "REACT_APP_BACKEND_URL must be set in frontend/.env"
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
-
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 mongo_client = MongoClient(os.environ["MONGO_URL"])
 db = mongo_client[os.environ["DB_NAME"]]
 

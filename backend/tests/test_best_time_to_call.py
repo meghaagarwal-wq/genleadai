@@ -18,8 +18,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://pipeline-pro-96.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PWD = "Demo1234!"
-
+ADMIN_PWD = os.environ.get("TEST_ADMIN_PWD", "Demo1234!")
 # Seed leads referenced by main agent
 LEAD_WITH_RECENT_BROCHURE = "69e081b5cd724a3d376691c4"   # 4 brochure views, one within last hour
 LEAD_QUINN_HIGH_ICP = "69df5f8410ff1b6e41ead225"         # ICP 93, no brochure opens

@@ -18,9 +18,7 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or \
            "https://pipeline-pro-96.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "Demo1234!"
-
-
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Demo1234!")
 @pytest.fixture(scope="session")
 def api():
     s = requests.Session()
