@@ -1,3 +1,54 @@
+## Iter 89 — Pull Leads from Lemlist (Feb 2026)
+
+### What landed
+**Backend — `routes/pietential.py`**
+- `POST /api/pt/integrations/lemlist/pull-leads` (NEW, workspace-admin only).
+  Fetches campaigns from Lemlist (max 5 by default), then per-campaign leads
+  (max 25 each). Returns a per-campaign breakdown: `{imported, skipped,
+  fetched, campaign_id, campaign_name}` plus `total_imported`, total
+  `campaigns_available` (82 for Pietential).
+- Tenant-stamped (`_stamp_tenant`) so leads show up under the
+  `ten_pietential` filter. Dedupe by `(tenant_id, email)`.
+- Updates `pt_integrations.last_sync_at + status='connected'` so the
+  integration card reflects the fresh sync.
+
+**Backend — `routes/outreach_import.py`**
+- `_lemlist_resolve_contacts(api_key, contact_ids)` (NEW). Lemlist's
+  `/campaigns/{id}/leads` endpoint returns only `{_id, state, contactId}`
+  in 2026 — name/email/title/company live in a separate `/contacts`
+  collection. The resolver batches up to 50 ids per call against
+  `GET /api/contacts?idsOrEmails=<csv>` and returns `{contactId:
+  contact_doc}`. The pull endpoint merges these into each lead row.
+
+**Frontend — `pietential/pages/PtOverview.js`**
+- New `Pull leads from Lemlist` button next to `Replay demo flow` in the
+  page header. Confirm dialog explains the import scope (5 campaigns × 25
+  leads, dedupe automatic). Success toast shows
+  `Imported N new lead(s) from M Lemlist campaign(s) · K skipped (dedupe)`.
+
+**Frontend — `pietential/PtLayout.js`**
+- `useEffect` now writes the synchronous fallback FIRST (immediately) so
+  the `X-Tenant-Id` header is set before any child route's data fetch.
+  Then refines with the full tenant object from `/api/tenants/me` async.
+
+### Verification (real data, live API)
+- 10 real Lemlist leads pulled from Pietential's workspace across 2
+  campaigns (AWA/PER + Email Only - SMB), all CHROs/VPs of Human
+  Resources. Lead Feed page now renders them with the correct source
+  ("Lemlist"), latest-signal showing the actual email engagement state
+  (`emailsSent`, `emailsOpened`, `emailsUnsubscribed`, `emailsBounced`).
+- 82 total campaigns reachable on the Pietential Lemlist workspace.
+- Dedupe works: pulling the same campaigns twice produced `skipped=20`
+  on the second pass.
+
+### Tests
+- No new automated test file (this is a UI-driven feature with safety
+  caps; tests would require mocking the Lemlist contacts endpoint which
+  is brittle). Verified via live preview against the real Lemlist key.
+
+---
+
+
 ## Iter 88 — Real Pietential Integrations + Full P1 Backlog (Feb 2026)
 
 ### Pietential live with real keys

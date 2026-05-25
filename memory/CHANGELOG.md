@@ -1,6 +1,23 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 89 (One-click Lemlist lead import)
+- **`POST /api/pt/integrations/lemlist/pull-leads`**: fetches campaigns →
+  leads → contacts from Lemlist's API, maps to `pt_leads` with tenant
+  stamping + email dedupe. Per-campaign breakdown returned.
+- **`_lemlist_resolve_contacts`**: new helper resolves Lemlist's
+  thin-lead-record shape `{_id, state, contactId}` against the
+  `/api/contacts` collection (batched up to 50 ids/call).
+- **`Pull leads from Lemlist` button** on Pietential Overview.
+- **Sync-write `active_tenant` localStorage on PtLayout mount**: prevents
+  child routes from firing fetches before the tenant id is pinned (was
+  causing Lead Feed to render empty even though data was present).
+- **Live verification**: 10 real Pietential leads (HR director persona)
+  imported across 2 of their 82 Lemlist campaigns; Lead Feed page
+  renders them with engagement state in latest-signal column.
+
+
+
 ## 2026-02 — Iter 88 (Pietential live integrations + full P1 backlog)
 - **Real Saleshandy + Lemlist connected for Pietential**: keys saved
   encrypted in `pt_integrations`, both handshakes verified (Lemlist: 82

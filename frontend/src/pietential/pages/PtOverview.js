@@ -21,6 +21,7 @@ const PtOverview = () => {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState(false);
+  const [pulling, setPulling] = useState(false);
 
   const load = () => {
     ptApi.get('/api/pt/overview').then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
@@ -39,6 +40,19 @@ const PtOverview = () => {
     finally { setReplaying(false); }
   };
 
+  const pullFromLemlist = async () => {
+    if (!window.confirm('Pull leads from Lemlist now? Fetches up to 5 campaigns × 25 leads each from your connected Lemlist workspace. Duplicates are skipped automatically.')) return;
+    setPulling(true);
+    try {
+      const r = await ptApi.post('/api/pt/integrations/lemlist/pull-leads', { max_campaigns: 5, max_per_campaign: 25 });
+      const d = r.data;
+      toast.success(`Imported ${d.imported} new lead(s) from ${d.campaigns_processed} Lemlist campaign(s)${d.skipped ? ` · ${d.skipped} skipped (dedupe)` : ''}`, { duration: 6000 });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Lemlist pull failed', { duration: 8000 });
+    } finally { setPulling(false); }
+  };
+
   if (loading) return <div className="text-sm text-[#64748B]">Loading…</div>;
   const m = data?.metrics || {};
   const c = data?.connections || {};
@@ -49,10 +63,16 @@ const PtOverview = () => {
         title="Overview"
         subtitle={data?.last_updated_at ? `Last activity ${fmtDateTime(data.last_updated_at)}` : 'Live engagement intelligence layer'}
         right={
-          <button onClick={replayDemo} disabled={replaying} data-testid="pt-replay-demo-btn"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#7C35DC' }}>
-            <Lightning size={14} weight="fill" /> {replaying ? 'Replaying…' : 'Replay demo flow'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={pullFromLemlist} disabled={pulling} data-testid="pt-pull-lemlist-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold border border-[#7C35DC] text-[#7C35DC] hover:bg-[#7C35DC]/8 disabled:opacity-50">
+              <Download size={14} weight="fill" /> {pulling ? 'Pulling…' : 'Pull leads from Lemlist'}
+            </button>
+            <button onClick={replayDemo} disabled={replaying} data-testid="pt-replay-demo-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#7C35DC' }}>
+              <Lightning size={14} weight="fill" /> {replaying ? 'Replaying…' : 'Replay demo flow'}
+            </button>
+          </div>
         }
       />
 

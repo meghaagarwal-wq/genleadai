@@ -318,6 +318,39 @@ async def _lemlist_list_leads(api_key: str, campaign_id: str) -> List[dict]:
     return out
 
 
+async def _lemlist_resolve_contacts(api_key: str, contact_ids: List[str]) -> Dict[str, dict]:
+    """iter89 — Lemlist's `/campaigns/{id}/leads` only returns
+    `{_id, state, contactId}`. To get email/firstName/etc we have to hit
+    `GET /api/contacts?idsOrEmails=<csv>` (max ~100 ids per call). Returns
+    a `{contact_id: contact_doc}` mapping.
+    """
+    if not contact_ids:
+        return {}
+    out: Dict[str, dict] = {}
+    async with httpx.AsyncClient(timeout=25) as client:
+        chunk = 50
+        for i in range(0, len(contact_ids), chunk):
+            ids = ",".join(contact_ids[i:i+chunk])
+            try:
+                r = await client.get(
+                    f"{LEMLIST_BASE}/contacts",
+                    headers=_lemlist_headers(api_key),
+                    params={"idsOrEmails": ids},
+                )
+                if r.status_code != 200:
+                    continue
+                data = r.json()
+                if not isinstance(data, list):
+                    continue
+                for c in data:
+                    cid = c.get("_id") or c.get("id")
+                    if cid:
+                        out[cid] = c
+            except Exception:
+                continue
+    return out
+
+
 def _lemlist_normalize(lead: dict, camp: dict) -> dict:
     return {
         "first_name": lead.get("firstName") or lead.get("first_name") or "Lead",

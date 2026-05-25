@@ -1171,6 +1171,207 @@ async def list_integrations(current_user: dict = Depends(get_current_user)):
     return {"primary": primary, "future": future}
 
 
+# ─── Pull leads from Lemlist (iter89) ───────────────────────────────────
+class LemlistPullPayload(BaseModel):
+    campaign_ids: Optional[List[str]] = None       # if None, pulls from first 5 campaigns
+    max_campaigns: int = 5                          # safety cap
+    max_per_campaign: int = 50                      # safety cap (don't drain the workspace on first click)
+
+
+@router.post("/integrations/lemlist/pull-leads")
+async def pull_leads_from_lemlist(payload: LemlistPullPayload, current_user: dict = Depends(get_current_user)):
+    """One-click lead import from Lemlist.
+
+    Fetches campaigns (up to `max_campaigns`), then leads per campaign
+    (up to `max_per_campaign`), maps to the Pietential lead schema, and
+    upserts into `pt_leads`. Returns a per-campaign breakdown so the
+    founder can see exactly what came in.
+    """
+    _require_admin_workspace(current_user)
+    integ = integrations_col.find_one({"name": "lemlist"}) or {}
+    key = _dec(integ.get("api_key") or "") if integ.get("api_key") else ""
+    if not key:
+        raise HTTPException(400, "Lemlist not connected — paste an API key in Integrations first.")
+
+    from routes.outreach_import import _lemlist_list_campaigns, _lemlist_list_leads, _lemlist_resolve_contacts
+    try:
+        all_campaigns = await _lemlist_list_campaigns(key)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach Lemlist: {str(e)[:160]}")
+
+    # Filter to requested campaigns (or take the first N)
+    if payload.campaign_ids:
+        wanted = [c for c in all_campaigns if (c.get("_id") or c.get("id")) in payload.campaign_ids]
+    else:
+        wanted = all_campaigns[: max(1, min(payload.max_campaigns, 25))]
+
+    if not wanted:
+        return {
+            "ok": True,
+            "imported": 0,
+            "skipped": 0,
+            "campaigns_processed": 0,
+            "total_campaigns_available": len(all_campaigns),
+            "per_campaign": [],
+            "message": "No matching campaigns found in your Lemlist workspace.",
+        }
+
+    total_imported = 0
+    total_skipped = 0
+    per_campaign: List[Dict[str, Any]] = []
+
+    for camp in wanted:
+        camp_id = camp.get("_id") or camp.get("id")
+        camp_name = camp.get("name") or "Untitled"
+        if not camp_id:
+            continue
+        try:
+            leads_raw = await _lemlist_list_leads(key, camp_id)
+        except HTTPException as e:
+            per_campaign.append({
+                "campaign_id": camp_id, "campaign_name": camp_name,
+                "fetched": 0, "imported": 0, "skipped": 0,
+                "error": str(e.detail)[:160],
+            })
+            continue
+        except Exception as e:
+            per_campaign.append({
+                "campaign_id": camp_id, "campaign_name": camp_name,
+                "fetched": 0, "imported": 0, "skipped": 0,
+                "error": f"Unexpected error: {str(e)[:160]}",
+            })
+            continue
+
+        slice_size = max(1, min(payload.max_per_campaign, 200))
+        leads_slice = leads_raw[:slice_size]
+
+        # iter89 — Lemlist's campaign-leads endpoint returns LIGHT records:
+        # {_id, state, contactId}. Resolve the contacts to get email/name/etc.
+        contact_ids = [
+            (ll.get("contactId") or ll.get("contact_id"))
+            for ll in leads_slice
+            if (ll.get("contactId") or ll.get("contact_id"))
+        ]
+        contact_lookup = await _lemlist_resolve_contacts(key, contact_ids)
+
+        imported_here = 0
+        skipped_here = 0
+
+        for ll in leads_slice:
+            cid = ll.get("contactId") or ll.get("contact_id")
+            contact = contact_lookup.get(cid, {}) if cid else {}
+            # The campaign-lead row sometimes has email directly (legacy plans);
+            # newer plans require the /contacts lookup. Try both.
+            email = (
+                (ll.get("email") or "")
+                or (contact.get("email") or "")
+            ).lower().strip()
+            if not email:
+                skipped_here += 1
+                continue
+            existing = leads_col.find_one(
+                {"email": email, **_tf(current_user)}, {"_id": 0, "id": 1}
+            )
+            if existing:
+                skipped_here += 1  # dedupe — already have this lead
+                continue
+            fields = contact.get("fields") or {}
+            full_name = contact.get("fullName") or ""
+            first_name = (
+                ll.get("firstName") or ll.get("first_name")
+                or fields.get("firstName") or contact.get("firstName")
+                or (full_name.split(" ", 1)[0] if full_name else "")
+            )
+            last_name = (
+                ll.get("lastName") or ll.get("last_name")
+                or fields.get("lastName") or contact.get("lastName")
+                or (full_name.split(" ", 1)[1] if " " in full_name else "")
+            )
+            new_lead = {
+                "id": _new_id("ptl"),
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+                "company_name": (
+                    ll.get("companyName") or ll.get("company")
+                    or fields.get("companyName") or contact.get("companyName")
+                ),
+                "title": (
+                    ll.get("jobTitle") or ll.get("title")
+                    or fields.get("jobTitle") or contact.get("jobTitle")
+                ),
+                "linkedin_url": (
+                    ll.get("linkedinUrl") or ll.get("linkedin_url")
+                    or fields.get("linkedinUrl") or contact.get("linkedinUrl")
+                ),
+                "phone": ll.get("phone") or fields.get("phone") or contact.get("phone"),
+                "source": "lemlist",
+                "source_campaign_id": camp_id,
+                "source_campaign_name": camp_name,
+                "industry": (
+                    ll.get("companyIndustry") or ll.get("industry")
+                    or fields.get("companyIndustry") or contact.get("industry")
+                ),
+                "employee_count": ll.get("companySize") or fields.get("companySize"),
+                "geography": ll.get("country") or fields.get("country") or contact.get("country"),
+                "icp_fit": None,
+                "score": 0,
+                "stage": "cold",
+                "latest_signal": f"Imported from Lemlist · {camp_name} ({ll.get('state','—')})",
+                "automation_status": "active",
+                "owner": current_user.get("name") or current_user.get("email") or "Workspace",
+                "last_activity_at": _now_iso(),
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "_lemlist_raw": {
+                    "lead_state": ll.get("state"),
+                    "contact_id": cid,
+                    "first_contacted": fields.get("firstContactedDate"),
+                    "last_contacted": fields.get("lastContactedDate"),
+                },
+            }
+            _stamp_tenant(new_lead, current_user)
+            leads_col.insert_one(new_lead)
+            imported_here += 1
+
+        total_imported += imported_here
+        total_skipped += skipped_here
+        per_campaign.append({
+            "campaign_id": camp_id,
+            "campaign_name": camp_name,
+            "fetched": len(leads_raw),
+            "imported": imported_here,
+            "skipped": skipped_here,
+        })
+
+    # Update integration last-sync timestamp so the connection card shows fresh state
+    integrations_col.update_one(
+        {"name": "lemlist"},
+        {"$set": {"last_sync_at": _now_iso(), "status": "connected"}},
+    )
+    _log("lemlist_pull_leads",
+         f"Pulled {total_imported} new leads from Lemlist across {len(per_campaign)} campaign(s).",
+         "info",
+         imported=total_imported, skipped=total_skipped)
+
+    return {
+        "ok": True,
+        "imported": total_imported,
+        "skipped": total_skipped,
+        "campaigns_processed": len(per_campaign),
+        "total_campaigns_available": len(all_campaigns),
+        "per_campaign": per_campaign,
+        "message": (
+            f"Imported {total_imported} new lead(s) from {len(per_campaign)} Lemlist campaign(s)."
+            + (f" {total_skipped} already in your workspace (skipped)." if total_skipped else "")
+        ),
+    }
+
+
+
+
 @router.get("/setup/health")
 async def setup_health(current_user: dict = Depends(get_current_user)):
     """iter86 — Pietential workspace setup completeness check.

@@ -59,30 +59,29 @@ const PtLayout = ({ children }) => {
   const navigate = useNavigate();
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  // iter87 — pin the active tenant to ten_pietential whenever we're inside /pt.
-  // Without this, the main app's AriaWorkspaceSwitcher (only mounts when the
-  // user steps OUT of /pt) writes its own tenant id to localStorage, and the
-  // Pietential dashboard silently starts returning the wrong tenant's data
-  // when the user comes back. Fetching from /api/tenants/me first to grab the
-  // full tenant object (label, etc.) so the legacy switcher still renders
-  // correctly if the user ever leaves.
+  // iter87-89 — pin the active tenant to ten_pietential whenever we're
+  // inside /pt. Done SYNCHRONOUSLY first so the X-Tenant-Id header is set
+  // before any child page fires its initial fetch.
   useEffect(() => {
     let cancelled = false;
+    // Step 1 — synchronous fallback (always runs immediately).
+    try {
+      const stored = JSON.parse(localStorage.getItem('active_tenant') || 'null');
+      if (stored?.id !== 'ten_pietential') {
+        localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
+      }
+    } catch (e) {
+      localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
+    }
+    // Step 2 — async upgrade with the full tenant object from the server.
     (async () => {
       try {
-        const stored = JSON.parse(localStorage.getItem('active_tenant') || 'null');
-        if (stored?.id === 'ten_pietential') return;
         const r = await api.get('/api/tenants/me');
         if (cancelled) return;
         const pietential = (r.data?.tenants || []).find(t => t.id === 'ten_pietential');
-        if (pietential) {
-          localStorage.setItem('active_tenant', JSON.stringify(pietential));
-        } else {
-          // fallback — still set the id so the X-Tenant-Id header is correct.
-          localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
-        }
+        if (pietential) localStorage.setItem('active_tenant', JSON.stringify(pietential));
       } catch (e) {
-        localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
+        // already wrote the synchronous fallback above
       }
     })();
     return () => { cancelled = true; };
