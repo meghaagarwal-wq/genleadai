@@ -1,3 +1,50 @@
+## Iter 87 — Fix /ai-setup Redirect + Dashboard State Loss (Feb 2026)
+
+### Bug reported
+Clicking the Pietential sidebar "AI Setup" link dropped the user into the
+main app's `/ai-setup` route (full layout swap from Pietential → GenLeadAI
+chrome), AND when navigating back to `/pt`, the Pietential dashboard
+silently broke (no leads, no integrations, no metrics).
+
+### Root cause
+Two issues stacked:
+1. `/ai-setup` route lived OUTSIDE the `/pt/*` mount, so visiting it
+   unmounted `PtLayout` and mounted the main `Layout`.
+2. The main `Layout` hosts `AriaWorkspaceSwitcher`, whose `useEffect`
+   fetches `/api/tenants/me` and — if `active_tenant` is empty in
+   localStorage — auto-sets it to `list[0]` (the user's first tenant,
+   typically `ten_demo`, NOT `ten_pietential`). On return to `/pt`, every
+   subsequent `ptApi.get(...)` call sent `X-Tenant-Id: ten_demo`, so the
+   backend returned demo-tenant data (empty for Pietential collections).
+
+### Fix
+- Mounted `<AISetupAssistant />` inside the `/pt/*` route tree at
+  `/pt/ai-setup`. The Pietential sidebar stays visible; the AI Setup
+  wizard renders in the same chrome.
+- Updated `PtLayout.js` nav entry from `/ai-setup` → `/pt/ai-setup`.
+- Updated `/api/pt/setup/health` CTA `cta_path` values from `/ai-setup` →
+  `/pt/ai-setup` for the lead-magnet + touchpoints items.
+- Added an `useEffect` to `PtLayout` that PINS
+  `localStorage['active_tenant']` to `ten_pietential` on mount (fetches
+  the full tenant object from `/api/tenants/me` for label fidelity, falls
+  back to a minimal `{id, name}` if the request fails). This is the
+  long-term safety net: even if the user leaves /pt and the main app's
+  switcher mutates the tenant id, returning to /pt restores it.
+
+### Verification (screenshots)
+- `/pt/ai-setup` now renders AI Setup wizard inside the Pietential sidebar
+  with "AI Setup" highlighted.
+- After navigating away to AI Setup and back, the Pietential dashboard
+  still loads 3 engaged leads, 1 email click, 1 LL DM, 1 warm lead, etc.
+  (verified live).
+
+### Tests
+- No new backend test (frontend-only routing change + localStorage write).
+- Manual verification via Playwright screenshot pair confirmed.
+
+---
+
+
 ## Iter 86 — Setup Health + Multi-Attachment + Workspace Identity in Lead-Magnet Sends (Feb 2026)
 
 ### What landed

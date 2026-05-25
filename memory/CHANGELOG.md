@@ -1,6 +1,21 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 87 (Fix AI Setup redirect breaking Pietential dashboard)
+- **Mounted `/ai-setup` inside `/pt`**: route is now `/pt/ai-setup`, so the
+  Pietential sidebar stays visible and the layout never swaps to the main
+  GenLeadAI chrome.
+- **`PtLayout` now pins `active_tenant=ten_pietential` on mount**: prevents
+  the main app's `AriaWorkspaceSwitcher` (which only mounts when the user
+  leaves /pt) from silently rewriting localStorage to the demo tenant.
+  Without this, every Pietential API call sent `X-Tenant-Id: ten_demo`
+  after a single visit to the main app — dashboard appeared "broken" with
+  zero data even though the backend was fine.
+- **Setup Health CTA paths** updated to `/pt/ai-setup` so the inline
+  fix-it links stay inside the Pietential workspace.
+
+
+
 ## 2026-02 — Iter 86 (Setup health + multi-attach + workspace identity in lead-magnet sends)
 - **New `GET /api/pt/setup/health`** — 5-bullet workspace completeness check
   (email sender, Saleshandy, Lemlist, lead magnet, touchpoints) with

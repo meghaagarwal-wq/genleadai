@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
@@ -5,11 +6,12 @@ import {
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
+import api from '../config/api';
 
 const NAV = [
   { to: '/pt',                  label: 'Overview',       icon: Gauge },
   { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
-  { to: '/ai-setup',            label: 'AI Setup',       icon: Sparkle, external: true },
+  { to: '/pt/ai-setup',         label: 'AI Setup',       icon: Sparkle },
   { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
   { to: '/pt/lemlist',          label: 'Lemlist',        icon: LinkedinLogo },
   { to: '/pt/campaigns',        label: 'Campaigns',      icon: Megaphone },
@@ -56,6 +58,35 @@ const PtLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const handleLogout = () => { logout(); navigate('/login'); };
+
+  // iter87 — pin the active tenant to ten_pietential whenever we're inside /pt.
+  // Without this, the main app's AriaWorkspaceSwitcher (only mounts when the
+  // user steps OUT of /pt) writes its own tenant id to localStorage, and the
+  // Pietential dashboard silently starts returning the wrong tenant's data
+  // when the user comes back. Fetching from /api/tenants/me first to grab the
+  // full tenant object (label, etc.) so the legacy switcher still renders
+  // correctly if the user ever leaves.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem('active_tenant') || 'null');
+        if (stored?.id === 'ten_pietential') return;
+        const r = await api.get('/api/tenants/me');
+        if (cancelled) return;
+        const pietential = (r.data?.tenants || []).find(t => t.id === 'ten_pietential');
+        if (pietential) {
+          localStorage.setItem('active_tenant', JSON.stringify(pietential));
+        } else {
+          // fallback — still set the id so the X-Tenant-Id header is correct.
+          localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
+        }
+      } catch (e) {
+        localStorage.setItem('active_tenant', JSON.stringify({ id: 'ten_pietential', name: 'Pietential' }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex">

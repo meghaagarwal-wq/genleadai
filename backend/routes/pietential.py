@@ -1243,7 +1243,7 @@ async def setup_health(current_user: dict = Depends(get_current_user)):
             if magnet_ok else "Optional. Upload a 2-pager Aria can attach to first emails."
         ),
         "cta": "AI Setup → Lead magnet",
-        "cta_path": "/ai-setup",
+        "cta_path": "/pt/ai-setup",
     })
 
     # 5. Touchpoint journey published
@@ -1254,7 +1254,7 @@ async def setup_health(current_user: dict = Depends(get_current_user)):
         "status": "ok" if tp_count > 0 else "fail",
         "detail": f"{tp_count} step(s) published." if tp_count else "Empty — run AI Setup against your GTM doc to seed the journey.",
         "cta": "AI Setup → Touchpoints",
-        "cta_path": "/ai-setup",
+        "cta_path": "/pt/ai-setup",
     })
 
     score = sum(1 for it in items if it["status"] == "ok")

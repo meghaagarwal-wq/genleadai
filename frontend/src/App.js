@@ -60,6 +60,7 @@ import { Privacy, Terms, DPA } from './pages/legal/Legal';
 // Pietential workspace
 import PtLayout from './pietential/PtLayout';
 import PtOverview from './pietential/pages/PtOverview';
+
 import PtLeadFeed from './pietential/pages/PtLeadFeed';
 import PtLeadDetail from './pietential/pages/PtLeadDetail';
 import PtAccounts from './pietential/pages/PtAccounts';
@@ -188,6 +189,7 @@ function App() {
                     <PtLayout>
                       <Routes>
                         <Route path="/" element={<PtOverview />} />
+                        <Route path="/ai-setup" element={<AISetupAssistant />} />
                         <Route path="/leads" element={<PtLeadFeed />} />
                         <Route path="/leads/:id" element={<PtLeadDetail />} />
                         <Route path="/saleshandy" element={<PtSaleshandy />} />
