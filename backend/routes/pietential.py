@@ -1232,7 +1232,15 @@ async def setup_health(current_user: dict = Depends(get_current_user)):
     })
 
     # 4. Lead magnet
-    magnet = db["lead_magnets"].find_one({"scope": "workspace"}) or {}
+    # iter88 — tenant-scope the magnet query when the user has a tenant_id.
+    # The `lead_magnets` collection is shared across tenants (used by
+    # different deployments), so without scoping the founder could see a
+    # neighbouring tenant's magnet asset status.
+    tenant_id = current_user.get("tenant_id")
+    magnet_filter: Dict[str, Any] = {"scope": "workspace"}
+    if tenant_id:
+        magnet_filter["tenant_id"] = tenant_id
+    magnet = db["lead_magnets"].find_one(magnet_filter) or {}
     magnet_ok = bool(magnet.get("enabled") and (magnet.get("file_id") or magnet.get("url")))
     items.append({
         "id": "lead_magnet",
@@ -1247,12 +1255,21 @@ async def setup_health(current_user: dict = Depends(get_current_user)):
     })
 
     # 5. Touchpoint journey published
-    tp_count = db["touchpoints"].count_documents({"tenant_id": current_user.get("tenant_id")}) if current_user.get("tenant_id") else db["touchpoints"].count_documents({})
+    # iter88 — strictly require tenant_id. Without it, return 'fail' rather
+    # than counting all touchpoints across every tenant (misleading).
+    if tenant_id:
+        tp_count = db["touchpoints"].count_documents({"tenant_id": tenant_id})
+        tp_detail = f"{tp_count} step(s) published." if tp_count else "Empty — run AI Setup against your GTM doc to seed the journey."
+        tp_status = "ok" if tp_count > 0 else "fail"
+    else:
+        tp_count = 0
+        tp_status = "fail"
+        tp_detail = "No tenant context — log in as a workspace member to see touchpoints."
     items.append({
         "id": "touchpoints",
         "label": "Touchpoint journey",
-        "status": "ok" if tp_count > 0 else "fail",
-        "detail": f"{tp_count} step(s) published." if tp_count else "Empty — run AI Setup against your GTM doc to seed the journey.",
+        "status": tp_status,
+        "detail": tp_detail,
         "cta": "AI Setup → Touchpoints",
         "cta_path": "/pt/ai-setup",
     })

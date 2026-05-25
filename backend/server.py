@@ -938,7 +938,22 @@ async def execute_aria_action(lead_id: str, action: str, action_data: dict, mess
                     "subject": f"Hi {lead.get('first_name', 'there')} — from {company_name}",
                     "html": html_body,
                 }
-                await asyncio.to_thread(resend.Emails.send, params)
+                # iter88 — route Aria's outbound replies through the
+                # workspace-scoped helper so the founder's saved Resend key,
+                # from-address, and signature all apply automatically. Falls
+                # back to platform default sender when no workspace config.
+                try:
+                    from routes.pt_email import send_workspace_email
+                    await send_workspace_email(
+                        to=lead["email"],
+                        subject=params["subject"],
+                        html_body=html_body,
+                        uploads_dir=UPLOADS_DIR,
+                        append_signature=True,
+                    )
+                except Exception:
+                    # Platform-default fallback if workspace helper unavailable.
+                    await asyncio.to_thread(resend.Emails.send, params)
             except Exception as e:
                 print(f"Email send failed: {e}")
         
@@ -3566,6 +3581,12 @@ def _get_lead_preferred_channel(lead_id: str) -> str:
 
 
 async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: str, founder_name: str):
+    """Send a lead magnet via the workspace-scoped Resend helper.
+
+    iter88 — Returns (sent: bool, error: str | None) so callers can echo a
+    4xx (or set a different activity subject) when delivery fails, instead
+    of inserting an 'email_sent' activity row regardless of outcome.
+    """
     name = lead.get("first_name") or "there"
     template = magnet.get("message_template") or (
         f"Hi {{first_name}},\n\nQuick note before our chat — here's a short overview of how we work and recent results: {{link}}\n\nGive it 2 minutes, it'll make our call sharper.\n\n— {founder_name}"
@@ -3573,14 +3594,8 @@ async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: st
     body = template.replace("{first_name}", name).replace("{link}", tracking_url).replace("{founder}", founder_name)
     html = body.replace("\n", "<br>")
     html_body = f"<div style='font-family:Plus Jakarta Sans,Arial,sans-serif;color:#1A0A2E;line-height:1.6;'>{html}</div>"
-    # iter86 — route through the workspace-scoped helper so the founder's
-    # configured from-name/from-address/signature/attachment all apply
-    # automatically. Falls back to the platform default when the workspace
-    # has nothing configured.
     try:
         from routes.pt_email import send_workspace_email
-        # If the magnet is a file (PDF/PPTX), also attach it inline so the
-        # lead doesn't need to click through to the tracking URL.
         attachment_ids = []
         if magnet.get("type") == "file" and magnet.get("file_id"):
             attachment_ids.append(magnet["file_id"])
@@ -3592,8 +3607,15 @@ async def _send_lead_magnet_via_email(lead: dict, magnet: dict, tracking_url: st
             uploads_dir=UPLOADS_DIR,
             append_signature=True,
         )
+        return True, None
+    except HTTPException as he:
+        err = str(he.detail)[:200]
+        print(f"Lead magnet email failed (HTTP {he.status_code}): {err}")
+        return False, err
     except Exception as e:
-        print(f"Lead magnet email failed: {e}")
+        err = str(e)[:200]
+        print(f"Lead magnet email failed: {err}")
+        return False, err
 
 
 def _send_lead_magnet_via_whatsapp_message(lead: dict, magnet: dict, tracking_url: str, founder_name: str) -> str:
@@ -3648,10 +3670,14 @@ async def auto_send_lead_magnet(lead_id: str, trigger: str):
         subject = "Lead magnet sent (WhatsApp)" if wa_result.get("sent") else "Lead magnet queued (WhatsApp logged-only — configure WHATSAPP_* env)"
         body_preview = body_text
     else:
-        await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
+        sent_ok, send_err = await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
         body_preview = magnet.get("name") or "Pre-call brochure"
-        activity_type = "email_sent"
-        subject = "Lead magnet sent (Email)"
+        if sent_ok:
+            activity_type = "email_sent"
+            subject = "Lead magnet sent (Email)"
+        else:
+            activity_type = "email_failed"
+            subject = f"Lead magnet FAILED (Email): {send_err or 'unknown error'}"
 
     now_iso = datetime.now(timezone.utc).isoformat()
     activities_collection.insert_one({
@@ -3764,10 +3790,14 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
             subject = f"Lead magnet WhatsApp send failed: {wa_result.get('error')}"
         body_preview = body_text
     else:
-        await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
+        sent_ok, send_err = await _send_lead_magnet_via_email(lead, magnet, tracking_url, founder_name)
         body_preview = magnet.get("name") or "Pre-call brochure"
-        activity_type = "email_sent"
-        subject = "Lead magnet sent (Email)"
+        if sent_ok:
+            activity_type = "email_sent"
+            subject = "Lead magnet sent (Email)"
+        else:
+            activity_type = "email_failed"
+            subject = f"Lead magnet FAILED (Email): {send_err or 'unknown error'}"
 
     now_iso = datetime.now(timezone.utc).isoformat()
     activities_collection.insert_one({
@@ -3788,6 +3818,8 @@ async def send_lead_magnet_manual(lead_id: str, current_user: dict = Depends(get
         "magnet_scope": magnet.get("scope", "workspace"),
         "created_at": now_iso,
     })
+    if channel == "email" and not sent_ok:
+        raise HTTPException(status_code=502, detail=send_err or "Email delivery failed")
     return {"sent": True, "channel": channel, "tracking_url": tracking_url, "scope": magnet.get("scope", "workspace")}
 
 

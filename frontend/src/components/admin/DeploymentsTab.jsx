@@ -109,6 +109,20 @@ export default function DeploymentsTab() {
               <div className="col-span-2"><dt className="text-slate-500">Last activity</dt><dd className="text-slate-700">{d.last_activity_at ? new Date(d.last_activity_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</dd></div>
             </dl>
 
+            {/* iter88 — setup health rollup */}
+            {typeof d.setup_ready === 'number' && (
+              <div className="mt-2.5 px-2.5 py-1.5 rounded-md flex items-center gap-2" data-testid={`deployment-setup-health-${d.tenant_id}`}
+                style={{
+                  background: d.setup_live ? 'rgba(22,163,74,0.08)' : 'rgba(245,158,11,0.10)',
+                  borderLeft: `3px solid ${d.setup_live ? '#16A34A' : '#F59E0B'}`,
+                }}>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.16em]" style={{ color: d.setup_live ? '#16A34A' : '#B45309' }}>
+                  {d.setup_live ? '✓ Workspace live' : '⚠ Setup incomplete'}
+                </span>
+                <span className="ml-auto text-[10px] font-bold text-slate-600">{d.setup_ready}/{d.setup_total} ready</span>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <button
                 type="button"

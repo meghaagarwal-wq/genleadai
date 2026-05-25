@@ -7,6 +7,7 @@ the sidebar uses to render the per-workspace ARIA status indicator.
 """
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -94,6 +95,41 @@ def _deployment_card(tenant: dict) -> dict:
             return bool(b.get("connected") or b.get("api_key") or b.get("phone_number_id") or b.get("from_address"))
         return bool(b)
 
+    # iter88 — lightweight setup completeness rollup so the Master Admin
+    # grid shows "Pietential 5/5 ✓" vs "Acme 2/5 ⚠" at a glance. Mirrors the
+    # /api/pt/setup/health contract (5 items: email/saleshandy/lemlist/
+    # magnet/touchpoints) but counts only the OK ones for a quick score.
+    # Also reads from pt_integrations (Pietential workspace-scoped collection)
+    # in addition to tenant.integrations (multi-tenant deployment store) so
+    # tenants using either store get an accurate setup count.
+    setup_ready = 0
+    setup_total = 5
+
+    # iter88 — Pietential uses a single-tenant pt_integrations collection
+    # instead of tenants.integrations, so credit those keys ONLY against the
+    # Pietential card (not all 36 tenant cards).
+    is_pietential = (tid == "ten_pietential")
+
+    def _pt_integ(name: str) -> dict:
+        if not is_pietential:
+            return {}
+        return db["pt_integrations"].find_one({"name": name}) or {}
+
+    if _flag("resend") or _flag("email") or _pt_integ("email").get("api_key") or os.environ.get("RESEND_API_KEY"):
+        setup_ready += 1
+    if _flag("saleshandy") or _pt_integ("saleshandy").get("api_key"):
+        setup_ready += 1
+    if _flag("lemlist") or _pt_integ("lemlist").get("api_key"):
+        setup_ready += 1
+    magnet_filter: dict = {"scope": "workspace"}
+    if tid:
+        magnet_filter["tenant_id"] = tid
+    magnet_doc = db["lead_magnets"].find_one(magnet_filter) or {}
+    if magnet_doc.get("enabled") and (magnet_doc.get("file_id") or magnet_doc.get("url")):
+        setup_ready += 1
+    if tid and db["touchpoints"].count_documents({"tenant_id": tid}) > 0:
+        setup_ready += 1
+
     return {
         "tenant_id": tid,
         "workspace_name": tenant.get("name") or tid,
@@ -111,6 +147,10 @@ def _deployment_card(tenant: dict) -> dict:
         "paused_at": settings.get("deployment_paused_at"),
         "launched_at": settings.get("deployment_launched_at"),
         "created_at": tenant.get("created_at"),
+        # iter88 — setup health rollup
+        "setup_ready": setup_ready,
+        "setup_total": setup_total,
+        "setup_live": setup_ready >= 3,
     }
 
 

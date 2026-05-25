@@ -101,6 +101,14 @@ const PtLayout = ({ children }) => {
               <span className="text-sm font-extrabold text-[#0F172A] leading-none tracking-tight" style={{ fontFamily: 'Space Grotesk, Inter' }}>GenLeadAI Aria</span>
             </div>
             <div className="text-[10px] text-[#64748B] uppercase tracking-[0.16em] mt-0.5">Pietential Growth Intelligence</div>
+            {/* iter88 — pinned tenant indicator. Lets the founder + GenLeadAI
+                operator confirm the workspace context is correct at a glance.
+                If this ever shows the wrong tenant, the multi-tenant state
+                has drifted and the dashboard data will be wrong. */}
+            <div className="mt-1.5 inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.18em] text-[#16A34A]" data-testid="pt-tenant-pin">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]" />
+              Tenant · Pietential
+            </div>
           </div>
         </div>
 
