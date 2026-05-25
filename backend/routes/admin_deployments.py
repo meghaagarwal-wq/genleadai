@@ -115,6 +115,12 @@ def _deployment_card(tenant: dict) -> dict:
             return {}
         return db["pt_integrations"].find_one({"name": name}) or {}
 
+    # iter88 — credit the email slot when ANY working sender path exists
+    # (tenant.integrations.resend, pt_integrations.email, or the platform
+    # RESEND_API_KEY env). Keeps the Master Admin grid aligned with the
+    # founder's own /api/pt/setup/health view (both count email-deliverable
+    # workspaces as "1/5 ready", regardless of whether the key is workspace
+    # or platform-scoped).
     if _flag("resend") or _flag("email") or _pt_integ("email").get("api_key") or os.environ.get("RESEND_API_KEY"):
         setup_ready += 1
     if _flag("saleshandy") or _pt_integ("saleshandy").get("api_key"):

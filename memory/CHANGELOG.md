@@ -1,6 +1,32 @@
 # ARIA / GenLeadAI — Changelog
 
 
+## 2026-02 — Iter 88 (Pietential live integrations + full P1 backlog)
+- **Real Saleshandy + Lemlist connected for Pietential**: keys saved
+  encrypted in `pt_integrations`, both handshakes verified (Lemlist: 82
+  campaigns reachable). `/api/pt/setup/health` flips to `live: true`,
+  3/5 ready.
+- **Aria-drafted replies route through `send_workspace_email`**: founder's
+  saved Resend key + from-address + signature all apply to outbound replies.
+- **`_send_lead_magnet_via_email` returns `(sent, error)`**: both call
+  sites emit `email_failed` activity (was always `email_sent` regardless
+  of outcome). Manual endpoint raises 502 with Resend's detail.
+- **Tenant-scoped `/setup/health`**: magnet + touchpoint queries strictly
+  require `tenant_id`; no more cross-tenant leakage or inflated counts.
+- **Master Admin setup-health rollup**: each `/api/admin/deployments`
+  card now returns `setup_ready/total/live`. Pietential's `ten_pietential`
+  exclusively gets credit for `pt_integrations` keys (other tenants see
+  their own tenant.integrations only). DeploymentsTab.jsx renders a
+  green/amber chip per card.
+- **Tenant-pin indicator**: green `TENANT · PIETENTIAL` chip in the
+  Pietential sidebar (acts as both UX trust signal and early-warning if
+  multi-tenant state drifts again).
+- **Tests**: 9/9 backend PASS + 2 manual-pass, zero issues from testing
+  agent. Real Saleshandy + Lemlist + Resend handshakes all consumed
+  network round-trips successfully.
+
+
+
 ## 2026-02 — Iter 87 (Fix AI Setup redirect breaking Pietential dashboard)
 - **Mounted `/ai-setup` inside `/pt`**: route is now `/pt/ai-setup`, so the
   Pietential sidebar stays visible and the layout never swaps to the main

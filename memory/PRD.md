@@ -1,3 +1,73 @@
+## Iter 88 — Real Pietential Integrations + Full P1 Backlog (Feb 2026)
+
+### Pietential live with real keys
+- **Saleshandy** connected (workspace key in `pt_integrations.api_key`,
+  Fernet-encrypted at rest). Handshake passed; 0 sequences (none built
+  yet, but the API key is valid).
+- **Lemlist** connected. Handshake passed; **82 campaigns reachable**.
+- `/api/pt/setup/health` now flips to `live: true` with `3/5 ready` —
+  email (platform default), Saleshandy ✓, Lemlist ✓. Remaining 2:
+  lead-magnet asset (optional) + touchpoint journey (run AI Setup).
+
+### P1 backlog cleared
+
+**1. Aria-drafted reply → `send_workspace_email`**
+   `server.py:~922` now routes the SEND_EMAIL action through
+   `routes.pt_email.send_workspace_email` so the founder's saved Resend
+   key + from-name + from-address + signature all apply to Aria's outbound
+   replies. Try/except fallback to legacy `resend.Emails.send` if the
+   helper raises.
+
+**2. `_send_lead_magnet_via_email` returns `(sent, error)`**
+   Both call sites (auto-send on `post_booking`, manual
+   `POST /api/leads/{id}/send-lead-magnet`) now:
+   • Emit `activity_type='email_sent'` on success.
+   • Emit `activity_type='email_failed'` with the Resend error in subject
+     on failure.
+   • The manual endpoint raises **502** with the detail to the FE
+     instead of silently inserting a misleading success row.
+
+**3. `/setup/health` tenant-scoped**
+   Magnet + touchpoint queries now require `tenant_id`. Without it the
+   touchpoint slot returns `fail` with a clear "no tenant context" detail
+   instead of counting all touchpoints across every tenant (information
+   leak / inflated score).
+
+**4. Master Admin setup-health rollup**
+   `GET /api/admin/deployments/list` now returns `setup_ready` (int),
+   `setup_total=5`, `setup_live` (bool) on every card. Pietential's
+   `ten_pietential` is the only tenant that gets credit for the
+   `pt_integrations` Saleshandy/Lemlist keys (hardcoded gate; future:
+   `tenant.settings.uses_pt_workspace` flag). DeploymentsTab.jsx renders a
+   green `✓ Workspace live` chip or amber `⚠ Setup incomplete` chip per
+   card with the score.
+
+### Potential improvement shipped: Tenant-pin indicator
+   `PtLayout` now shows a green `TENANT · PIETENTIAL` chip below the
+   brand. Acts as both a trust signal and an early-warning system: if the
+   tenant ever silently swaps again (the bug that caused iter87), it'd
+   show up here immediately. Also pins `localStorage.active_tenant` to
+   `ten_pietential` on every `/pt/*` page mount.
+
+### Tests
+- `backend/tests/test_iter88_real_keys_setup_health_deployments.py` —
+  11 tests across 4 classes (setup-health, deployments rollup, lead-magnet
+  branches, regression).
+- **Result: 9/9 PASS + 2 SKIP** (env-dependent), 100% on executed tests,
+  zero critical/minor issues from testing agent.
+- Lead-magnet failure branch verified MANUALLY: bad recipient email →
+  502 + `email_failed` activity logged correctly.
+
+### Out of scope (next iteration)
+- Replace hardcoded `tid == "ten_pietential"` gate with
+  `tenant.settings.uses_pt_workspace` flag (so future agency clients can
+  share the same single-tenant collection style).
+- Aria-drafted reply live integration test (requires fully-seeded ICP +
+  touchpoint pipeline — not worth the test harness cost).
+
+---
+
+
 ## Iter 87 — Fix /ai-setup Redirect + Dashboard State Loss (Feb 2026)
 
 ### Bug reported
