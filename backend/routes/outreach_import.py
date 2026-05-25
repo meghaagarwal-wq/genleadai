@@ -318,6 +318,57 @@ async def _lemlist_list_leads(api_key: str, campaign_id: str) -> List[dict]:
     return out
 
 
+async def _saleshandy_list_prospects(api_key: str, limit: int = 50) -> List[dict]:
+    """iter90 — list prospects from Saleshandy. Returns the raw items;
+    each has {id, email, verificationStatus, attributes:[{id,name,value}]}
+    where `attributes` carries the standard fields (first_name, last_name,
+    company_name, job_title, ...) keyed by attribute id.
+    """
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(
+            f"{SALESHANDY_BASE}/prospects",
+            headers=_saleshandy_headers(api_key),
+        )
+        body_low = (r.text or "").lower()
+        is_auth_error = (
+            r.status_code in (401, 403)
+            or ("\"type\":\"auth\"" in body_low)
+            or ("invalid token" in body_low)
+            or ("invalid api key" in body_low)
+        )
+        if is_auth_error:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Saleshandy rejected the API key. Double-check you copied the FULL key from "
+                    "Saleshandy → Settings → API and that it hasn't been revoked."
+                ),
+            )
+        if r.status_code == 429:
+            raise HTTPException(status_code=429, detail="Saleshandy is rate-limiting this workspace. Wait 60 seconds and try again.")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Saleshandy returned {r.status_code}: {r.text[:160]}")
+        data = r.json() or {}
+        payload = data.get("payload") if isinstance(data, dict) else data
+        if not isinstance(payload, list):
+            return []
+        return payload[:limit] if limit else payload
+
+
+def _saleshandy_extract_attribute(prospect: dict, *keys: str) -> Optional[str]:
+    """Saleshandy returns custom + standard fields under a generic
+    `attributes: [{id, name, value}]` list. Look up by attribute name
+    (case-insensitive) across the supplied keys.
+    """
+    attrs = prospect.get("attributes") or []
+    keys_low = {k.lower() for k in keys}
+    for a in attrs:
+        nm = (a.get("name") or a.get("attributeName") or "").lower()
+        if nm in keys_low and a.get("value"):
+            return a.get("value")
+    return None
+
+
 async def _lemlist_resolve_contacts(api_key: str, contact_ids: List[str]) -> Dict[str, dict]:
     """iter89 — Lemlist's `/campaigns/{id}/leads` only returns
     `{_id, state, contactId}`. To get email/firstName/etc we have to hit

@@ -1171,11 +1171,12 @@ async def list_integrations(current_user: dict = Depends(get_current_user)):
     return {"primary": primary, "future": future}
 
 
-# ─── Pull leads from Lemlist (iter89) ───────────────────────────────────
+# ─── Pull leads from Lemlist (iter89-90) ────────────────────────────────
 class LemlistPullPayload(BaseModel):
     campaign_ids: Optional[List[str]] = None       # if None, pulls from first 5 campaigns
     max_campaigns: int = 5                          # safety cap
     max_per_campaign: int = 50                      # safety cap (don't drain the workspace on first click)
+    auto_score: bool = True                         # iter90 — run each lead through Aria scoring
 
 
 @router.post("/integrations/lemlist/pull-leads")
@@ -1332,6 +1333,22 @@ async def pull_leads_from_lemlist(payload: LemlistPullPayload, current_user: dic
                     "last_contacted": fields.get("lastContactedDate"),
                 },
             }
+            # iter90 — auto-score before insert so the Lead Feed lands
+            # already-prioritised. Aria (Claude Haiku) when available, else
+            # heuristic. Either way, sets `score` + `stage` + `latest_signal`.
+            if payload.auto_score:
+                from routes.pt_lead_scoring import score_lead
+                try:
+                    scored = await score_lead(new_lead, use_aria=True)
+                    new_lead["score"] = scored["score"]
+                    new_lead["stage"] = scored["stage"]
+                    new_lead["latest_signal"] = (
+                        f"Imported · {camp_name} · {scored['stage'].upper()} ({scored['score']}) — "
+                        f"{scored['why'][:80]}"
+                    )
+                    new_lead["scoring_source"] = scored["source"]
+                except Exception:
+                    pass  # keep default cold/0 on any scoring failure
             _stamp_tenant(new_lead, current_user)
             leads_col.insert_one(new_lead)
             imported_here += 1
@@ -1368,6 +1385,197 @@ async def pull_leads_from_lemlist(payload: LemlistPullPayload, current_user: dic
             + (f" {total_skipped} already in your workspace (skipped)." if total_skipped else "")
         ),
     }
+
+
+# ─── Pull leads from Saleshandy (iter90) ────────────────────────────────
+class SaleshandyPullPayload(BaseModel):
+    max_prospects: int = 50
+    auto_score: bool = True
+
+
+@router.post("/integrations/saleshandy/pull-leads")
+async def pull_leads_from_saleshandy(payload: SaleshandyPullPayload, current_user: dict = Depends(get_current_user)):
+    """One-click prospect import from Saleshandy.
+
+    Pulls up to `max_prospects` from `GET /v1/prospects`, maps the
+    Saleshandy `attributes` array to lead fields, and upserts into
+    `pt_leads` with optional Aria scoring.
+    """
+    _require_admin_workspace(current_user)
+    integ = integrations_col.find_one({"name": "saleshandy"}) or {}
+    key = _dec(integ.get("api_key") or "") if integ.get("api_key") else ""
+    if not key:
+        raise HTTPException(400, "Saleshandy not connected — paste an API key in Integrations first.")
+
+    from routes.outreach_import import _saleshandy_list_prospects, _saleshandy_extract_attribute
+    try:
+        prospects = await _saleshandy_list_prospects(key, limit=payload.max_prospects)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"Could not reach Saleshandy: {str(e)[:160]}")
+
+    if not prospects:
+        return {
+            "ok": True, "imported": 0, "skipped": 0, "scored": 0,
+            "message": "No prospects in your Saleshandy workspace yet.",
+        }
+
+    imported = 0
+    skipped = 0
+    scored = 0
+    sample: List[Dict[str, Any]] = []
+
+    for p in prospects:
+        email = (p.get("email") or "").lower().strip()
+        if not email:
+            skipped += 1
+            continue
+        existing = leads_col.find_one(
+            {"email": email, **_tf(current_user)}, {"_id": 0, "id": 1}
+        )
+        if existing:
+            skipped += 1
+            continue
+        first = _saleshandy_extract_attribute(p, "first_name", "firstName", "First Name", "first name") or ""
+        last = _saleshandy_extract_attribute(p, "last_name", "lastName", "Last Name", "last name") or ""
+        company = _saleshandy_extract_attribute(p, "company_name", "companyName", "Company", "company") or ""
+        title = _saleshandy_extract_attribute(p, "job_title", "jobTitle", "Title", "title", "designation") or ""
+        phone = _saleshandy_extract_attribute(p, "phone", "phone_number", "Phone") or ""
+        linkedin = _saleshandy_extract_attribute(p, "linkedin", "linkedin_url", "linkedinUrl") or ""
+        country = _saleshandy_extract_attribute(p, "country", "Country", "location") or ""
+
+        new_lead = {
+            "id": _new_id("ptl"),
+            "first_name": first,
+            "last_name": last,
+            "email": email,
+            "company_name": company,
+            "title": title,
+            "phone": phone,
+            "linkedin_url": linkedin,
+            "geography": country,
+            "source": "saleshandy",
+            "source_prospect_id": p.get("id"),
+            "icp_fit": None,
+            "score": 0,
+            "stage": "cold",
+            "latest_signal": "Imported from Saleshandy",
+            "automation_status": "active",
+            "owner": current_user.get("name") or current_user.get("email") or "Workspace",
+            "last_activity_at": _now_iso(),
+            "created_at": _now_iso(),
+            "updated_at": _now_iso(),
+            "_saleshandy_raw": {
+                "id": p.get("id"),
+                "createdAt": p.get("createdAt"),
+                "verificationStatus": p.get("verificationStatus"),
+            },
+        }
+        if payload.auto_score:
+            from routes.pt_lead_scoring import score_lead
+            try:
+                s = await score_lead(new_lead, use_aria=True)
+                new_lead["score"] = s["score"]
+                new_lead["stage"] = s["stage"]
+                new_lead["latest_signal"] = (
+                    f"Imported from Saleshandy · {s['stage'].upper()} ({s['score']}) — {s['why'][:80]}"
+                )
+                new_lead["scoring_source"] = s["source"]
+                scored += 1
+            except Exception:
+                pass
+        _stamp_tenant(new_lead, current_user)
+        leads_col.insert_one(new_lead)
+        imported += 1
+        if len(sample) < 5:
+            sample.append({
+                "name": f"{first} {last}".strip(),
+                "email": email,
+                "title": title,
+                "stage": new_lead.get("stage"),
+                "score": new_lead.get("score"),
+            })
+
+    integrations_col.update_one(
+        {"name": "saleshandy"},
+        {"$set": {"last_sync_at": _now_iso(), "status": "connected"}},
+    )
+    _log("saleshandy_pull_leads",
+         f"Pulled {imported} new prospects from Saleshandy ({scored} auto-scored).",
+         "info", imported=imported, skipped=skipped, scored=scored)
+    return {
+        "ok": True,
+        "imported": imported,
+        "skipped": skipped,
+        "scored": scored,
+        "total_available": len(prospects),
+        "sample": sample,
+        "message": (
+            f"Imported {imported} new prospect(s) from Saleshandy"
+            + (f", {scored} auto-scored by Aria" if scored else "")
+            + (f". {skipped} skipped (already in workspace)." if skipped else ".")
+        ),
+    }
+
+
+# ─── Retroactive lead scoring (iter90) ──────────────────────────────────
+class RescorePayload(BaseModel):
+    max_leads: int = 50
+    only_stage: Optional[str] = "cold"   # rescore cold leads by default
+    only_score_zero: bool = True          # only rescore leads with score=0
+
+
+@router.post("/leads/rescore")
+async def rescore_leads(payload: RescorePayload, current_user: dict = Depends(get_current_user)):
+    """Re-run Aria scoring against existing leads in the workspace.
+
+    Useful right after a pull when auto_score was off, or to refresh stale
+    scoring after the founder updates their ICP definition.
+    """
+    _require_admin_workspace(current_user)
+    from routes.pt_lead_scoring import score_lead
+
+    q: Dict[str, Any] = {**_tf(current_user)}
+    if payload.only_stage:
+        q["stage"] = payload.only_stage
+    if payload.only_score_zero:
+        q["$or"] = [{"score": 0}, {"score": {"$exists": False}}]
+
+    leads = list(leads_col.find(q, {"_id": 0}).limit(max(1, min(payload.max_leads, 200))))
+    if not leads:
+        return {"ok": True, "rescored": 0, "by_tier": {"hot": 0, "warm": 0, "cold": 0}, "message": "No leads matched the criteria."}
+
+    rescored = 0
+    by_tier = {"hot": 0, "warm": 0, "cold": 0}
+    for lead in leads:
+        try:
+            s = await score_lead(lead, use_aria=True)
+            leads_col.update_one(
+                {"id": lead["id"]},
+                {"$set": {
+                    "score": s["score"],
+                    "stage": s["stage"],
+                    "latest_signal": (
+                        f"Aria scored · {s['stage'].upper()} ({s['score']}) — {s['why'][:80]}"
+                    ),
+                    "scoring_source": s["source"],
+                    "rescored_at": _now_iso(),
+                }},
+            )
+            by_tier[s["stage"]] = by_tier.get(s["stage"], 0) + 1
+            rescored += 1
+        except Exception:
+            continue
+    _log("leads_rescore", f"Aria rescored {rescored} leads · hot={by_tier['hot']} warm={by_tier['warm']} cold={by_tier['cold']}", "info")
+    return {
+        "ok": True,
+        "rescored": rescored,
+        "by_tier": by_tier,
+        "message": f"Aria rescored {rescored} leads — {by_tier['hot']} hot, {by_tier['warm']} warm, {by_tier['cold']} cold.",
+    }
+
+
 
 
 

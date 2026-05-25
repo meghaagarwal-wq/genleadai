@@ -22,6 +22,8 @@ const PtOverview = () => {
   const [loading, setLoading] = useState(true);
   const [replaying, setReplaying] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [pullingSh, setPullingSh] = useState(false);
+  const [rescoring, setRescoring] = useState(false);
 
   const load = () => {
     ptApi.get('/api/pt/overview').then(r => setData(r.data)).catch(() => {}).finally(() => setLoading(false));
@@ -41,16 +43,42 @@ const PtOverview = () => {
   };
 
   const pullFromLemlist = async () => {
-    if (!window.confirm('Pull leads from Lemlist now? Fetches up to 5 campaigns × 25 leads each from your connected Lemlist workspace. Duplicates are skipped automatically.')) return;
+    if (!window.confirm('Pull leads from Lemlist now? Fetches up to 5 campaigns × 25 leads each, auto-scored by Aria. Duplicates are skipped automatically.')) return;
     setPulling(true);
     try {
-      const r = await ptApi.post('/api/pt/integrations/lemlist/pull-leads', { max_campaigns: 5, max_per_campaign: 25 });
+      const r = await ptApi.post('/api/pt/integrations/lemlist/pull-leads', { max_campaigns: 5, max_per_campaign: 25, auto_score: true });
       const d = r.data;
       toast.success(`Imported ${d.imported} new lead(s) from ${d.campaigns_processed} Lemlist campaign(s)${d.skipped ? ` · ${d.skipped} skipped (dedupe)` : ''}`, { duration: 6000 });
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Lemlist pull failed', { duration: 8000 });
     } finally { setPulling(false); }
+  };
+
+  const pullFromSaleshandy = async () => {
+    if (!window.confirm('Pull prospects from Saleshandy now? Fetches up to 50 prospects, auto-scored by Aria. Duplicates are skipped automatically.')) return;
+    setPullingSh(true);
+    try {
+      const r = await ptApi.post('/api/pt/integrations/saleshandy/pull-leads', { max_prospects: 50, auto_score: true });
+      const d = r.data;
+      toast.success(d.message || `Imported ${d.imported} new prospect(s) from Saleshandy${d.scored ? ` · ${d.scored} scored by Aria` : ''}`, { duration: 6000 });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Saleshandy pull failed', { duration: 8000 });
+    } finally { setPullingSh(false); }
+  };
+
+  const rescoreLeads = async () => {
+    if (!window.confirm('Rescore your cold leads with Aria? Aria re-evaluates each cold lead against Pietential\'s ICP (HR leadership) and promotes matches to warm/hot.')) return;
+    setRescoring(true);
+    try {
+      const r = await ptApi.post('/api/pt/leads/rescore', { max_leads: 100, only_stage: 'cold', only_score_zero: false });
+      const d = r.data;
+      toast.success(`Aria rescored ${d.rescored} leads — ${d.by_tier.hot} hot · ${d.by_tier.warm} warm · ${d.by_tier.cold} cold`, { duration: 7000 });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Rescore failed', { duration: 8000 });
+    } finally { setRescoring(false); }
   };
 
   if (loading) return <div className="text-sm text-[#64748B]">Loading…</div>;
@@ -63,14 +91,22 @@ const PtOverview = () => {
         title="Overview"
         subtitle={data?.last_updated_at ? `Last activity ${fmtDateTime(data.last_updated_at)}` : 'Live engagement intelligence layer'}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button onClick={pullFromLemlist} disabled={pulling} data-testid="pt-pull-lemlist-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold border border-[#7C35DC] text-[#7C35DC] hover:bg-[#7C35DC]/8 disabled:opacity-50">
-              <Download size={14} weight="fill" /> {pulling ? 'Pulling…' : 'Pull leads from Lemlist'}
+              <Download size={14} weight="fill" /> {pulling ? 'Pulling…' : 'Pull from Lemlist'}
+            </button>
+            <button onClick={pullFromSaleshandy} disabled={pullingSh} data-testid="pt-pull-saleshandy-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold border border-[#7C35DC] text-[#7C35DC] hover:bg-[#7C35DC]/8 disabled:opacity-50">
+              <EnvelopeOpen size={14} weight="fill" /> {pullingSh ? 'Pulling…' : 'Pull from Saleshandy'}
+            </button>
+            <button onClick={rescoreLeads} disabled={rescoring} data-testid="pt-rescore-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold border border-[#16A34A] text-[#16A34A] hover:bg-[#16A34A]/8 disabled:opacity-50">
+              <Lightning size={14} weight="fill" /> {rescoring ? 'Scoring…' : 'Aria rescore cold leads'}
             </button>
             <button onClick={replayDemo} disabled={replaying} data-testid="pt-replay-demo-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#7C35DC' }}>
-              <Lightning size={14} weight="fill" /> {replaying ? 'Replaying…' : 'Replay demo flow'}
+              <Lightning size={14} weight="fill" /> {replaying ? 'Replaying…' : 'Replay demo'}
             </button>
           </div>
         }

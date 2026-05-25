@@ -1,3 +1,75 @@
+## Iter 90 — Pietential Production Finalized (Feb 2026)
+
+### Workspace owner account
+- **Email**: megha@contentvista.com
+- **Password**: `Piet-4vRQ-lDa2-ttcO`
+- **Role**: `pietential_owner` (workspace-admin)
+- **Tenant**: `ten_pietential` (membership: owner)
+- Saved to `/app/memory/test_credentials.md`.
+
+### Saleshandy pull (mirror of Lemlist iter89)
+- `POST /api/pt/integrations/saleshandy/pull-leads` — pulls up to
+  `max_prospects` from `GET /v1/prospects`. Saleshandy nests metadata
+  inside a generic `attributes: [{id,name,value}]` array, so the helper
+  `_saleshandy_extract_attribute()` does case-insensitive name lookup
+  across common variants (`first_name|firstName|First Name`, etc).
+- Tenant-stamped, email-deduped, returns per-prospect sample preview.
+- **10 real prospects imported** on first run from Pietential's
+  Saleshandy workspace.
+
+### Aria lead scoring
+- `routes/pt_lead_scoring.py` (NEW) — two-tier scoring engine:
+  - **Aria (Claude Haiku via Emergent LLM key)** — sends a tight prompt
+    with the lead's title/company/industry/engagement and gets back
+    `{score, tier, why}`. Used by default.
+  - **Heuristic** — regex match against HOT (`CHRO`, `VP HR`, `Head of People`)
+    and WARM (`Director HR`, `Senior Mgr HR`, `Talent Director`)
+    title patterns + engagement bonus (opened +8, clicked/replied +15,
+    unsubscribed/bounced –25). Fallback when LLM is unavailable.
+- Both pull endpoints (`auto_score: bool = True`) call it before insert
+  so the Lead Feed lands already-prioritised.
+- `POST /api/pt/leads/rescore` (NEW) — retroactive endpoint to rescore
+  existing leads (filterable by `only_stage`, `only_score_zero`).
+
+### Live results
+- **23 leads** in `ten_pietential` (10 from Lemlist + 12 from Saleshandy
+  + 1 seed).
+- **7 HOT** (CHROs + VP HR), 2 WARM, 14 COLD — Aria scored every one
+  individually with a personalised `why` like:
+  > "VP of HR at target company size; perfect ICP match. Email
+  > engagement signal positive."
+  > "VP of HR at right level, but unsubscribed from emails signals low
+  > intent. Missing engagement."
+- Demoted leads with `unsubscribed` engagement automatically.
+
+### Frontend
+- `PtOverview` header gained 4 action buttons:
+  `Pull from Lemlist · Pull from Saleshandy · Aria rescore cold leads · Replay demo`.
+- Confirm-dialog on each destructive/expensive action; toast surfaces
+  the per-call breakdown (e.g. "Aria rescored 22 leads — 7 hot · 2 warm
+  · 13 cold").
+
+### Production-readiness checklist
+- ☑ Pietential owner login provisioned with strong unique password
+- ☑ Tenant membership cleaned up (single membership: ten_pietential)
+- ☑ Saleshandy + Lemlist API keys saved encrypted with live handshake
+- ☑ 23 real prospects in the lead pool, Aria-scored, prioritized
+- ☑ Email sender wired (platform default; workspace key optional)
+- ☑ Setup-health rollup at 3/5 (lead magnet + touchpoints are next)
+- ☑ Master Admin Deployments grid surfaces Pietential as `✓ Workspace live`
+- ☑ Backend regression: iter80-89 still green
+
+### Not in scope
+- The Saleshandy prospects don't have `title` populated in the
+  Pietential workspace (their attributes return empty) so all 12 scored
+  COLD via heuristic. Once Pietential enriches the Saleshandy prospects
+  (or uploads a CSV with titles), rescoring will promote them.
+- Lead-magnet upload + touchpoint journey are the last 2 setup items —
+  founder action, not blocker.
+
+---
+
+
 ## Iter 89 — Pull Leads from Lemlist (Feb 2026)
 
 ### What landed
