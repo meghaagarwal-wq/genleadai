@@ -179,6 +179,59 @@ def main():
             )
             print(f"[Migrate] {email} → member of demo")
 
+    # 2b. Pietential workspace owner (Megha) — idempotent seed.
+    # Production environments don't carry over the preview DB, so we
+    # provision the account here on every startup. Password is sourced
+    # from env (PIETENTIAL_OWNER_PASSWORD) with a documented default to
+    # keep onboarding zero-friction. If the user already exists, we never
+    # touch their password — they may have rotated it.
+    try:
+        import uuid as _uuid
+        from deps import get_password_hash as _hash
+
+        pt_email = "megha@contentvista.com"
+        pt_default_password = os.environ.get("PIETENTIAL_OWNER_PASSWORD", "Piet-4vRQ-lDa2-ttcO")
+        existing = users_col.find_one({"email": pt_email})
+        if not existing:
+            users_col.insert_one({
+                "id": f"usr_{_uuid.uuid4().hex[:12]}",
+                "email": pt_email,
+                "name": "Megha Agarwal",
+                "full_name": "Megha Agarwal",
+                "role": "pietential_owner",
+                "tenant_id": PIETENTIAL_TENANT["id"],
+                "is_active": True,
+                "password_hash": _hash(pt_default_password),
+                "created_at": NOW,
+            })
+            print(f"[Migrate] {pt_email} → provisioned as pietential_owner")
+        else:
+            # Backfill missing fields without overwriting the password.
+            patch = {}
+            if not existing.get("role"):
+                patch["role"] = "pietential_owner"
+            if not existing.get("tenant_id"):
+                patch["tenant_id"] = PIETENTIAL_TENANT["id"]
+            if existing.get("is_active") is None:
+                patch["is_active"] = True
+            if patch:
+                users_col.update_one({"email": pt_email}, {"$set": patch})
+
+        # Ensure owner membership exists (idempotent)
+        upsert(
+            memberships_col,
+            {"tenant_id": PIETENTIAL_TENANT["id"], "user_email": pt_email},
+            {
+                "id": f"mem_pt_{pt_email.replace('@', '_at_').replace('.', '_')}",
+                "tenant_id": PIETENTIAL_TENANT["id"],
+                "user_email": pt_email,
+                "role": "owner",
+                "joined_at": NOW,
+            },
+        )
+    except Exception as _pt_e:
+        print(f"[Migrate] Pietential owner seed skipped: {_pt_e}")
+
     # 3. Onboarding configs (sane defaults)
     upsert(onboarding_col, {"tenant_id": DEMO_TENANT["id"]}, DEMO_ONBOARDING)
     upsert(onboarding_col, {"tenant_id": PIETENTIAL_TENANT["id"]}, PIETENTIAL_ONBOARDING)
