@@ -39,7 +39,7 @@ PIETENTIAL_TENANT = {
     "name": "Pietential",
     "owner_email": "admin@demo.com",
     "plan": "pro",
-    "settings": {},
+    "settings": {"workspace_type": "hybrid"},
     "onboarding_completed": True,
     "created_at": NOW,
 }
@@ -146,6 +146,24 @@ def main():
     upsert(tenants_col, {"id": DEMO_TENANT["id"]}, DEMO_TENANT)
     upsert(tenants_col, {"id": PIETENTIAL_TENANT["id"]}, PIETENTIAL_TENANT)
     print(f"[Migrate] Tenants ensured: {DEMO_TENANT['id']}, {PIETENTIAL_TENANT['id']}")
+
+    # 1b. Default workspace_type — iter92 v2 master prompt schema.
+    # Use $setOnInsert-like semantics: only set if not already configured,
+    # so existing workspaces aren't silently changed.
+    tenants_col.update_one(
+        {"id": "ten_pietential", "settings.workspace_type": {"$exists": False}},
+        {"$set": {"settings.workspace_type": "hybrid"}},
+    )
+    tenants_col.update_one(
+        {"id": "ten_demo", "settings.workspace_type": {"$exists": False}},
+        {"$set": {"settings.workspace_type": "hybrid"}},
+    )
+    # Any other tenants: default to hybrid (safest — shows all sections).
+    tenants_col.update_many(
+        {"settings.workspace_type": {"$exists": False}},
+        {"$set": {"settings.workspace_type": "hybrid"}},
+    )
+    print("[Migrate] workspace_type defaulted to 'hybrid' on tenants missing it")
 
     # 2. Create memberships
     admin_email = "admin@demo.com"

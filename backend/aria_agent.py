@@ -156,12 +156,27 @@ def get_aria_system_prompt(tenant: Optional[Dict[str, Any]] = None):
     """Build the master Aria conversation prompt. ALWAYS tenant-aware so
     the bot represents THIS workspace's business, not the platform.
 
+    iter92 — if the tenant has a v2 assembled training prompt
+    (`settings.aria_training_profile.assembled_prompt`), use that as the
+    authoritative system message. Otherwise fall back to the legacy
+    business_profile-driven prompt below.
+
     Fall-back order for each field:
       tenant.settings.business_profile.business_name
       → tenant.settings.business_profile.legal_name
       → tenant.name
       → env COMPANY_NAME (last resort, may be the platform brand)
     """
+    # v2 — prefer the workspace-trained assembled prompt
+    try:
+        from routes.aria_training import get_assembled_prompt
+        assembled = get_assembled_prompt(tenant) if tenant else None
+        if assembled:
+            return assembled
+    except Exception as _e:
+        # Never block Aria on the training layer — fall through to legacy
+        logger.warning(f"[aria] assembled prompt lookup failed: {_e}")
+
     bp = ((tenant or {}).get("settings") or {}).get("business_profile") or {}
     persona = ((tenant or {}).get("settings") or {}).get("aria_persona") or {}
     company_name = (

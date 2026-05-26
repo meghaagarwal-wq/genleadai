@@ -98,6 +98,9 @@ def register_all_routes(app: FastAPI) -> None:
         failed_router as failed_messages_router,
     )
 
+    # Aria training (v2 master prompt — iter92)
+    from .aria_training import router as aria_training_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -121,5 +124,6 @@ def register_all_routes(app: FastAPI) -> None:
         billing_upgrade_router, billing_profile_router,
         integrations_catalog_router, sales_channels_router, simulate_inbound_router,
         health_router, failed_messages_router,
+        aria_training_router,
     ):
         app.include_router(router)

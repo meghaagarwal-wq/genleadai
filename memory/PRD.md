@@ -1,3 +1,92 @@
+## Iter 92 — Aria v2 Master Prompt (Phase 1 of 4) (Feb 2026)
+
+### What landed
+
+**Spec captured at `/app/memory/ARIA_MASTER_SPEC.md`** — authoritative
+source for Aria v2. Includes master prompt template, document extraction
+prompt, assembly logic, and adaptive dashboard section matrix.
+
+**New backend module — `routes/aria_training.py`**
+- Pydantic schema `TrainingProfilePayload` mirroring the 32 fields of
+  the master prompt (Sections 1-9 + Insights config + KB chunks).
+- `assemble_aria_prompt(workspace_name, founder_name, aria_name,
+  workspace_type, profile)` — pure function that renders the full
+  ~7000-char prompt with the same section structure as the spec.
+  Section 7 (B2B Insights Engine) is conditionally included only when
+  `workspace_type ∈ {b2b, hybrid}`.
+- `reassemble_for_tenant(tenant_id)` — runs the assembler and writes a
+  Fernet-encrypted blob to `tenants.settings.aria_training_profile.assembled_prompt`.
+- `get_assembled_prompt(tenant)` — decrypted accessor used by aria_agent.
+
+**New endpoints** (mounted via `routes/__init__.py`):
+- `GET  /api/aria/training-profile` — returns the decrypted training data
+  + version + workspace_type + has_assembled_prompt flag.
+- `PUT  /api/aria/training-profile` — owner/admin/master_admin only;
+  persists training data then re-assembles + re-encrypts.
+- `GET  /api/aria/system-prompt-preview` — plain-text preview for the
+  workspace owner; falls back to a "stub" preview if no profile saved.
+- `POST /api/aria/training-profile/reassemble` — force re-assembly.
+- `GET  /api/aria/workspace-type`
+- `PUT  /api/aria/workspace-type` — `{workspace_type: "b2b"|"b2c"|"hybrid"}`,
+  triggers a re-assembly immediately so Section 7 toggles on/off.
+
+**`aria_agent.get_aria_system_prompt(tenant)`** — now reads the
+v2 assembled prompt FIRST and falls back to the legacy
+business_profile-driven prompt only when no v2 profile exists. Means:
+existing tenants without training data keep working with no regression;
+trained tenants get the full master prompt injected on every Aria call.
+
+**Migration update — `scripts/migrate_to_multi_tenant.py`**
+- `ten_pietential` now defaults to `workspace_type: hybrid`.
+- All existing tenants missing `workspace_type` get `hybrid` (safest —
+  shows every dashboard section + enables insights engine).
+- Idempotent: only sets when the field doesn't already exist.
+
+### Live verification (Pietential workspace)
+
+Saved a real training profile via `PUT /api/aria/training-profile`:
+- `what_you_sell`: "AI-powered employee experience + growth automation"
+- 1 ICP defined (CHRO at Mid-Market SaaS, USA/EU/India)
+- Brand voice: "Warm and consultative"
+- Calendar link, qualification questions, KB chunk all set
+
+Stored prompt length: **7,088 chars**, Fernet-encrypted blob: 11,753 bytes.
+`aria_agent.get_aria_system_prompt(pietential_tenant)` now returns the
+v2 prompt with `SECTION 1 — BUSINESS IDENTITY` marker present.
+
+### Tests — `tests/test_iter92_aria_master_prompt_v2.py`
+**18/18 PASS** across 4 classes:
+- Unit (5): assembler renders all 10 section markers, b2c excludes
+  Section 7, b2b includes it, brand integrity block contains workspace
+  name + founder name, filled ICP renders correctly, empty lists →
+  `NOT_CONFIGURED`.
+- Endpoints (7): GET workspace-type, PUT rejects invalid (422), PUT
+  accepts all 3 valid types, GET training-profile shape, PUT reassembles,
+  preview reflects saved data, reassemble endpoint increments version.
+- Role gating (2): sales_rep blocked on PUT profile + PUT workspace-type.
+- Integration (3): stored prompt is Fernet-encrypted (enc:: prefix, no
+  plaintext), aria_agent uses v2 assembled prompt when present, falls
+  back to legacy when no profile.
+
+### Out of scope (Phase 2-4 — next iterations)
+- **Phase 2:** Document extraction Prompt 2 — strict JSON with
+  `NOT_FOUND` semantics, merge from multiple docs.
+- **Phase 3:** B2B Insights Engine daily scan loop, signal
+  classification (8 types), insight cards, intelligence feed UI.
+  Requires: paid LinkedIn enrichment (Proxycurl/Apollo) + news API
+  integration — will add API-key fields when wired.
+- **Phase 4:** Workspace type toggle UI + adaptive dashboard section
+  visibility per workspace_type.
+
+### Frontend impact
+- **None this iter.** Backend-only Phase 1. The training profile is
+  consumable today via the API; the FE training UI is part of Phase 2
+  (alongside the document upload + extraction flow).
+
+---
+
+
+
 ## Iter 91 — P1/P2 Backlog Cleared (Feb 2026)
 
 ### What landed
