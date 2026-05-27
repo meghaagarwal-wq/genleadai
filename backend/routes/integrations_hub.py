@@ -593,7 +593,7 @@ async def saleshandy_webhook(tenant_id: str, request: Request):
     # 2. Score event via pietential — fire-and-forget so a failure there
     #    doesn't block the lead capture.
     try:
-        from routes.pietential import LeadEvent, log_event_internal  # type: ignore
+        from routes.pt_events import LeadEvent, log_event_internal  # type: ignore
         event_type = _saleshandy_event_type(body)
         ev = LeadEvent(
             lead_email=raw_lead.get("email") or "",
@@ -656,7 +656,7 @@ async def lemlist_webhook(tenant_id: str, request: Request):
     }
     res = await _normalize_and_capture(tenant_id, raw_lead, "lemlist", request)
     try:
-        from routes.pietential import LeadEvent, log_event_internal  # type: ignore
+        from routes.pt_events import LeadEvent, log_event_internal  # type: ignore
         event_type = _lemlist_event_type(body)
         ev = LeadEvent(
             lead_email=raw_lead.get("email") or "",

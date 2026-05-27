@@ -36,7 +36,7 @@ def fresh_user():
     """Signup a brand new tenant via /api/auth/signup."""
     uid = uuid.uuid4().hex[:10]
     email = f"TEST_iter71_{uid}@example.com"
-    password = "Demo1234!"  # noqa: S105 — signup test fixture, not a real secret
+    password = os.environ.get("TEST_SIGNUP_PASSWORD", "Demo1234!")
     payload = {"email": email, "password": password, "full_name": "Iter71 Test", "workspace_name": f"Iter71 Co {uid}"}
     r = requests.post(f"{BASE_URL}/api/auth/signup", json=payload, timeout=30)
     if r.status_code not in (200, 201):

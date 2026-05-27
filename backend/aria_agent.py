@@ -152,46 +152,49 @@ async def create_scheduling_link(event_type_uri: str, lead_name: str = None, lea
     return None
 
 # ─── ARIA Agent System Prompt ───
-def get_aria_system_prompt(tenant: Optional[Dict[str, Any]] = None):
-    """Build the master Aria conversation prompt. ALWAYS tenant-aware so
-    the bot represents THIS workspace's business, not the platform.
+def _resolve_tenant_persona(tenant: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """Resolve workspace persona fields from the tenant doc with fallbacks.
 
-    iter92 — if the tenant has a v2 assembled training prompt
-    (`settings.aria_training_profile.assembled_prompt`), use that as the
-    authoritative system message. Otherwise fall back to the legacy
-    business_profile-driven prompt below.
-
-    Fall-back order for each field:
-      tenant.settings.business_profile.business_name
-      → tenant.settings.business_profile.legal_name
-      → tenant.name
-      → env COMPANY_NAME (last resort, may be the platform brand)
+    Used by `get_aria_system_prompt` to white-label the legacy prompt
+    when no v2 training profile exists.
     """
-    # v2 — prefer the workspace-trained assembled prompt
+    settings = ((tenant or {}).get("settings") or {})
+    bp = settings.get("business_profile") or {}
+    persona = settings.get("aria_persona") or {}
+    return {
+        "company_name": (
+            (bp.get("business_name") or "").strip()
+            or (bp.get("legal_name") or "").strip()
+            or ((tenant or {}).get("name") or "").strip()
+            or COMPANY_NAME
+        ),
+        "founder_name": (
+            (bp.get("founder_name") or "").strip()
+            or ((tenant or {}).get("owner_name") or "").strip()
+            or FOUNDER_NAME
+        ),
+        "aria_name": (persona.get("aria_name") or "").strip() or ARIA_NAME,
+    }
+
+
+def _try_v2_assembled_prompt(tenant: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Return the workspace's v2 assembled prompt if one exists.
+
+    Never raises — failures in the training layer must not block Aria.
+    """
+    if not tenant:
+        return None
     try:
         from routes.aria_training import get_assembled_prompt
-        assembled = get_assembled_prompt(tenant) if tenant else None
-        if assembled:
-            return assembled
-    except Exception as _e:
-        # Never block Aria on the training layer — fall through to legacy
-        logger.warning(f"[aria] assembled prompt lookup failed: {_e}")
+        return get_assembled_prompt(tenant)
+    except Exception as e:
+        logger.warning(f"[aria] assembled prompt lookup failed: {e}")
+        return None
 
-    bp = ((tenant or {}).get("settings") or {}).get("business_profile") or {}
-    persona = ((tenant or {}).get("settings") or {}).get("aria_persona") or {}
-    company_name = (
-        (bp.get("business_name") or "").strip()
-        or (bp.get("legal_name") or "").strip()
-        or ((tenant or {}).get("name") or "").strip()
-        or COMPANY_NAME
-    )
-    founder_name = (
-        (bp.get("founder_name") or "").strip()
-        or ((tenant or {}).get("owner_name") or "").strip()
-        or FOUNDER_NAME
-    )
-    aria_name = (persona.get("aria_name") or "").strip() or ARIA_NAME
 
+def _legacy_aria_prompt(company_name: str, founder_name: str, aria_name: str) -> str:
+    """Render the legacy white-labelled Aria prompt. Kept intact for
+    tenants that haven't filled out the v2 training profile yet."""
     return f"""You are {aria_name}, a warm, intelligent sales assistant for {company_name}. You represent {founder_name} personally. Your job is to have genuine, helpful conversations with potential clients — not to pitch aggressively.
 
 CRITICAL — Brand integrity:
@@ -231,6 +234,22 @@ Always respond with a JSON object containing:
   "action": "NONE|SEND_EMAIL|UPDATE_STATUS|BOOK_MEETING|MARK_DNC|ESCALATE|LOG_QUALIFICATION",
   "action_data": {{}} // action-specific data
 }}"""
+
+
+def get_aria_system_prompt(tenant: Optional[Dict[str, Any]] = None):
+    """Build the master Aria conversation prompt. Tenant-aware white-labelling.
+
+    Order of precedence:
+      1. v2 assembled prompt (from `aria_training_profile`) if present.
+      2. Legacy prompt assembled from `business_profile` fallback chain.
+    """
+    assembled = _try_v2_assembled_prompt(tenant)
+    if assembled:
+        return assembled
+    persona = _resolve_tenant_persona(tenant)
+    return _legacy_aria_prompt(
+        persona["company_name"], persona["founder_name"], persona["aria_name"]
+    )
 
 # ─── ARIA Agent Core ───
 async def run_aria_agent(lead: dict, conversation_history: list, incoming_message: str = None, touch_type: str = None):

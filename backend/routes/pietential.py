@@ -2533,31 +2533,16 @@ async def update_field_mapping(payload: FieldMappingUpdate, current_user: dict =
 
 # ─── Public helpers used by external webhook receivers (integrations_hub) ───
 class LeadEvent(BaseModel):
-    """Minimal event payload accepted by the internal log_event helper."""
+    """Minimal event payload accepted by the internal log_event helper.
+
+    DEPRECATED: kept here as a re-export for back-compat. New callers
+    should import from `routes.pt_events` directly (iter96 cycle fix).
+    """
     lead_email: str
     event_type: str
     payload: Dict[str, Any] = {}
 
 
-async def log_event_internal(tenant_id: str, event: "LeadEvent") -> dict:
-    """Fire a scoring event from a server-side caller (e.g. an inbound webhook
-    handler that already validated its signature). Never raises — failures
-    are caught and returned so the caller's main flow isn't blocked.
-    """
-    # `_ingest_event` performs the scoring + cascade + task creation.
-    # It accepts arbitrary metadata; we stuff the raw provider payload in
-    # so analytics/debug surfaces can replay it later.
-    try:
-        return _ingest_event(
-            event_type=event.event_type,
-            lead_lookup={"email": event.lead_email},
-            metadata={"raw": event.payload, "tenant_id": tenant_id, "via": "webhook"},
-            current_user_email="webhook",
-        )
-    except HTTPException as e:
-        # Unknown event types are common (we accept a wide range from providers)
-        # — log and shrug instead of bubbling a 400 to the upstream webhook.
-        return {"ok": False, "error": e.detail}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+# Re-export for back-compat — actual impl lives in pt_events.py
+from routes.pt_events import log_event_internal  # noqa: E402, F401
 

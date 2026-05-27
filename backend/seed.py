@@ -1,12 +1,30 @@
 """Seed database with realistic demo data."""
 import os
-import random
+# Use cryptographically-secure random for ALL generation, even seed data.
+# Audit fix iter96 — the values aren't security-sensitive (demo phones, scores)
+# but using `secrets` removes the entire class of bandit S311 warnings.
+import secrets
 from datetime import datetime, timedelta, timezone
 from pymongo import MongoClient
 from passlib.context import CryptContext
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Adapter — gives us random.choice / randint / random / sample on top of secrets.
+_rng = secrets.SystemRandom()
+
+class random:  # noqa: N801 — shim to keep call-sites unchanged
+    """Shim so the rest of this file reads naturally as `random.choice(...)`
+    but every call routes through SystemRandom (CSPRNG)."""
+    @staticmethod
+    def choice(seq):       return _rng.choice(seq)
+    @staticmethod
+    def randint(a, b):     return _rng.randint(a, b)
+    @staticmethod
+    def random():          return _rng.random()
+    @staticmethod
+    def sample(pop, k):    return _rng.sample(pop, k)
 
 mongo_client = MongoClient(os.getenv("MONGO_URL"))
 db = mongo_client[os.getenv("DB_NAME")]
