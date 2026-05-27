@@ -70,18 +70,24 @@ function BotSVG({ blink, size, waving = false }) {
           <stop offset="1" stopColor="#f3e8ff" />
         </linearGradient>
         <linearGradient id="bot-screen" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#6d28d9" />
-          <stop offset="0.5" stopColor="#a855f7" />
-          <stop offset="1" stopColor="#ec4899" />
+          <stop offset="0"   stopColor="#3b0764" />
+          <stop offset="0.5" stopColor="#6d28d9" />
+          <stop offset="1"   stopColor="#831843" />
         </linearGradient>
         <linearGradient id="bot-accent" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#a855f7" />
           <stop offset="1" stopColor="#ec4899" />
         </linearGradient>
-        <radialGradient id="eye-glow" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="0.6" stopColor="#f5d0fe" />
-          <stop offset="1" stopColor="#a855f7" />
+        <radialGradient id="eye-glow" cx="0.5" cy="0.45" r="0.55">
+          <stop offset="0"    stopColor="#ffffff" />
+          <stop offset="0.55" stopColor="#ffffff" />
+          <stop offset="0.85" stopColor="#fdf4ff" />
+          <stop offset="1"    stopColor="#7e22ce" />
+        </radialGradient>
+        <radialGradient id="eye-pupil" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0"   stopColor="#1a103a" />
+          <stop offset="0.7" stopColor="#3b0764" />
+          <stop offset="1"   stopColor="#581c87" />
         </radialGradient>
         <filter id="bot-shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="6" stdDeviation="6" floodColor="#581c87" floodOpacity="0.35" />
@@ -104,19 +110,44 @@ function BotSVG({ blink, size, waving = false }) {
         <motion.g animate={{ x: [0, 4, -4, 0] }} transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
           {blink ? (
             <>
-              <rect x="74" y="86" width="14" height="3" rx="1.5" fill="#fff" />
-              <rect x="112" y="86" width="14" height="3" rx="1.5" fill="#fff" />
+              <rect x="69" y="86" width="20" height="4" rx="2" fill="#ffffff" />
+              <rect x="111" y="86" width="20" height="4" rx="2" fill="#ffffff" />
             </>
           ) : (
             <>
-              <circle cx="81" cy="86" r="8" fill="url(#eye-glow)" />
-              <circle cx="119" cy="86" r="8" fill="url(#eye-glow)" />
-              <circle cx="83" cy="84" r="2.5" fill="#fff" />
-              <circle cx="121" cy="84" r="2.5" fill="#fff" />
+              {/* sclera (white of the eye) */}
+              <circle cx="81"  cy="86" r="11" fill="url(#eye-glow)" />
+              <circle cx="119" cy="86" r="11" fill="url(#eye-glow)" />
+              {/* iris / pupil */}
+              <circle cx="81"  cy="87" r="6"   fill="url(#eye-pupil)" />
+              <circle cx="119" cy="87" r="6"   fill="url(#eye-pupil)" />
+              <circle cx="81"  cy="87" r="3.2" fill="#0b0420" />
+              <circle cx="119" cy="87" r="3.2" fill="#0b0420" />
+              {/* primary catch-lights */}
+              <circle cx="83.5" cy="84.5" r="2.2" fill="#ffffff" />
+              <circle cx="121.5" cy="84.5" r="2.2" fill="#ffffff" />
+              {/* secondary tiny sparkles */}
+              <circle cx="78.5" cy="89"   r="1"   fill="#ffffff" opacity="0.85" />
+              <circle cx="116.5" cy="89"  r="1"   fill="#ffffff" opacity="0.85" />
             </>
           )}
         </motion.g>
-        <path d="M 86 104 Q 100 114 114 104" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+
+        {/* nose — a small rounded triangle between the eyes */}
+        <path
+          d="M 96 96 Q 100 92 104 96 Q 100 101 96 96 Z"
+          fill="#fbcfe8"
+          stroke="#ffffff"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+        <circle cx="100" cy="96" r="1" fill="#ffffff" opacity="0.8" />
+
+        {/* smile — thicker, with a subtle shadow underneath for depth */}
+        <path d="M 82 106 Q 100 119 118 106" stroke="#3b0764" strokeWidth="4.5" strokeLinecap="round" fill="none" opacity="0.35" />
+        <path d="M 82 105 Q 100 118 118 105" stroke="#ffffff" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+        {/* tiny tongue dot for warmth */}
+        <circle cx="100" cy="113" r="2" fill="#fb7185" opacity="0.9" />
         <circle cx="64" cy="100" r="4" fill="#f0abfc" opacity="0.7" />
         <circle cx="136" cy="100" r="4" fill="#f0abfc" opacity="0.7" />
         <circle cx="38" cy="88" r="6" fill="url(#bot-accent)" />
