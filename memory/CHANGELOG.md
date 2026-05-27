@@ -1,5 +1,48 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 104 (New ARIA-by-GenLeadAI public landing page)
+
+### Landing page rebuild
+- **Replaced** the old `/pages/LandingPage.js` (now deleted) with a new
+  `/pages/landing/AriaLanding.js` built from the user-provided Tailwind v4
+  / `motion/react` `.tsx` artifacts. Page renders at `/` for unauthenticated
+  visitors only (authenticated routes are unaffected).
+- New components: `AriaBot.js` (animated mascot), `AiFlourishes.js`
+  (AgentOrb, TypingWord, SignalBars), `aria-landing.css` (scoped brand
+  tokens, OKLCH colors, marquee/shimmer/pulse-ring/caret/signal keyframes).
+- **Tailwind v4 → v3 migration**: source used `@theme inline` + OKLCH +
+  `@utility`. Re-implemented as a `.aria-landing` parent class that scopes
+  CSS variables and overrides utility classes (`text-primary`, `bg-card`,
+  `border-primary`, etc.) only inside the landing — no global bleed.
+- **TSX → JSX**: stripped TypeScript annotations; swapped
+  `motion/react` → `framer-motion` (already at v12.40).
+- **CTA wiring**: signup form submit, nav "Start free", CTA-band email
+  form, and floating-bot bubble all `useNavigate('/signup?email=…&mode=…')`.
+  Nav "Log in" → `/login`.
+- All 12 sections faithfully ported: Nav, Hero (with shimmer-text typing
+  headline + animated blobs + sparkle particles + AriaBot mascot + AgentOrb
+  + SignupCard), Marquee, TwoModes (B2B/B2C), HowItWorks (4 steps),
+  Comparison (old way vs ARIA way), WhoItsFor (3 cards), Testimonials (3),
+  Integrations (22 chips), FAQ (6 collapsibles), CTABand, Footer (4-column
+  with brand/company/product/contact + WhatsApp/email/phone),
+  FloatingBot (auto-roaming mascot).
+
+### Tested via testing_agent_v3_fork (iter89)
+- 100% (9/9) review items pass on desktop 1920x1080 + mobile 390x844
+- 0 console errors during full landing render + interactions
+- Login regression: admin@demo.com still authenticates and lands post-auth
+- Minor polish applied: `aria-expanded` on FAQ toggles + mobile "Log in"
+  is now reachable in the header (was hidden on small screens)
+
+### Known polish items (deferred — non-blocking)
+- TypingWord can cause headline layout shift mid-cycle (cosmetic only)
+- FloatingBot occasionally overlaps hero signup card edges (visually
+  acceptable per the source artifact's intent)
+- `AriaLanding.js` is 1140 lines — refactor to per-section files under
+  `/pages/landing/sections/` is queued but not blocking
+
+
+
 ## 2026-02 — Iter 103 (P1+P2 audit sweep · full V3 audit complete)
 
 ### Decision logged

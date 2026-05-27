@@ -1,3 +1,40 @@
+## Iter 104 — New ARIA / GenLeadAI public landing page (Feb 2026)
+
+> User uploaded Tailwind v4 / `motion/react` `.tsx` artifacts and asked to
+> "Replace the existing landing page with the ARIA by GenLeadAI page…
+> match the layout, copy, and motion behavior exactly."
+
+### What landed
+- New page mounted at `/` (unauthenticated visitors only):
+  `/app/frontend/src/pages/landing/AriaLanding.js` (1140 lines, 12 sections)
+- Mascot + flourishes: `AriaBot.js`, `AiFlourishes.js` (AgentOrb /
+  TypingWord / SignalBars)
+- Scoped styles: `aria-landing.css` — `.aria-landing` wrapper holds OKLCH
+  brand tokens + utility overrides so nothing bleeds globally
+- TSX → JSX, `motion/react` → `framer-motion`, Tailwind v4 → v3 syntax
+- CTAs wired: signup forms → `/signup?email=…&mode=…`, log-in → `/login`
+- Old `/pages/LandingPage.js` deleted
+- Mobile "Log in" link is now reachable in the header (was hidden < `sm:`)
+- A11y: `aria-expanded` on FAQ toggles
+- Verified: testing agent iter89 — 100% (9/9), 0 console errors, login
+  regression intact for `admin@demo.com / Demo1234!`
+
+### Active backlog (carried forward)
+- P1: OAuth flows for LinkedIn / Gmail / Outlook / Meta Ads / Google Ads /
+  Calendly (blocked on user-supplied credentials)
+- P2: PPT + image OCR in Train ARIA document extraction
+- P2: URL scrape endpoint for Train ARIA
+- P2: Master Prompt version restore endpoint
+- P2 (new): Refactor `AriaLanding.js` into per-section files under
+  `/pages/landing/sections/`
+- P2 (new): Make `/signup` read `?email` + `?mode` query params and
+  pre-fill the registration fields (currently passed but ignored)
+- P2 (new): Reserve a fixed slot for the TypingWord to prevent the
+  mid-cycle headline layout shift
+
+---
+
+
 ## Iter 95 — ARIA Master Build v3.0 Phase 5a Foundation (Feb 2026)
 
 > User pasted the full v3.0 master spec ("deliver me this exact thing").

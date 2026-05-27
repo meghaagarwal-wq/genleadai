@@ -108,7 +108,7 @@ function Nav({ onSignup, onLogin }) {
           <button
             type="button"
             onClick={onLogin}
-            className="hidden rounded-full px-4 py-2 text-sm font-medium text-foreground hover:bg-muted sm:inline-flex"
+            className="rounded-full px-3 py-2 text-sm font-medium text-foreground hover:bg-muted sm:px-4"
             data-testid="nav-login-btn"
           >
             Log in
@@ -758,6 +758,7 @@ function FAQ() {
                 <button
                   type="button"
                   onClick={() => setOpen(open === i ? null : i)}
+                  aria-expanded={open === i}
                   className="flex w-full items-center justify-between gap-4 p-6 text-left"
                   data-testid={`faq-toggle-${i}`}
                 >
