@@ -143,17 +143,38 @@ async def training_history(tenant: dict = Depends(get_active_tenant)):
         training_versions_col.find({"tenant_id": tenant["id"]}, {"_id": 0})
         .sort("version", -1).limit(50)
     )
-    # Fallback: if no version snapshots, surface current at v=1
-    if not versions:
-        cur = training_col.find_one({"tenant_id": tenant["id"]}, {"_id": 0})
-        if cur:
-            versions = [{
-                "version": 1,
-                "saved_at": cur.get("updated_at") or _now_iso(),
-                "summary": (cur.get("what_you_sell") or "")[:120],
-                "tenant_id": tenant["id"],
-                "is_current": True,
-            }]
+    # iter105 — fallback: read live profile from tenants.settings so the modal
+    # always shows at least the current version, even before any snapshot exists.
+    tdoc = tenants_col.find_one({"id": tenant["id"]}, {"_id": 0, "settings.aria_training_profile": 1}) or {}
+    tprofile = (tdoc.get("settings") or {}).get("aria_training_profile") or {}
+    cur_version = tprofile.get("version") or 0
+    cur_data = tprofile.get("data") or {}
+    cur_assembled_at = tprofile.get("assembled_at") or _now_iso()
+
+    # Mark which snapshot is the current one (matches the live version number)
+    for v in versions:
+        v["is_current"] = (v.get("version") == cur_version)
+
+    # If no snapshot for the current version yet (older save before the snapshot
+    # logic), inject a synthetic row so the modal shows at least one entry.
+    if cur_version and not any(v.get("version") == cur_version for v in versions):
+        versions.insert(0, {
+            "version": cur_version,
+            "saved_at": cur_assembled_at,
+            "summary": (cur_data.get("what_you_sell") or cur_data.get("business_name") or "")[:120],
+            "tenant_id": tenant["id"],
+            "is_current": True,
+            "synthetic": True,
+        })
+    elif not versions and cur_data:
+        versions = [{
+            "version": cur_version or 1,
+            "saved_at": cur_assembled_at,
+            "summary": (cur_data.get("what_you_sell") or cur_data.get("business_name") or "")[:120],
+            "tenant_id": tenant["id"],
+            "is_current": True,
+            "synthetic": True,
+        }]
     return {"versions": versions}
 
 
@@ -167,18 +188,22 @@ async def training_restore(
     )
     if not snap:
         raise HTTPException(404, "Version not found")
-    payload = snap.get("payload") or {}
-    training_col.update_one(
-        {"tenant_id": tenant["id"]},
-        {"$set": {**payload, "updated_at": _now_iso(), "restored_from_version": version}},
-        upsert=True,
+    profile = snap.get("payload") or {}
+    # Write back to the canonical location (tenants.settings.aria_training_profile.data),
+    # bump version, then re-assemble & re-encrypt the system prompt.
+    tenants_col.update_one(
+        {"id": tenant["id"]},
+        {"$set": {
+            "settings.aria_training_profile.data": profile,
+            "settings.aria_training_profile.restored_from_version": version,
+            "settings.aria_training_profile.assembled_at": _now_iso(),
+        }},
     )
-    # Best-effort reassemble — non-blocking if helper not present.
     try:
-        from routes.aria_training import _reassemble_system_prompt  # type: ignore
-        _reassemble_system_prompt(tenant["id"])
-    except Exception:
-        pass
+        from routes.aria_training import reassemble_for_tenant
+        reassemble_for_tenant(tenant["id"])
+    except Exception as _e:
+        print(f"[restore] reassemble failed: {_e}")
     return {"ok": True, "restored_version": version}
 
 
@@ -286,6 +311,7 @@ _REGISTERED_JOBS = {
     "enrichment_retry",
     "pixel_attribution",
     "snooze_recovery",
+    "insight_digest_sender",
 }
 
 

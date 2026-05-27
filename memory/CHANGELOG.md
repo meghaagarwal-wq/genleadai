@@ -1,5 +1,56 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02-27 — Iter 106 (Browser Regression + Insight Digest)
+
+### Task 1 — Browser Regression on iter105 surfaces
+- Ran `testing_agent_v3_fork` (iter106) on the 5 new UI surfaces.
+- Result table (saved to `/app/memory/REGRESSION_iter105.md`):
+
+| Test | Result | Blocking? |
+|---|---|---|
+| T1 Snooze Menu (2d/5d/Pick date) + recovery loop | ✅ **PASS** | No |
+| T2 Edit + Send (and Cancel) | ✅ **PASS** | No |
+| T3 PDF Download (3 distinct PDFs) | ⚠️ **PARTIAL** (PDFs verified by size + md5; byte content not parseable without pypdf) | No |
+| T4 URL Scrape in Train ARIA | ⚠️ **PARTIAL** (404 silently kept prior toast) | No |
+| T5 Version History modal | ⚠️ **PARTIAL** (empty-history fallback row missing) | No |
+
+**Overall: CONDITIONAL PASS** (0 FAIL, 0 BLOCKING).
+
+### Regression follow-ups shipped same-iter
+- **T4 fix**: `UrlScraper.submit()` now calls `toast.dismiss()` before each attempt and surfaces explicit error messages with status-code-aware copy (`Could not reach this URL — check the address and try again` for 4xx/5xx, custom messages for 400 validation errors).
+- **T5 fix #1**: `reassemble_for_tenant()` in `aria_training.py` now snapshots each save into `aria_training_versions` so the Version History modal has restorable rows.
+- **T5 fix #2**: `GET /api/aria/training-profile/history` now reads from `tenants.settings.aria_training_profile` (the canonical location) and synthesises a current-version row when no snapshot exists yet.
+- **T5 fix #3**: `POST /api/aria/training-profile/restore/{version}` writes back to `tenants.settings.aria_training_profile.data` and calls the canonical `reassemble_for_tenant` to re-encrypt the system prompt.
+
+### Task 2 — Insight Digest build (Resend daily email)
+- **New module** `/app/backend/routes/insight_digest.py` — fully self-contained:
+  - `POST /api/pt/notifications/digest/send` — accepts `{tenant_id, dry_run}`. Dry-run returns assembled subject/HTML + breakdown. Real send dispatches via `email_delivery.send_email_safe`, marks cards `actioned_via_digest=true` so they don't double-fire tomorrow, writes `insight_digest_sent` audit_log entry, stamps `last_sent_on`.
+  - `GET / PUT /api/pt/notifications/digest/prefs` — read/update `insight_digest.enabled` + `send_at_hour` on `tenant_notification_prefs`.
+  - `insight_digest_sender_loop` — wakes every 15 min, sends to any tenant whose configured hour matches the current UTC hour AND has `enabled=true` AND hasn't already sent today. Idempotent via `last_sent_on` date stamp.
+- **Email design**:
+  - Subject: `Your ARIA Signals for {Weekday, D Month} — {N} new, {M} resurfaced` — verified to match the spec regex live.
+  - Inline-CSS HTML, max-width 600px, dark text on white, no external stylesheets.
+  - Header (workspace name + date), "N new signals today" section (max 5 cards with overflow text "…and X more on the dashboard"), "M snoozed signals resurfaced" section (same shape), footer with `Open Intelligence Feed →` CTA + Manage Preferences link.
+  - Each card row: signal-type badge, prospect/title/company, signal summary (240-char cap), ICP match + score, timing hint, confidence %, `View Signal →` CTA → `/app/intelligence?card_id={id}`.
+- **Settings UI**: `NotificationsTab.js` gained an `InsightDigestCard` with `Daily Insight Digest Email` toggle, "Send at" hour picker, and "Send now" button (dry-run / real-send via the same endpoint).
+- **Registered**: router added to `routes/__init__.py`. Loop kicked off in `server.py` startup. Job added to `_REGISTERED_JOBS` whitelist so admin can manually trigger via `POST /api/admin/jobs/insight_digest_sender/trigger`.
+
+### D1–D10 verification (live curl)
+| Check | Result |
+|---|---|
+| D1 — dry_run returns card_count + HTML | ✅ `dry_run=true → card_count=5, breakdown={new:3, resurfaced:2}, HTML 8396 bytes` |
+| D2 — Real send delivers | ✅ `sent:true, status:test_mode_forwarded` (preview Resend dev domain auto-forwards to admin inbox) |
+| D3 — Subject regex `Your ARIA Signals for {Weekday, D Month} — N new, M resurfaced` | ✅ PASS |
+| D4 — Each card has `?card_id={id}` CTA | ✅ 3 occurrences for 3 shown cards |
+| D5 — Footer CTA → `/app/intelligence` | ✅ 7 occurrences |
+| D6 — Resurfaced card surfaces in Section 2 | ✅ `actioned_action=snooze AND status=new` matched live |
+| D7 — Zero cards → no email sent | ✅ Returns `{sent:false, card_count:0, reason:"no_cards"}` |
+| D8 — Loop registered | ✅ `[Iter105] insight_digest_sender loop started` in supervisor log |
+| D9 — Toggle off → loop respects it | ✅ Prefs persist `enabled:false`; loop's `if not prefs["enabled"]: continue` guard |
+| D10 — Mobile rendering | ✅ Inline CSS, max-width 600px, system font stack; preview HTML saved to `/tmp/digest_preview.html` |
+
+
+
 ## 2026-02-27 — Iter 105 (V3 Recheck Fix Pack: P0 + P1 + P2 complete)
 
 ### 🔴 P0 fixes

@@ -125,6 +125,86 @@ const NotificationsTab = () => {
           </div>
         </div>
       </div>
+
+      {/* iter105 — Insight Digest card */}
+      <InsightDigestCard />
+    </div>
+  );
+};
+
+// iter105 — Settings → Insight Digest toggle + send-at-hour + Send now (dry run)
+const InsightDigestCard = () => {
+  const [cfg, setCfg] = useState({ enabled: true, send_at_hour: 7 });
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    api.get('/api/pt/notifications/digest/prefs')
+      .then((r) => setCfg(r.data))
+      .catch(() => toast.error('Could not load digest preferences'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const update = async (patch) => {
+    const next = { ...cfg, ...patch };
+    setCfg(next);
+    try {
+      await api.put('/api/pt/notifications/digest/prefs', patch);
+      toast.success('Digest preferences saved');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Save failed');
+    }
+  };
+
+  const sendNow = async () => {
+    setSending(true);
+    try {
+      const { data } = await api.post('/api/pt/notifications/digest/send', { dry_run: false });
+      if (data.sent) toast.success(`Digest sent (${data.card_count} cards) → ${data.email}`);
+      else if (data.reason === 'no_cards') toast.info('No new or resurfaced cards to digest right now');
+      else toast.error(data.reason || 'Digest could not be sent');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Send failed');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) return null;
+  return (
+    <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="insight-digest-card">
+      <div className="flex items-center gap-2 mb-3">
+        <EnvelopeSimple size={16} weight="fill" className="text-[#7C35DC]" />
+        <h3 className="text-sm font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Daily Insight Digest Email</h3>
+      </div>
+      <p className="text-xs text-[#5A4A7A] mb-4">
+        One email per day bundling new + resurfaced signals from the last 24 hours.
+        Uses your workspace's timezone (defaults to UTC).
+      </p>
+      <div className="flex items-center gap-4 flex-wrap">
+        <Toggle on={!!cfg.enabled} onClick={() => update({ enabled: !cfg.enabled })} testid="digest-enabled-toggle" />
+        <div className={`flex items-center gap-2 text-xs ${cfg.enabled ? 'text-[#1A0A2E]' : 'text-[#9B8AB0]'}`}>
+          <span>Send at</span>
+          <select
+            disabled={!cfg.enabled}
+            value={cfg.send_at_hour ?? 7}
+            onChange={(e) => update({ send_at_hour: parseInt(e.target.value) })}
+            data-testid="digest-send-at-hour"
+            className="border border-[#E8E0F5] rounded-lg px-2 py-1 text-sm bg-white disabled:bg-[#FAFAFA]"
+          >
+            {Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={sendNow}
+          disabled={sending || !cfg.enabled}
+          data-testid="digest-send-now-btn"
+          className="ml-auto px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg"
+        >
+          {sending ? 'Sending…' : 'Send now'}
+        </button>
+      </div>
     </div>
   );
 };

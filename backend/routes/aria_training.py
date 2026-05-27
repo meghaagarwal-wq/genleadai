@@ -411,6 +411,20 @@ def reassemble_for_tenant(tenant_id: str) -> Dict[str, Any]:
         {"id": tenant_id},
         {"$set": {"settings.aria_training_profile": payload}},
     )
+    # iter105 — snapshot this version into aria_training_versions so the
+    # Version History modal has restorable entries. We store the raw profile
+    # data (not the encrypted prompt) so a future restore can re-assemble.
+    try:
+        db["aria_training_versions"].insert_one({
+            "tenant_id": tenant_id,
+            "version": payload["version"],
+            "saved_at": payload["assembled_at"],
+            "payload": profile,
+            "summary": (profile.get("what_you_sell") or profile.get("business_name") or "")[:120],
+            "workspace_type": wt,
+        })
+    except Exception as _e:
+        print(f"[reassemble_for_tenant] snapshot insert failed: {_e}")
     return payload
 
 

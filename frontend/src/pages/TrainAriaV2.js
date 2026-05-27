@@ -159,13 +159,24 @@ const UrlScraper = ({ onExtracted }) => {
     const v = url.trim();
     if (!v) return;
     setBusy(true);
+    toast.dismiss();  // iter105 — clear any previous toast so a 404 always shows fresh state
     try {
       const { data } = await api.post('/api/aria/training-profile/scrape-url', { url: v }, { timeout: 60000 });
       toast.success(`Scraped ${data.char_count} chars — review extracted fields below`);
       onExtracted?.(data);
       setUrl('');
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'URL scrape failed');
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      let msg;
+      if (status === 502 || status === 404) {
+        msg = `Could not reach this URL — check the address and try again${detail ? ` (${detail})` : ''}`;
+      } else if (status === 400) {
+        msg = detail || 'Invalid URL';
+      } else {
+        msg = detail || err?.message || 'URL scrape failed';
+      }
+      toast.error(msg, { duration: 6000 });
     } finally {
       setBusy(false);
     }

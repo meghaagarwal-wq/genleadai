@@ -4614,6 +4614,13 @@ async def _start_b2b_insight_scan_loop():
         print("[Iter105] snooze_recovery loop started")
     except Exception as _e:
         print(f"[Iter105] snooze_recovery loop NOT started: {_e}")
+    # iter105 — Task 2: insight_digest_sender (fires daily at configured hour)
+    try:
+        from routes.insight_digest import insight_digest_sender_loop
+        asyncio.create_task(insight_digest_sender_loop())
+        print("[Iter105] insight_digest_sender loop started")
+    except Exception as _e:
+        print(f"[Iter105] insight_digest_sender loop NOT started: {_e}")
     print("[B2BInsightScan] Background loop started (24h tick, +5min startup stagger)")
 
 

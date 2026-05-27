@@ -129,6 +129,9 @@ def register_all_routes(app: FastAPI) -> None:
     # WhatsApp command parser helper).
     from .iter105_fixes import router as iter105_fixes_router
 
+    # Iter105 — Task 2: Insight Digest daily email
+    from .insight_digest import router as insight_digest_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -162,5 +165,6 @@ def register_all_routes(app: FastAPI) -> None:
         leads_csv_router,
         realtime_onboarding_router,
         iter105_fixes_router,
+        insight_digest_router,
     ):
         app.include_router(router)
