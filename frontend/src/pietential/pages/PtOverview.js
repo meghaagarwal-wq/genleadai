@@ -155,10 +155,10 @@ const PtOverview = () => {
             Connect Saleshandy or Lemlist, configure webhooks, or upload a CSV to start tracking engagement.
           </p>
           <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
-            <Link to="/pt/leads" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }} data-testid="overview-cta-upload">
+            <Link to="/app/leads" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }} data-testid="overview-cta-upload">
               Upload CSV <ArrowRight size={14} weight="bold" />
             </Link>
-            <Link to="/pt/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30" data-testid="overview-cta-connect">
+            <Link to="/app/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30" data-testid="overview-cta-connect">
               Configure integrations
             </Link>
             <button onClick={replayDemo} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30">
@@ -179,7 +179,7 @@ const ConnBanner = ({ connected, platform, msg }) => (
       <div className="text-sm text-[#0F172A]">{msg}</div>
     </div>
     {!connected && (
-      <Link to="/pt/integrations" className="text-xs font-semibold text-[#7C35DC] hover:underline">Connect</Link>
+      <Link to="/app/integrations" className="text-xs font-semibold text-[#7C35DC] hover:underline">Connect</Link>
     )}
   </div>
 );

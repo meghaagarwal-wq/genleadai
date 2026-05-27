@@ -53,7 +53,7 @@ const PtLeadDetail = () => {
     try {
       await ptApi.delete(`/api/pt/leads/${id}`);
       toast.success('Deleted');
-      navigate('/pt/leads');
+      navigate('/app/leads');
     } catch { toast.error('Could not delete'); }
   };
 
@@ -63,7 +63,7 @@ const PtLeadDetail = () => {
   const { lead, company, events, notes, score_breakdown, recommendation } = data;
   return (
     <div data-testid="pt-lead-detail-page">
-      <button onClick={() => navigate('/pt/leads')} className="flex items-center gap-1.5 text-sm text-[#64748B] hover:text-[#0F172A] mb-4" data-testid="pt-detail-back">
+      <button onClick={() => navigate('/app/leads')} className="flex items-center gap-1.5 text-sm text-[#64748B] hover:text-[#0F172A] mb-4" data-testid="pt-detail-back">
         <ArrowLeft size={14} /> Back to Lead Feed
       </button>
 
@@ -207,7 +207,7 @@ const PtLeadDetail = () => {
 
           {company && (
             <Card title="Account">
-              <KV label="Company" value={<Link to="/pt/accounts" className="text-[#7C35DC] hover:underline">{company.name}</Link>} />
+              <KV label="Company" value={<Link to="/app/accounts" className="text-[#7C35DC] hover:underline">{company.name}</Link>} />
               <KV label="Stage" value={<StageBadge stage={company.account_stage} />} />
               <KV label="Sequence" value={company.sequence_status} />
               <KV label="Pause required" value={company.pause_required ? 'Yes' : 'No'} />

@@ -1,5 +1,33 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02-27 — Iter 107 (Route consolidation + Saleshandy import attempt)
+
+### ✅ Task 1 — Remove `/pt/*` URL prefix
+- `/pt` → `<Navigate to="/app" replace />`
+- `/pt/*` → `<PtRedirect />` (preserves trailing path: `/pt/intelligence` → `/app/intelligence`, `/pt/leads/abc123` → `/app/leads/abc123`)
+- Hard-coded `to="/pt/…"` / `navigate('/pt/…')` references in
+  `OnboardingWizardV3.js`, `PtLeadDetail.js`, `PtOverview.js`, `PtLeadFeed.js` rewritten to `/app/…`
+- Backend API paths (`/api/pt/...`) are deliberately left alone — those are server endpoints, not browser URLs, and renaming them would break the running app
+- Live verified in browser: all three test paths redirect correctly + the Pietential `/app` dashboard renders unchanged
+
+### ⛔ Task 2 — Saleshandy import: blocked by invalid API key
+Hit the actual import endpoint live:
+```
+POST /api/pt/integrations/saleshandy/pull-leads (X-Tenant-Id: ten_pietential)
+→ HTTP 400: "Saleshandy rejected the API key. Double-check you copied the
+   FULL key from Saleshandy → Settings → API and that it hasn't been revoked."
+```
+DB state for the Pietential Saleshandy integration:
+- `pt_integrations.saleshandy.status = needs_setup`
+- `error_log` = "Saleshandy rejected the API key…"
+- Saved key length: 120 chars (encrypted), but Saleshandy's own API rejects it
+- 12 saleshandy-tagged leads already in `pt_leads` (probably from an earlier valid session)
+- 39 leads (51 − 12) presumably still in Saleshandy, can be pulled the moment a valid key is provided
+
+**Action required from user**: paste a fresh Saleshandy API key (Saleshandy → Settings → API → copy the FULL key) into Integrations → Saleshandy, then click `Update`. The 39 unimported leads will pull automatically on the next 30-minute `saleshandy_poll_loop` tick — or instantly via `POST /api/pt/integrations/saleshandy/pull-leads`.
+
+
+
 ## 2026-02-27 — Iter 106 (Production-readiness sprint)
 
 ### ⛔ Blocked on user (cannot execute from agent)

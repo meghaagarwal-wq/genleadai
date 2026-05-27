@@ -1,5 +1,12 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
+// iter107 — preserves the trailing path when redirecting /pt/* → /app/*.
+const PtRedirect = () => {
+  const loc = useLocation();
+  const target = (loc.pathname || '').replace(/^\/pt/, '/app') + (loc.search || '');
+  return <Navigate to={target} replace />;
+};
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
@@ -225,41 +232,12 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/pt/*"
-                element={
-                  <ProtectedRoute>
-                    <PtLayout>
-                      <Routes>
-                        <Route path="/" element={<PtOverview />} />
-                        <Route path="/ai-setup" element={<AISetupAssistant />} />
-                        <Route path="/train-aria" element={<TrainAriaV2 />} />
-                        <Route path="/intelligence" element={<PtIntelligenceFeed />} />
-                        <Route path="/conversations" element={<Conversations />} />
-                        <Route path="/icps" element={<ICPManager />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/leads" element={<PtLeadFeed />} />
-                        <Route path="/leads/:id" element={<PtLeadDetail />} />
-                        <Route path="/saleshandy" element={<PtSaleshandy />} />
-                        <Route path="/lemlist" element={<PtLemlist />} />
-                        <Route path="/campaigns" element={<PtCampaigns />} />
-                        <Route path="/accounts" element={<PtAccounts />} />
-                        <Route path="/touchpoints" element={<PtTouchpointMap />} />
-                        <Route path="/tasks" element={<PtTasks />} />
-                        <Route path="/logs" element={<PtAutomationLogs />} />
-                        <Route path="/automations" element={<PtAutomations />} />
-                        <Route path="/reports" element={<PtReports />} />
-                        <Route path="/integrations" element={<PtIntegrations />} />
-                        <Route path="/team" element={<PtTeam />} />
-                        <Route path="/settings" element={<PtSettings />} />
-                      </Routes>
-                    </PtLayout>
-                  </ProtectedRoute>
-                }
-              />
-              {/* iter101 — Unified `/app/*` alias for the V3 client dashboard.
-                  Same PtLayout, same nested routes. Kept `/pt/*` working for
-                  backwards-compat with bookmarks & external links. */}
+              {/* iter107 — /pt/* removed. Permanently redirect any old bookmarks
+                  to the canonical /app/* shell. Preserves the trailing path so
+                  /pt/intelligence → /app/intelligence, /pt/leads/123 → /app/leads/123, etc. */}
+              <Route path="/pt" element={<Navigate to="/app" replace />} />
+              <Route path="/pt/*" element={<PtRedirect />} />
+              {/* iter101 — Unified `/app/*` is the canonical client dashboard. */}
               <Route
                 path="/app/*"
                 element={

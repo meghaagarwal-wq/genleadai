@@ -113,7 +113,7 @@ const PtLeadFeed = () => {
           cta={
             <div className="flex items-center justify-center gap-2">
               <button onClick={() => setShowCsv(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }} data-testid="empty-cta-upload">Upload CSV</button>
-              <Link to="/pt/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30">Configure integrations</Link>
+              <Link to="/app/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30">Configure integrations</Link>
             </div>
           }
         />

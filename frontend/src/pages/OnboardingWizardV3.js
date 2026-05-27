@@ -159,7 +159,7 @@ const OnboardingWizardV3 = () => {
       // on next login instead of being looped back into onboarding.
       try { await api.put('/api/onboarding/state', { step: STEPS.length - 1, business_name: businessName, mode, lead_source: leadSource, completed: true, payload: {} }); } catch { /* ignore */ }
       toast.success("You're all set — Aria is live.");
-      navigate('/pt');
+      navigate('/app');
     } catch (e) { toast.error('Could not finalize'); }
     finally { setBusy(false); }
   };
