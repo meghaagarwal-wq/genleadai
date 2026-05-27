@@ -1,4 +1,44 @@
-## Iter 108 — API-Key Pre-validation + server.py refactor (Feb 2026)
+## Iter 108 — NUCLEAR CONSOLIDATION (Feb 2026)
+
+### What you asked for
+ONE frontend, ONE backend, ONE database, TWO dashboard types (`/app` for clients, `/admin` for super-admin). Every workspace looks IDENTICAL — same layout, same chrome, only the data and mode-driven nav items differ.
+
+### What landed
+**ONE unified layout:** new `frontend/src/components/AppLayout.js` is the single
+client-dashboard shell. Dark sidebar + purple accents (the "main ARIA
+dashboard" look). Workspace switcher in the top-left header (Linear/Notion
+style) reads from `/api/tenants/me` so EVERY tenant the user belongs to
+shows up — no hardcoded "Pietential" anywhere. Mode-driven nav: Intelligence
+Feed for `b2b`/`hybrid`, Lead Inbox for `b2c`/`hybrid`, everything else
+always visible. Route-level guard prevents direct-URL bypass.
+
+**Deleted:**
+- `frontend/src/components/Layout.js` (old legacy dark layout)
+- `frontend/src/pietential/PtLayout.js` (old Pietential-branded layout)
+- Removed the entire `/*` catch-all route tree (Dashboard, LeadInbox, Pipeline, AriaFeed, AriaAnalytics, YourFiveToday, SleepingLeads, AuditLog, Limits, Billing, Troubleshooting, AIAssistant, FailedMessages, Analytics, Playbooks, AISalesJourneys, FounderBriefs, HumanHandoff, RevivalEngine, AriaInsightsPage, SalesAssets, AriaBrain, WeeklyRecap, SalesEngagement, AdminFeedback, MasterAdmin, TouchpointJourney, OutreachCampaigns, TrainAria, Contacts, FollowUps, Reports, Integrations, Settings, Conversations, Pipeline, Campaigns)
+- Their imports cleaned from `App.js`
+
+**Routes that exist now (the only ones):**
+- `/app/*` — client dashboard via AppLayout (Home, Intelligence, Leads, Conversations, ICPs, Train ARIA, Automations, Integrations, Reports, Settings + saleshandy/lemlist/campaigns/accounts/touchpoints/tasks/logs/team sub-routes)
+- `/admin/*` — admin panel via AdminLayout (master_admin only)
+- `/login`, `/signup`, `/onboarding`, `/onboarding-v3`, `/invite/:token`
+- `/aria/*`, `/privacy`, `/terms`, `/dpa`, `/demo`, `/demo-sandbox` (public/marketing)
+- `/billing/success`, `/billing/cancel` (Stripe return URLs)
+- **30+ legacy redirects** — `/dashboard`, `/leads`, `/pipeline`, `/conversations`, `/icps`, `/integrations`, `/reports`, `/settings`, `/aria-agent/*`, `/contacts`, `/follow-ups`, `/sleeping-leads`, `/your-5-today`, `/audit-log`, `/troubleshooting`, `/limits`, `/billing`, `/billing/invoices`, `/master-admin`, `/admin/feedback`, `/admin/failed-messages`, `/touchpoint-journey`, `/outreach`, `/outreach/:id`, `/sales-engagement`, `/pt`, `/pt/*` all 301 → their `/app/*` equivalents.
+
+### V1–V10 verification (all PASS — see live screenshots)
+- V1 — one frontend process; V2 — one backend; V3 — admin@demo.com sees `GenLeadAI Demo` + `Pietential` only in switcher.
+- V4 — GenLeadAI Demo loads main dashboard.
+- V5 — Pietential renders through the EXACT SAME AppLayout (dark sidebar, identical header) — only the data differs.
+- V6 — Pietential nav shows Intelligence Feed (b2b mode).
+- V7 — `/app/intelligence` renders.
+- V8 — Pietential leads visible at `/app/leads`.
+- V9 — `/admin` loads admin panel.
+- V10 — zero workspace-specific layout files remain.
+
+---
+
+
 
 ### Scope (4-action prompt)
 1. **Deploy + /api/health verify** — User deployed mid-iter; production

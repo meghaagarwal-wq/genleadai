@@ -1,90 +1,33 @@
+/**
+ * App.js — iter108 NUCLEAR CONSOLIDATION
+ *
+ * The ONLY surfaces that exist after this commit:
+ *   - /app/*            — client dashboard (every workspace, single AppLayout)
+ *   - /admin/*          — super-admin panel (master_admin only)
+ *   - /login /signup /onboarding /invite
+ *   - /aria/* /privacy /terms /dpa     — public marketing / legal
+ *   - /pt/* and any legacy /dashboard, /leads, etc.  → redirect to /app/...
+ *
+ * Layout files:
+ *   - components/AppLayout.js      — THE ONE client layout
+ *   - admin/AdminLayout.js         — admin panel
+ *   - public/PublicLayout.js       — public marketing
+ *   (DELETED: components/Layout.js, pietential/PtLayout.js)
+ */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-
-// iter107 — preserves the trailing path when redirecting /pt/* → /app/*.
-const PtRedirect = () => {
-  const loc = useLocation();
-  const target = (loc.pathname || '').replace(/^\/pt/, '/app') + (loc.search || '');
-  return <Navigate to={target} replace />;
-};
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
+
+// Public & auth
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Signup from './pages/Signup';
 import AriaLanding from './pages/landing/AriaLanding';
-import DemoSandbox from './pages/DemoSandbox';
 import InviteAccept from './pages/InviteAccept';
-import Dashboard from './pages/Dashboard';
-import LeadInbox from './pages/LeadInbox';
-import LeadDetail from './pages/LeadDetail';
-import Pipeline from './pages/Pipeline';
-import Campaigns from './pages/Campaigns';
-import Analytics from './pages/Analytics';
-import Reports from './pages/Reports';
-import FailedMessages from './pages/FailedMessages';
-import Conversations from './pages/Conversations';
-import InteractiveDemo from './pages/InteractiveDemo';
-import Settings from './pages/Settings';
-import AriaFeed from './pages/AriaFeed';
-import AriaAnalytics from './pages/AriaAnalytics';
-import YourFiveToday from './pages/YourFiveToday';
-import SleepingLeads from './pages/SleepingLeads';
-import AuditLog from './pages/AuditLog';
-import OnboardingWizard from './pages/OnboardingWizard';
-import OnboardingWizardV3 from './pages/OnboardingWizardV3';
-import Billing from './pages/Billing';
-import Invoices from './pages/Invoices';
-import Troubleshooting from './pages/Troubleshooting';
-import AISetupAssistant from './pages/AISetupAssistant';
-import Limits from './pages/Limits';
-import Contacts from './pages/Contacts';
-import FollowUps from './pages/FollowUps';
-import AIAssistant from './pages/AIAssistant';
-import Integrations from './pages/Integrations';
-import TrainAria from './pages/TrainAria';
-import TrainAriaV2 from './pages/TrainAriaV2';
-import PtIntelligenceFeed from './pietential/pages/PtIntelligenceFeed';
-import AdminLayout from './admin/AdminLayout';
-import Playbooks from './pages/Playbooks';
-import AISalesJourneys from './pages/AISalesJourneys';
-import FounderBriefs from './pages/FounderBriefs';
-import HumanHandoff from './pages/HumanHandoff';
-import RevivalEngine from './pages/RevivalEngine';
-import AriaInsightsPage from './pages/AriaInsightsPage';
-import SalesAssets from './pages/SalesAssets';
-import AriaBrain from './pages/AriaBrain';
-import WeeklyRecap from './pages/WeeklyRecap';
-import SalesEngagement from './pages/SalesEngagement';
-import AdminFeedback from './pages/AdminFeedback';
-import MasterAdmin from './pages/MasterAdmin';
-import TouchpointJourney from './pages/TouchpointJourney';
-import ICPManager from './pages/ICPManager';
-import OutreachCampaigns from './pages/OutreachCampaigns';
-import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
-import NotFound from './pages/NotFound';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
-
-// Pietential workspace
-import PtLayout from './pietential/PtLayout';
-import PtOverview from './pietential/pages/PtOverview';
-
-import PtLeadFeed from './pietential/pages/PtLeadFeed';
-import PtLeadDetail from './pietential/pages/PtLeadDetail';
-import PtAccounts from './pietential/pages/PtAccounts';
-import PtTasks from './pietential/pages/PtTasks';
-import PtReports from './pietential/pages/PtReports';
-import PtIntegrations from './pietential/pages/PtIntegrations';
-import PtSettings from './pietential/pages/PtSettings';
-import { PtSaleshandy, PtLemlist } from './pietential/pages/PtPlatformActivity';
-import PtTouchpointMap from './pietential/pages/PtTouchpointMap';
-import PtTeam from './pietential/pages/PtTeam';
-import PtCampaigns from './pietential/pages/PtCampaigns';
-import PtAutomationLogs from './pietential/pages/PtAutomationLogs';
-import PtAutomations from './pietential/pages/PtAutomations';
 import AriaHome from './public/pages/AriaHome';
 import DemoDashboard from './public/pages/DemoDashboard';
 import LeadFeedSEO from './public/pages/LeadFeedSEO';
@@ -97,19 +40,44 @@ import UseSalesTeams from './public/pages/use-cases/SalesTeams';
 import CompareAriaVsCrm from './public/pages/compare/AriaVsCrm';
 import CompareAriaVsSpreadsheets from './public/pages/compare/AriaVsSpreadsheets';
 import CompareAiVsCrm from './public/pages/compare/AISalesAssistantVsCrm';
-import Layout from './components/Layout';
-import UpgradeModal from './components/UpgradeModal';
+import OnboardingWizard from './pages/OnboardingWizard';
+import OnboardingWizardV3 from './pages/OnboardingWizardV3';
+import InteractiveDemo from './pages/InteractiveDemo';
+import DemoSandbox from './pages/DemoSandbox';
+
+// Admin
+import AdminLayout from './admin/AdminLayout';
+
+// Client app shell + pages (the unified /app/* tree)
+import AppLayout from './components/AppLayout';
+import PtOverview from './pietential/pages/PtOverview';
+import PtLeadFeed from './pietential/pages/PtLeadFeed';
+import PtLeadDetail from './pietential/pages/PtLeadDetail';
+import PtIntelligenceFeed from './pietential/pages/PtIntelligenceFeed';
+import PtReports from './pietential/pages/PtReports';
+import PtIntegrations from './pietential/pages/PtIntegrations';
+import PtAutomations from './pietential/pages/PtAutomations';
+import PtAutomationLogs from './pietential/pages/PtAutomationLogs';
+import PtCampaigns from './pietential/pages/PtCampaigns';
+import PtAccounts from './pietential/pages/PtAccounts';
+import PtTouchpointMap from './pietential/pages/PtTouchpointMap';
+import PtTasks from './pietential/pages/PtTasks';
+import PtTeam from './pietential/pages/PtTeam';
+import PtSettings from './pietential/pages/PtSettings';
+import { PtSaleshandy, PtLemlist } from './pietential/pages/PtPlatformActivity';
+import AISetupAssistant from './pages/AISetupAssistant';
+import TrainAriaV2 from './pages/TrainAriaV2';
+import Conversations from './pages/Conversations';
+import ICPManager from './pages/ICPManager';
+import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
+import NotFound from './pages/NotFound';
+
 import ErrorBoundary from './components/ErrorBoundary';
 import api from './config/api';
 import './App.css';
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
+  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 });
 
 function ProtectedRoute({ children, requireOnboarded = true, requireRole = null }) {
@@ -124,7 +92,6 @@ function ProtectedRoute({ children, requireOnboarded = true, requireRole = null 
       .then((r) => {
         if (!alive) return;
         const t = r.data?.tenant;
-        // Keep active_tenant in localStorage current
         try {
           const stored = JSON.parse(localStorage.getItem('active_tenant') || 'null');
           const merged = { ...(stored || {}), id: t?.id, name: t?.name, onboarding_completed: !!r.data?.completed };
@@ -136,40 +103,26 @@ function ProtectedRoute({ children, requireOnboarded = true, requireRole = null 
     return () => { alive = false; };
   }, [user]);
 
-  // Role gate — added for /admin (master_admin only)
-  if (requireRole && user && user.role !== requireRole) {
-    return <Navigate to="/" replace />;
-  }
-
+  if (requireRole && user && user.role !== requireRole) return <Navigate to="/app" replace />;
   if (loading || (user && !gateState.checked)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
-        <div className="text-[#A3A3A3]">Loading...</div>
+        <div className="text-[#A3A3A3]">Loading…</div>
       </div>
     );
   }
-
-  // Unauthenticated visitors at the root URL land on the public marketing page
-  // instead of bouncing to /login. Any other deep-link still requires sign-in.
   if (!user) {
     if (location.pathname === '/' || location.pathname === '') return <AriaLanding />;
     return <Navigate to="/login" replace />;
   }
-
-  if (requireOnboarded && !gateState.completed) {
-    return <Navigate to="/onboarding" replace />;
-  }
-
+  if (requireOnboarded && !gateState.completed) return <Navigate to="/onboarding" replace />;
   return children;
 }
 
 function ImpersonationBanner() {
   const [info, setInfo] = React.useState(null);
   React.useEffect(() => {
-    try {
-      const raw = localStorage.getItem('impersonating');
-      if (raw) setInfo(JSON.parse(raw));
-    } catch (e) { /* ignore */ }
+    try { const raw = localStorage.getItem('impersonating'); if (raw) setInfo(JSON.parse(raw)); } catch (e) { /* ignore */ }
   }, []);
   if (!info) return null;
   const stop = () => {
@@ -179,186 +132,165 @@ function ImpersonationBanner() {
   };
   return (
     <div className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm shadow-md" data-testid="impersonation-banner">
-      <div>
-        <strong>Admin view:</strong> impersonating <strong>{info.workspace_name}</strong> ({info.mode})
-      </div>
-      <button data-testid="stop-impersonation-btn" onClick={stop} className="px-3 py-1 bg-amber-900 hover:bg-amber-800 text-white rounded text-xs font-semibold">Stop & return to admin</button>
+      <div><strong>Admin view:</strong> impersonating <strong>{info.workspace_name}</strong> ({info.mode})</div>
+      <button data-testid="stop-impersonation-btn" onClick={stop} className="px-3 py-1 bg-amber-900 hover:bg-amber-800 text-white rounded text-xs font-semibold">
+        Stop & return to admin
+      </button>
     </div>
   );
 }
+
+/**
+ * Preserves the trailing path when redirecting a legacy URL to its /app/*
+ * equivalent. Used for /pt/* and a few legacy single-page paths.
+ */
+const PathRedirect = ({ from }) => {
+  const loc = useLocation();
+  const tail = (loc.pathname || '').replace(new RegExp('^' + from), '');
+  const target = `/app${tail || ''}${loc.search || ''}`;
+  return <Navigate to={target} replace />;
+};
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
-      <AuthProvider>
-        <PlanProvider>
-          <WorkspaceProvider>
-          <Router>
-            <ImpersonationBanner />
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Navigate to="/signup" replace />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/demo" element={<InteractiveDemo />} />
-              <Route path="/demo-sandbox" element={<DemoSandbox />} />
-              <Route path="/invite/:token" element={<InviteAccept />} />
+        <AuthProvider>
+          <PlanProvider>
+            <WorkspaceProvider>
+              <Router>
+                <ImpersonationBanner />
+                <Routes>
+                  {/* ── Public / auth ─────────────────────────────────── */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Navigate to="/signup" replace />} />
+                  <Route path="/signup" element={<Signup />} />
+                  <Route path="/demo" element={<InteractiveDemo />} />
+                  <Route path="/demo-sandbox" element={<DemoSandbox />} />
+                  <Route path="/invite/:token" element={<InviteAccept />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/dpa" element={<DPA />} />
 
-              {/* Legal pages (public) */}
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/dpa" element={<DPA />} />
+                  {/* Public ARIA marketing / SEO */}
+                  <Route path="/aria" element={<AriaHome />} />
+                  <Route path="/aria/demo-dashboard" element={<DemoDashboard />} />
+                  <Route path="/aria/lead-feed" element={<LeadFeedSEO />} />
+                  <Route path="/aria/sales-reports" element={<SalesReportsSEO />} />
+                  <Route path="/aria/use-cases/founders" element={<UseFounders />} />
+                  <Route path="/aria/use-cases/startups" element={<UseStartups />} />
+                  <Route path="/aria/use-cases/agencies" element={<UseAgencies />} />
+                  <Route path="/aria/use-cases/consultants" element={<UseConsultants />} />
+                  <Route path="/aria/use-cases/sales-teams" element={<UseSalesTeams />} />
+                  <Route path="/aria/compare/aria-vs-crm" element={<CompareAriaVsCrm />} />
+                  <Route path="/aria/compare/aria-vs-spreadsheets" element={<CompareAriaVsSpreadsheets />} />
+                  <Route path="/aria/compare/ai-sales-assistant-vs-crm" element={<CompareAiVsCrm />} />
 
-              {/* Public ARIA content ecosystem (crawlable, no auth) */}
-              <Route path="/aria" element={<AriaHome />} />
-              <Route path="/aria/demo-dashboard" element={<DemoDashboard />} />
-              <Route path="/aria/lead-feed" element={<LeadFeedSEO />} />
-              <Route path="/aria/sales-reports" element={<SalesReportsSEO />} />
-              <Route path="/aria/use-cases/founders" element={<UseFounders />} />
-              <Route path="/aria/use-cases/startups" element={<UseStartups />} />
-              <Route path="/aria/use-cases/agencies" element={<UseAgencies />} />
-              <Route path="/aria/use-cases/consultants" element={<UseConsultants />} />
-              <Route path="/aria/use-cases/sales-teams" element={<UseSalesTeams />} />
-              <Route path="/aria/compare/aria-vs-crm" element={<CompareAriaVsCrm />} />
-              <Route path="/aria/compare/aria-vs-spreadsheets" element={<CompareAriaVsSpreadsheets />} />
-              <Route path="/aria/compare/ai-sales-assistant-vs-crm" element={<CompareAiVsCrm />} />
+                  {/* ── Admin panel ───────────────────────────────────── */}
+                  <Route
+                    path="/admin/*"
+                    element={
+                      <ProtectedRoute requireRole="master_admin">
+                        <AdminLayout />
+                      </ProtectedRoute>
+                    }
+                  />
 
-              {/* Pietential workspace — parallel protected app */}
-              <Route
-                path="/admin/*"
-                element={
-                  <ProtectedRoute requireRole="master_admin">
-                    <AdminLayout />
-                  </ProtectedRoute>
-                }
-              />
-              {/* iter107 — /pt/* removed. Permanently redirect any old bookmarks
-                  to the canonical /app/* shell. Preserves the trailing path so
-                  /pt/intelligence → /app/intelligence, /pt/leads/123 → /app/leads/123, etc. */}
-              <Route path="/pt" element={<Navigate to="/app" replace />} />
-              <Route path="/pt/*" element={<PtRedirect />} />
-              {/* iter101 — Unified `/app/*` is the canonical client dashboard. */}
-              <Route
-                path="/app/*"
-                element={
-                  <ProtectedRoute>
-                    <PtLayout>
-                      <Routes>
-                        <Route path="/" element={<PtOverview />} />
-                        <Route path="/ai-setup" element={<AISetupAssistant />} />
-                        <Route path="/train-aria" element={<TrainAriaV2 />} />
-                        <Route path="/intelligence" element={<PtIntelligenceFeed />} />
-                        <Route path="/conversations" element={<Conversations />} />
-                        <Route path="/icps" element={<ICPManager />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/leads" element={<PtLeadFeed />} />
-                        <Route path="/leads/:id" element={<PtLeadDetail />} />
-                        <Route path="/saleshandy" element={<PtSaleshandy />} />
-                        <Route path="/lemlist" element={<PtLemlist />} />
-                        <Route path="/campaigns" element={<PtCampaigns />} />
-                        <Route path="/accounts" element={<PtAccounts />} />
-                        <Route path="/touchpoints" element={<PtTouchpointMap />} />
-                        <Route path="/tasks" element={<PtTasks />} />
-                        <Route path="/logs" element={<PtAutomationLogs />} />
-                        <Route path="/automations" element={<PtAutomations />} />
-                        <Route path="/reports" element={<PtReports />} />
-                        <Route path="/integrations" element={<PtIntegrations />} />
-                        <Route path="/team" element={<PtTeam />} />
-                        <Route path="/settings" element={<PtSettings />} />
-                      </Routes>
-                    </PtLayout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute requireOnboarded={false}>
-                    <OnboardingWizard />
-                  </ProtectedRoute>
-                }
-              />
-              {/* iter101 — V3 5-step onboarding (opt-in via /onboarding-v3).
-                  Legacy `/onboarding` kept for backwards-compat. */}
-              <Route
-                path="/onboarding-v3"
-                element={
-                  <ProtectedRoute requireOnboarded={false}>
-                    <OnboardingWizardV3 />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/*"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Routes>
-                        <Route path="/" element={<Dashboard />} />
-                        <Route path="/dashboard" element={<Navigate to="/" replace />} />
-                        {/* iter71 — protected demo dashboard with sample data.
-                            Public marketing /demo route (InteractiveDemo) takes precedence
-                            so we route the in-app demo to /dashboard-demo. */}
-                        <Route path="/dashboard-demo" element={<Dashboard demo={true} />} />
-                        <Route path="/your-5-today" element={<YourFiveToday />} />
-                        <Route path="/leads" element={<LeadInbox />} />
-                        <Route path="/leads/:id" element={<LeadDetail />} />
-                        <Route path="/sleeping-leads" element={<SleepingLeads />} />
-                        <Route path="/pipeline" element={<Pipeline />} />
-                        <Route path="/follow-ups" element={<FollowUps />} />
-                        <Route path="/conversations" element={<Conversations />} />
-                        <Route path="/ai-assistant" element={<AIAssistant />} />
-                        <Route path="/integrations" element={<Integrations />} />
-                        <Route path="/campaigns" element={<Campaigns />} />
-                        <Route path="/reports" element={<Reports />} />
-                        <Route path="/admin/failed-messages" element={<FailedMessages />} />
-                        <Route path="/analytics" element={<Analytics />} />
-                        <Route path="/aria" element={<AriaFeed />} />
-                        <Route path="/aria/analytics" element={<AriaAnalytics />} />
-                        <Route path="/audit-log" element={<AuditLog />} />
-                        <Route path="/billing" element={<Billing />} />
-                        <Route path="/billing/invoices" element={<Invoices />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/troubleshooting" element={<Troubleshooting />} />
-                        <Route path="/limits" element={<Limits />} />
-                        <Route path="/contacts" element={<Contacts />} />
-                        {/* AI Sales Agent additive routes */}
-                        <Route path="/aria-agent/train" element={<TrainAria />} />
-                        <Route path="/aria-agent/playbooks" element={<Playbooks />} />
-                        <Route path="/aria-agent/journeys" element={<AISalesJourneys />} />
-                        <Route path="/aria-agent/briefs" element={<FounderBriefs />} />
-                        <Route path="/aria-agent/handoff" element={<HumanHandoff />} />
-                        <Route path="/aria-agent/revival" element={<RevivalEngine />} />
-                        <Route path="/aria-agent/insights" element={<AriaInsightsPage />} />
-                        <Route path="/aria-agent/assets" element={<SalesAssets />} />
-                        <Route path="/aria-agent/brain" element={<AriaBrain />} />
-                        <Route path="/aria-agent/weekly-recap" element={<WeeklyRecap />} />
-                        <Route path="/sales-engagement" element={<SalesEngagement />} />
-                        <Route path="/admin/feedback" element={<AdminFeedback />} />
-                        <Route path="/master-admin" element={<MasterAdmin />} />
-                        <Route path="/touchpoint-journey" element={<TouchpointJourney />} />
-                        <Route path="/icps" element={<ICPManager />} />
-                        <Route path="/outreach" element={<OutreachCampaigns />} />
-                        <Route path="/outreach/:campaignId" element={<OutreachCampaigns />} />
-                        <Route path="/ai-setup" element={<AISetupAssistant />} />
-                        <Route path="/ai-setup-assistant" element={<AISetupAssistant />} />
-                        <Route path="/train-aria-v2" element={<TrainAriaV2 />} />
-                        <Route path="/billing/success" element={<BillingSuccess />} />
-                        <Route path="/billing/cancel" element={<BillingCancel />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                      <UpgradeModal />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-            {/* Mounted at root so toasts work on public routes (Login, LandingPage, Signup) too */}
-            <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
-          </Router>
-          </WorkspaceProvider>
-        </PlanProvider>
-      </AuthProvider>
+                  {/* ── Onboarding ────────────────────────────────────── */}
+                  <Route
+                    path="/onboarding"
+                    element={<ProtectedRoute requireOnboarded={false}><OnboardingWizard /></ProtectedRoute>}
+                  />
+                  <Route
+                    path="/onboarding-v3"
+                    element={<ProtectedRoute requireOnboarded={false}><OnboardingWizardV3 /></ProtectedRoute>}
+                  />
+
+                  {/* ── Legacy redirects (kept working, no UI) ────────── */}
+                  <Route path="/pt" element={<Navigate to="/app" replace />} />
+                  <Route path="/pt/*" element={<PathRedirect from="/pt" />} />
+                  <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+                  <Route path="/dashboard-demo" element={<Navigate to="/app" replace />} />
+                  <Route path="/leads" element={<Navigate to="/app/leads" replace />} />
+                  <Route path="/leads/:id" element={<PathRedirect from="" />} />
+                  <Route path="/pipeline" element={<Navigate to="/app/leads" replace />} />
+                  <Route path="/conversations" element={<Navigate to="/app/conversations" replace />} />
+                  <Route path="/icps" element={<Navigate to="/app/icps" replace />} />
+                  <Route path="/integrations" element={<Navigate to="/app/integrations" replace />} />
+                  <Route path="/reports" element={<Navigate to="/app/reports" replace />} />
+                  <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/aria-agent/*" element={<Navigate to="/app/intelligence" replace />} />
+                  <Route path="/contacts" element={<Navigate to="/app/leads" replace />} />
+                  <Route path="/follow-ups" element={<Navigate to="/app" replace />} />
+                  <Route path="/sleeping-leads" element={<Navigate to="/app/leads" replace />} />
+                  <Route path="/your-5-today" element={<Navigate to="/app" replace />} />
+                  <Route path="/audit-log" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/troubleshooting" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/limits" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/billing" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/billing/invoices" element={<Navigate to="/app/settings" replace />} />
+                  <Route path="/billing/success" element={<BillingSuccess />} />
+                  <Route path="/billing/cancel" element={<BillingCancel />} />
+                  <Route path="/master-admin" element={<Navigate to="/admin" replace />} />
+                  <Route path="/admin/feedback" element={<Navigate to="/admin" replace />} />
+                  <Route path="/admin/failed-messages" element={<Navigate to="/admin/system" replace />} />
+                  <Route path="/touchpoint-journey" element={<Navigate to="/app/touchpoints" replace />} />
+                  <Route path="/outreach" element={<Navigate to="/app/campaigns" replace />} />
+                  <Route path="/outreach/:campaignId" element={<Navigate to="/app/campaigns" replace />} />
+                  <Route path="/sales-engagement" element={<Navigate to="/app/campaigns" replace />} />
+
+                  {/* ── THE ONLY CLIENT DASHBOARD: /app/* ─────────────── */}
+                  <Route
+                    path="/app/*"
+                    element={
+                      <ProtectedRoute>
+                        <AppLayout>
+                          <Routes>
+                            <Route path="/" element={<PtOverview />} />
+                            <Route path="/intelligence" element={<PtIntelligenceFeed />} />
+                            <Route path="/leads" element={<PtLeadFeed />} />
+                            <Route path="/leads/:id" element={<PtLeadDetail />} />
+                            <Route path="/conversations" element={<Conversations />} />
+                            <Route path="/icps" element={<ICPManager />} />
+                            <Route path="/train-aria" element={<TrainAriaV2 />} />
+                            <Route path="/ai-setup" element={<AISetupAssistant />} />
+                            <Route path="/automations" element={<PtAutomations />} />
+                            <Route path="/integrations" element={<PtIntegrations />} />
+                            <Route path="/reports" element={<PtReports />} />
+                            <Route path="/settings" element={<PtSettings />} />
+                            {/* Sub-routes kept reachable but absent from main nav */}
+                            <Route path="/saleshandy" element={<PtSaleshandy />} />
+                            <Route path="/lemlist" element={<PtLemlist />} />
+                            <Route path="/campaigns" element={<PtCampaigns />} />
+                            <Route path="/accounts" element={<PtAccounts />} />
+                            <Route path="/touchpoints" element={<PtTouchpointMap />} />
+                            <Route path="/tasks" element={<PtTasks />} />
+                            <Route path="/logs" element={<PtAutomationLogs />} />
+                            <Route path="/team" element={<PtTeam />} />
+                            <Route path="*" element={<NotFound />} />
+                          </Routes>
+                        </AppLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Root: public marketing for guests, /app for users */}
+                  <Route
+                    path="/"
+                    element={
+                      <ProtectedRoute>
+                        <Navigate to="/app" replace />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+                <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
+              </Router>
+            </WorkspaceProvider>
+          </PlanProvider>
+        </AuthProvider>
       </ErrorBoundary>
     </QueryClientProvider>
   );
