@@ -1,5 +1,46 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 97 (B2B Insight Scan daily cron — P1 V3 backlog)
+- **New cron loop:** `b2b_insight_scan_loop()` in `routes/pt_insights.py`.
+  Sweeps every tenant with `mode in (b2b, hybrid)` once per 24h (+5 min
+  startup stagger), runs the existing `_scan_one_prospect` pipeline,
+  persists insight cards, and stamps `settings.pt_insights.last_scan_at`
+  + `last_scan_count` per tenant.
+- **Refactor:** extracted the manual `POST /api/pt/insights/scan/run-now`
+  logic into a pure `run_insight_scan_for_tenant(tenant)` helper. The
+  HTTP endpoint now delegates to it — zero behaviour change for callers.
+- **New helpers:** `_b2b_eligible_tenants()` (supports three field shapes:
+  top-level `mode`, `settings.mode`, legacy `settings.workspace_type`),
+  `run_b2b_insight_scan_once()` for one full sweep with per-tenant
+  breakdown.
+- **Wired in `server.py`:** `_start_b2b_insight_scan_loop` startup hook.
+  Log line `[B2BInsightScan] Background loop started …` confirms boot.
+- **Tests:** `tests/test_iter97_b2b_insight_scan_cron.py` — 7 cases:
+  eligibility under 3 field shapes, b2c exclusion, last-scan stamping,
+  multi-tenant sweep aggregation, and manual-endpoint regression.
+- **Verification:** 42/42 tests pass (35 prior + 7 new).
+
+
+## 2026-02 — Iter 96 (Code-review hygiene pass)
+- **Fix:** removed 10 F841 unused locals across `server.py` (`result`,
+  `disqualified_count`, `is_b2b`, `convo`, `terminal_states`,
+  `backend_url`, `doc`, `cutoff_overdue`, `money_at_risk_rows`) and
+  `aria_agent_routes/brain.py` (`lost`). Dead-code reduction with zero
+  behaviour change — all 35 regression tests still pass.
+- **Fix:** test fixtures no longer hardcode `Demo1234!` as a sole
+  fallback — `tests/test_iter71_dashboard_tenant_isolation.py` now reads
+  `TEST_ADMIN_PASSWORD` / `TEST_SIGNUP_PASSWORD` / `DEMO_ADMIN_PASSWORD`
+  in priority order.
+- **Confirmed (no change needed):** insecure `random` usage in
+  `seed.py` and `routes/auth_extras.py` was already replaced with
+  `secrets`/`SystemRandom` in iter96 prep. No active circular import
+  between `routes/integrations_hub.py` ↔ `routes/outreach_import.py`
+  (verified by direct `python -c` import; only one-way reference from
+  outreach_import → integrations_hub exists). No F821 (undefined name)
+  or F632 (`is` vs literal) violations across the codebase.
+- **Lint state:** `ruff --select F821,F841,F632` → **All checks passed**.
+
+
 
 ## 2026-02 — Iter 89 (One-click Lemlist lead import)
 - **`POST /api/pt/integrations/lemlist/pull-leads`**: fetches campaigns →

@@ -492,14 +492,12 @@ async def set_integrations(
     }
 
 
-@router.post("/scan/run-now", response_model=ScanResponse)
-async def run_scan_now(
-    tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
-):
-    """Manually trigger an insights scan over up to MAX_SCAN_BATCH prospects.
+async def run_insight_scan_for_tenant(tenant: Dict[str, Any]) -> Dict[str, Any]:
+    """Run one insights scan pass for a single tenant.
 
-    Order: hot leads first, then warm, then any with a `linkedin_url`.
-    Skips prospects with do-not-contact flags. Dedupes within 30 days.
+    Pure helper — no FastAPI deps. Used by both the manual endpoint and the
+    daily `b2b_insight_scan_loop` cron. Caller is responsible for permission
+    checks; we trust the tenant dict passed in.
     """
     proxy_key, news_key = _enrichment_keys_for(tenant)
     enrichment_status = {
@@ -529,13 +527,95 @@ async def run_scan_now(
         except Exception as e:
             logger.exception(f"[pt-insights] scan failed for {prospect.get('id')}: {e}")
 
-    return ScanResponse(
-        ok=True,
-        scanned=scanned,
-        insights_created=len(cards),
-        cards=cards,
-        enrichment_status=enrichment_status,
+    # Stamp last-scan timestamp so the cron + UI can show recency.
+    tenants_col.update_one(
+        {"id": tenant["id"]},
+        {"$set": {"settings.pt_insights.last_scan_at": _now_iso(),
+                  "settings.pt_insights.last_scan_count": len(cards)}},
     )
+
+    return {
+        "scanned": scanned,
+        "insights_created": len(cards),
+        "cards": cards,
+        "enrichment_status": enrichment_status,
+    }
+
+
+@router.post("/scan/run-now", response_model=ScanResponse)
+async def run_scan_now(
+    tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
+):
+    """Manually trigger an insights scan over up to MAX_SCAN_BATCH prospects.
+
+    Order: hot leads first, then warm, then any with a `linkedin_url`.
+    Skips prospects with do-not-contact flags. Dedupes within 30 days.
+    """
+    result = await run_insight_scan_for_tenant(tenant)
+    return ScanResponse(ok=True, **result)
+
+
+# ─── Cron — daily scan over every B2B / hybrid tenant ────────────────────
+B2B_SCAN_TICK_SECONDS = 24 * 60 * 60  # 24h
+
+
+def _b2b_eligible_tenants() -> List[Dict[str, Any]]:
+    """Tenants whose workspace mode is b2b or hybrid (insights only applies there).
+
+    Falls back to all tenants if the new V3 `mode` field is missing on legacy
+    docs — that's the safer default while we migrate.
+    """
+    cur = tenants_col.find(
+        {
+            "$or": [
+                {"settings.mode": {"$in": ["b2b", "hybrid"]}},
+                {"settings.workspace_type": {"$in": ["b2b", "hybrid"]}},
+                {"mode": {"$in": ["b2b", "hybrid"]}},
+            ]
+        },
+        {"_id": 0},
+    )
+    return list(cur)
+
+
+async def run_b2b_insight_scan_once() -> Dict[str, Any]:
+    """One full sweep across every eligible tenant — used by the cron loop."""
+    out: Dict[str, Any] = {
+        "ran_at": _now_iso(),
+        "tenants_scanned": 0,
+        "total_insights_created": 0,
+        "per_tenant": [],
+    }
+    for tenant in _b2b_eligible_tenants():
+        try:
+            result = await run_insight_scan_for_tenant(tenant)
+            out["tenants_scanned"] += 1
+            out["total_insights_created"] += result["insights_created"]
+            out["per_tenant"].append({
+                "tenant_id": tenant["id"],
+                "scanned": result["scanned"],
+                "insights_created": result["insights_created"],
+            })
+        except Exception as e:
+            logger.exception(f"[b2b_insight_scan] tenant {tenant.get('id')} failed: {e}")
+    return out
+
+
+async def b2b_insight_scan_loop() -> None:
+    """Background cron — runs once per 24h. Never raises (always re-loops)."""
+    logger.info("[b2b_insight_scan] loop started — tick every 24h")
+    # Stagger first run by 5 minutes so we don't compete with startup migration.
+    await asyncio.sleep(5 * 60)
+    while True:
+        try:
+            summary = await run_b2b_insight_scan_once()
+            logger.info(
+                f"[b2b_insight_scan] swept {summary['tenants_scanned']} tenant(s); "
+                f"created {summary['total_insights_created']} insight(s)"
+            )
+        except Exception as e:
+            logger.exception(f"[b2b_insight_scan] sweep error: {e}")
+        await asyncio.sleep(B2B_SCAN_TICK_SECONDS)
 
 
 @router.get("/feed")

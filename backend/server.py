@@ -52,6 +52,7 @@ from routes.health_engine import (
     stale_lead_loop as health_stale_loop,
     classify_sentiment as health_classify_sentiment,
 )
+from routes.pt_insights import b2b_insight_scan_loop  # iter97 — daily B2B Insights cron
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from security.limiter import limiter  # iter80 — shared instance for route modules
@@ -650,7 +651,7 @@ async def create_activity(activity: ActivityCreate, current_user: dict = Depends
     activity_doc["tenant_id"] = current_user.get("tenant_id")
     activity_doc["created_at"] = datetime.now(timezone.utc).isoformat()
     
-    result = activities_collection.insert_one(activity_doc)
+    activities_collection.insert_one(activity_doc)
     
     # Update lead's last_contacted_at (only if lead is in same tenant)
     try:
@@ -1195,7 +1196,6 @@ async def get_aria_analytics(current_user: dict = Depends(get_current_user)):
     
     # Disqualification reasons
     dnc_count = state_counts.get("DO_NOT_CONTACT", 0)
-    disqualified_count = leads_collection.count_documents({"aria_state": "DO_NOT_CONTACT", "tenant_id": tid})
     
     return {
         "total_conversations": total_conversations,
@@ -1898,7 +1898,6 @@ async def pre_call_research(request: PreCallResearchRequest, current_user: dict 
     )
     chat.with_model("anthropic", "claude-4-sonnet-20250514")
 
-    is_b2b = lead.get("lead_type") == "B2B"
     prompt = f"""Research this lead for a pre-call briefing:
 
 Name: {lead.get('first_name')} {lead.get('last_name')}
@@ -1974,7 +1973,6 @@ async def send_pre_call_brief(lead_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=404, detail="Lead not found")
     lead = serialize_doc(lead)
     research = lead.get("research_data", {})
-    convo = list(aria_conversations_collection.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(5))
     qual = lead.get("aria_qualification_data", {})
     founder = FOUNDER_PROFILE["name"]
 
@@ -2344,7 +2342,6 @@ async def get_lead_phase(lead_id: str, current_user: dict = Depends(get_current_
     phase1_states = ["PENDING_FIRST_TOUCH", "AWAITING_REPLY_1", "AWAITING_REPLY_2", "CONVERSATION_ACTIVE", "BOOKING_ATTEMPTED", "MEETING_BOOKED"]
     phase2_states = ["ON_HOLD_DURING_CALL"]
     phase3_states = ["PROPOSAL_PENDING", "PROPOSAL_FOLLOW_UP", "WAITING_FOR_CHECK_IN"]
-    terminal_states = ["DISQUALIFIED", "DO_NOT_CONTACT", "ESCALATED_TO_HUMAN", "SEQUENCE_ENDED"]
 
     if state in phase1_states:
         phase = 1
@@ -2525,7 +2522,6 @@ async def web_form_submit(lead: WebFormLead):
 @app.get("/api/form/embed-code")
 async def get_embed_code(current_user: dict = Depends(get_current_user)):
     """Generate embeddable HTML form snippet."""
-    backend_url = os.getenv("CORS_ORIGINS", "").split(",")[0] if os.getenv("CORS_ORIGINS") != "*" else "{{YOUR_BACKEND_URL}}"
     # Use the request's host for the URL
     embed_code = f"""<!-- GenLeadAI Lead Capture Form -->
 <div id="genleadai-form" style="max-width:480px;margin:0 auto;font-family:'Plus Jakarta Sans',sans-serif;">
@@ -3263,8 +3259,6 @@ ttv_collection = db["time_to_value"]
 @app.get("/api/ttv/milestones")
 async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
     """Get Time to Value milestones for the current user/workspace."""
-    doc = ttv_collection.find_one({"user_email": current_user["email"]}, {"_id": 0})
-
     # Auto-detect milestones from real data if not explicitly tracked
     now = datetime.now(timezone.utc)
     user_doc = users_collection.find_one({"email": current_user["email"]})
@@ -4571,6 +4565,16 @@ async def _start_retention_loop():
     print("[Retention] Background loop started (24h tick)")
 
 
+@app.on_event("startup")
+async def _start_b2b_insight_scan_loop():
+    """Iter97 — Daily B2B Insights cron. Scans every b2b/hybrid tenant once
+    per 24h, classifies new signals via Claude, and persists insight cards.
+    Cheap when no tenants exist; safe when LLM key absent (returns []).
+    """
+    asyncio.create_task(b2b_insight_scan_loop())
+    print("[B2BInsightScan] Background loop started (24h tick, +5min startup stagger)")
+
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ARIA End-of-Day Wrap — emails the founder a 6pm summary of today's progress
@@ -5057,7 +5061,6 @@ async def founder_command_center(
     the admin's Demo Dashboard page to opt-in to sample data.
     """
     now = datetime.now(timezone.utc)
-    cutoff_overdue = now - timedelta(days=2)
 
     # Demo opt-in: only the admin / demo-dashboard route should ask for this.
     if demo:
@@ -5076,7 +5079,6 @@ async def founder_command_center(
     overdue, hot_untouched, proposal_stuck, unassigned, lost_no_reason = [], [], [], [], []
     pipeline_value = 0
     money_at_risk = 0
-    money_at_risk_rows = []
 
     for l in leads:
         l["id"] = str(l["_id"]); l.pop("_id", None)

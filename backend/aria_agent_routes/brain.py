@@ -95,7 +95,6 @@ async def aria_brain(current_user: dict = Depends(get_current_user)):
     # Live learnings derived from workspace data
     leads_total = leads_collection.count_documents({})
     wins = leads_collection.count_documents({"status": "won"})
-    lost = leads_collection.count_documents({"status": "lost"})
     hot = leads_collection.count_documents({"icp_score": {"$gte": 80}})
     # Top source
     src_counts = {}
