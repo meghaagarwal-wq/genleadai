@@ -8,6 +8,7 @@ const NAV = [
   { to: '/admin/workspaces', label: 'Workspaces' },
   { to: '/admin/usage', label: 'Usage & Billing' },
   { to: '/admin/system', label: 'System Health' },
+  { to: '/admin/key-validation', label: 'Key Validation' },  // iter108
   { to: '/admin/settings', label: 'Settings' },
 ];
 
@@ -291,6 +292,148 @@ const AdminSettings = () => (
   </div>
 );
 
+// iter108 — Admin debug surface for the pre-save API-key validator. Shows
+// the last 50 attempts across the platform with elapsed_ms + masked key
+// + which user pasted it.
+const AdminKeyValidation = () => {
+  const [items, setItems] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [testProvider, setTestProvider] = useState('');
+  const [testKey, setTestKey] = useState('');
+  const [testResult, setTestResult] = useState(null);
+  const [testBusy, setTestBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [h, p] = await Promise.all([
+        api.get('/api/integrations/validate-key/history'),
+        api.get('/api/integrations/validate-key/providers'),
+      ]);
+      setItems(h.data.items || []);
+      setProviders(p.data.providers || []);
+      if (!testProvider && (p.data.providers || []).length) setTestProvider(p.data.providers[0]);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Failed to load key-validation history');
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const runTest = async () => {
+    if (!testProvider || !testKey) return;
+    setTestBusy(true);
+    setTestResult(null);
+    try {
+      const { data } = await api.post('/api/integrations/validate-key', {
+        provider: testProvider, api_key: testKey,
+      });
+      setTestResult(data);
+      refresh();
+    } catch (e) {
+      setTestResult({ valid: false, message: e?.response?.data?.detail || 'Request failed' });
+    } finally {
+      setTestBusy(false);
+    }
+  };
+
+  return (
+    <div data-testid="admin-key-validation">
+      <h1 className="text-2xl font-bold text-slate-900 mb-1">Key Validation</h1>
+      <p className="text-sm text-slate-600 mb-6">
+        Live debug of every API-key paste across all workspaces (last 50, in-memory).
+      </p>
+
+      <div className="border border-slate-200 rounded-xl p-5 bg-white mb-6">
+        <div className="text-sm font-semibold text-slate-900 mb-3">Try a key</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            value={testProvider}
+            onChange={(e) => setTestProvider(e.target.value)}
+            data-testid="admin-key-test-provider"
+            className="border border-slate-300 rounded-md px-2 py-1.5 text-sm bg-white"
+          >
+            {providers.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <input
+            type="password"
+            value={testKey}
+            placeholder="Paste a key to test…"
+            onChange={(e) => setTestKey(e.target.value)}
+            data-testid="admin-key-test-input"
+            className="flex-1 min-w-[260px] border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+          />
+          <button
+            onClick={runTest}
+            disabled={!testKey || testBusy}
+            data-testid="admin-key-test-run"
+            className="text-sm font-semibold bg-slate-900 text-white px-3 py-1.5 rounded-md disabled:opacity-50"
+          >{testBusy ? 'Testing…' : 'Validate'}</button>
+        </div>
+        {testResult && (
+          <div
+            data-testid="admin-key-test-result"
+            className={`mt-3 text-sm ${testResult.valid ? 'text-emerald-700' : 'text-rose-700'}`}
+          >
+            {testResult.valid ? '✓ Valid — ' : '✕ Rejected — '}{testResult.message}
+            {typeof testResult.elapsed_ms === 'number' && (
+              <span className="text-slate-500 ml-2">({testResult.elapsed_ms} ms)</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-semibold text-slate-900">Recent attempts ({items.length})</div>
+        <button
+          onClick={refresh}
+          data-testid="admin-key-history-refresh"
+          className="text-xs font-semibold text-violet-700 hover:underline"
+        >Refresh</button>
+      </div>
+      <div className="border border-slate-200 rounded-xl bg-white overflow-hidden">
+        {loading ? (
+          <div className="p-6 text-sm text-slate-500">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="p-6 text-sm text-slate-500">No attempts yet. Paste any key into an integration card to populate this list.</div>
+        ) : (
+          <table className="w-full text-sm" data-testid="admin-key-history-table">
+            <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="text-left px-4 py-2">When</th>
+                <th className="text-left px-4 py-2">Provider</th>
+                <th className="text-left px-4 py-2">Result</th>
+                <th className="text-left px-4 py-2">Latency</th>
+                <th className="text-left px-4 py-2">Key (masked)</th>
+                <th className="text-left px-4 py-2">User</th>
+                <th className="text-left px-4 py-2">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={i} className="border-t border-slate-100">
+                  <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{new Date(it.at).toLocaleString()}</td>
+                  <td className="px-4 py-2 font-medium text-slate-900">{it.provider}</td>
+                  <td className={`px-4 py-2 font-semibold ${it.valid ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {it.valid ? '✓ valid' : '✕ rejected'}
+                  </td>
+                  <td className="px-4 py-2 text-slate-500">{it.elapsed_ms != null ? `${it.elapsed_ms} ms` : '—'}</td>
+                  <td className="px-4 py-2 font-mono text-xs text-slate-700">{it.key_masked}</td>
+                  <td className="px-4 py-2 text-slate-600">{it.by_user_email || '—'}</td>
+                  <td className="px-4 py-2 text-slate-600 max-w-[420px] truncate" title={it.message}>{it.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const AdminLayout = () => {
   const navigate = useNavigate();
   return (
@@ -330,6 +473,7 @@ const AdminLayout = () => {
             <Route path="/workspaces" element={<AdminWorkspaces />} />
             <Route path="/usage" element={<AdminUsage />} />
             <Route path="/system" element={<AdminSystem />} />
+            <Route path="/key-validation" element={<AdminKeyValidation />} />
             <Route path="/settings" element={<AdminSettings />} />
           </Routes>
         </main>

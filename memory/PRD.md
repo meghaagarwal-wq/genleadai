@@ -1,3 +1,110 @@
+## Iter 108 — API-Key Pre-validation + server.py refactor (Feb 2026)
+
+### Scope (4-action prompt)
+1. **Deploy + /api/health verify** — BLOCKED on user action ("Save to GitHub → Deploy").
+2. **API-key pre-validation** — paste key → live test against provider → green/red → gated Save.
+3. **server.py refactor** — break the 5431-line monolith into per-domain routers.
+4. **OAuth wiring** — Calendly, Gmail, Outlook, Meta, LinkedIn, Google Ads.
+
+### What landed this iter
+
+**ACTION 2 — Pre-save API-key validation (✅ COMPLETE)**
+- New backend router `/app/backend/routes/api_key_validator.py`:
+  - `POST /api/integrations/validate-key` body `{provider, api_key}` →
+    `{valid, message, elapsed_ms}`.
+  - 6 providers wired with real provider-side test calls:
+    - **Saleshandy**: `GET /v1/sequences` + custom auth-in-400 detection.
+    - **Proxycurl → NinjaPear migration**: `/proxycurl/api/*` was sunset.
+      Now uses `GET https://nubela.co/api/v1/customer/listing` which
+      returns 401 `{"error":"Invalid API Key"}` for bad keys (same key
+      works across both products per Nubela's API_SUNSET notice).
+    - **Serper**: `POST /search?num=1` ping (1 credit).
+    - **Apollo**: `POST /v1/people/match` (1 credit, 200 + 422 = ok).
+    - **360dialog**: `GET /v1/configs` (free meta).
+    - **Resend**: `GET /api-keys` (free admin).
+  - In-memory ring buffer (last 50 attempts) stores `{at, provider,
+    valid, message, elapsed_ms, by_user_email, key_masked}`. Master-admin
+    only: `GET /api/integrations/validate-key/history` +
+    `GET /api/integrations/validate-key/providers`.
+- New frontend component `/app/frontend/src/components/ApiKeyInput.js`:
+  - Debounced (600ms) live validation, status icon (⏳/✓/✕), inline
+    coloured message, `onValidityChange` callback so parents can gate Save.
+  - Wired into `pietential/pages/PtIntegrations.js` for the 6 provider
+    cards via a `VALIDATED_PROVIDERS` allow-list (other cards keep the
+    legacy plain input — zero regression).
+- New **Admin debug surface** at `/admin/key-validation` (master-admin
+  nav item added in `AdminLayout.js`):
+  - "Try a key" form (provider dropdown + paste box + Validate button)
+    that exercises the same endpoint and renders result inline.
+  - Live "Recent attempts" table: When · Provider · Result · Latency ·
+    Key (masked) · User · Message. Refresh button.
+
+**ACTION 3 — server.py refactor (PARTIAL — 2 of N modules extracted)**
+- New router `/app/backend/routes/assets_routes.py` — 5 endpoints
+  (`POST/GET /api/assets[/upload]`, `GET /api/assets/download/{id}`,
+  `PATCH/DELETE /api/assets/{id}`). Self-contained, behaviour preserved.
+- New router `/app/backend/routes/webhooks_inbound.py` — Calendly +
+  Meta-Leads webhooks (`POST /api/webhooks/calendly` + `POST
+  /api/webhooks/meta-leads`). `auto_send_lead_magnet` imported lazily
+  to avoid circulars with the still-monolithic server.py.
+- Both registered via `routes/__init__.py` blueprint aggregator.
+- Stripped from server.py + replaced with one-line comments pointing
+  to the new locations. Also dropped a dead legacy duplicate of
+  `get_your_five_today` (the canonical impl at line ~361 wins by
+  first-match registration anyway).
+- `server.py` went from 5431 → 5151 lines (−280, ~5%).
+- 7-point regression all green: `/api/health` 200, login 200,
+  `/api/leads` 200 (50 leads), `/api/assets` 200, Calendly + Meta
+  webhooks both return `{received:true}`, key validator still works,
+  bonus checks (`/api/aria/feed`, `/api/pt/setup/health`,
+  `/api/leads/your-five-today`) all 200.
+- **Caveat:** The full per-domain breakdown of the remaining 5151
+  lines is a multi-session effort — WhatsApp webhook (180 lines, ~15
+  helpers), Stripe billing (290 lines, plan catalog + checkout +
+  webhook), lead-magnet flow (~250 lines), aria-call-priority
+  (~600 lines), eod-wrap (~150 lines) are all tightly coupled to
+  inline helpers and would each need a careful, tested extraction.
+
+**ACTION 4 — OAuth scaffolds (VERIFIED — credentials missing)**
+- The iter106 scaffold for 6 providers is already live in
+  `routes/oauth_integrations.py` and registered.
+- All 6 `GET /api/integrations/<provider>/connect` calls return a
+  clean **HTTP 503** with the exact missing env-var names. Canonical
+  provider slugs are: `calendly`, `gmail`, `outlook`, `meta`,
+  `linkedin`, `googleads`.
+- All 12 expected env vars (`CALENDLY_CLIENT_ID/SECRET`,
+  `GMAIL_CLIENT_ID/SECRET`, `MICROSOFT_CLIENT_ID/SECRET`,
+  `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`,
+  `GOOGLE_ADS_CLIENT_ID/SECRET`) are declared in `.env` but **empty**
+  — real wiring is BLOCKED on user-supplied credentials. Per the spec
+  no mocks were added.
+
+**ACTION 1 — Deploy (USER-ACTION)**
+- Code is stable on the preview. To go live the user must click
+  "Save to GitHub → Deploy" in the chat UI. After deploy I can curl
+  `/api/health` on the prod URL to confirm.
+
+### Active backlog (P0/P1 carried forward)
+- **P0 (user-blocked)**: deploy + production health check.
+- **P0 (user-blocked)**: paste real OAuth credentials for any of the
+  6 providers we should bring online first.
+- **P1**: continue server.py breakdown — recommended order due to
+  coupling:
+    1. WhatsApp webhook (`webhooks_whatsapp.py`).
+    2. Stripe billing + plan catalog (`billing_routes.py`).
+    3. Lead-magnet flow (`lead_magnets_routes.py`).
+    4. Aria call-priority + best-time-to-call
+       (`aria_call_priority.py`).
+    5. EOD-wrap loop + endpoints (`aria_eod_wrap.py`).
+    6. Demo seeder + dev plan switch (`dev_routes.py`).
+    7. Startup lifecycle helpers (`startup_lifecycle.py`).
+- **P2**: workspace-timezone DST edge cases in digest loop, Reports
+  ICP-channel cross-tab matrix, robots.txt politeness in Train ARIA
+  URL scrape, scan_url content-length cap.
+
+---
+
+
 ## Iter 104 — New ARIA / GenLeadAI public landing page (Feb 2026)
 
 > User uploaded Tailwind v4 / `motion/react` `.tsx` artifacts and asked to

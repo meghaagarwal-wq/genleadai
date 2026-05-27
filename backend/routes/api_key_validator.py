@@ -9,17 +9,21 @@ into one server function keeps the frontend dead simple (a single
 `ApiKeyInput` component).
 
 Costs of the test calls (per call, all bounded < 1¢):
-  - Saleshandy : GET  /v1/team-members            (free, scoped to API key)
-  - Proxycurl  : GET  /proxycurl/api/v2/linkedin?url=...  (consumes 1 credit)
-  - Serper     : POST /search                     (consumes 1 search credit)
-  - Apollo     : GET  /v1/auth/health             (free)
-  - 360dialog  : GET  /v1/configs                 (free meta endpoint)
-  - Resend     : GET  /api-keys                   (free admin endpoint)
+  - Saleshandy : GET  /v1/sequences                 (free — list call)
+  - Proxycurl  : GET  /api/v1/customer/listing      (free — NinjaPear auth probe)
+  - Serper     : POST /search                       (consumes 1 search credit)
+  - Apollo     : POST /v1/people/match              (consumes 1 enrichment credit)
+  - 360dialog  : GET  /v1/configs                   (free meta endpoint)
+  - Resend     : GET  /api-keys                     (free admin endpoint)
 """
 from __future__ import annotations
 
+import time
+from collections import deque
+from datetime import datetime, timezone
+from typing import Any, Deque, Dict, Optional, Tuple
+
 import httpx
-from typing import Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -69,27 +73,27 @@ async def _validate_saleshandy(key: str) -> Tuple[bool, str]:
 
 
 async def _validate_proxycurl(key: str) -> Tuple[bool, str]:
-    # Try multiple endpoints since Proxycurl has been sunsetting v2 paths.
-    # 200 / 400 / 404 = key accepted; 401 / 403 = key rejected;
-    # 410 = endpoint sunset (cannot verify, allow save with caveat).
+    # Proxycurl was sunset in 2026 and replaced by NinjaPear (same Nubela team,
+    # SAME API KEY — per the API_SUNSET message at /proxycurl/api/*).
+    # NinjaPear's `/api/v1/customer/listing` returns 401 `{"error":"Invalid API Key"}`
+    # for bad keys and 200 for valid ones — a clean auth check.
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             r = await client.get(
-                "https://nubela.co/proxycurl/api/v2/linkedin",
-                params={"url": "https://www.linkedin.com/in/proxycurl-validator/"},
-                headers={"Authorization": f"Bearer {key}"},
+                "https://nubela.co/api/v1/customer/listing",
+                headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
             )
-        if r.status_code in (200, 400, 404):
-            return True, "Key valid — ready to connect."
+        if r.status_code == 200:
+            return True, "Key valid — ready to connect (Proxycurl → NinjaPear migration)."
         if r.status_code in (401, 403):
-            return False, "Proxycurl rejected this key. Generate a new one at nubela.co → Account → API."
-        if r.status_code == 410:
-            # Proxycurl deprecated this endpoint — cannot validate, but save
-            # anyway since we'll re-verify on the next enrichment call.
-            return True, "Saved (Proxycurl couldn't pre-verify — endpoint changed; will validate on next scan)."
-        return False, f"Proxycurl returned HTTP {r.status_code}: {_short(r.text)}"
+            return False, "Proxycurl/NinjaPear rejected this key. Generate a new one at nubela.co → Account → API."
+        if r.status_code in (400, 404, 422):
+            # Endpoint reachable, key not rejected outright — treat as valid;
+            # the real call will surface any remaining issues at enrichment time.
+            return True, "Key valid — ready to connect."
+        return False, f"Proxycurl/NinjaPear returned HTTP {r.status_code}: {_short(r.text)}"
     except httpx.RequestError as e:
-        return False, f"Could not reach Proxycurl: {_short(str(e))}"
+        return False, f"Could not reach Proxycurl/NinjaPear: {_short(str(e))}"
 
 
 async def _validate_serper(key: str) -> Tuple[bool, str]:
@@ -180,10 +184,62 @@ async def validate_api_key(
     provider = (payload.provider or "").strip().lower()
     key = (payload.api_key or "").strip()
     if not key or len(key) < 8:
-        return {"valid": False, "message": "Key looks empty or too short."}
+        result = {"valid": False, "message": "Key looks empty or too short."}
+        _record_attempt(provider, current_user, result, key)
+        return result
     validator = VALIDATORS.get(provider)
     if not validator:
         raise HTTPException(404, f"No validator for provider: {provider}. "
                                  f"Known: {sorted(VALIDATORS.keys())}")
+    started = time.monotonic()
     valid, message = await validator(key)
-    return {"valid": valid, "message": message, "provider": provider}
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    result = {"valid": valid, "message": message, "provider": provider, "elapsed_ms": elapsed_ms}
+    _record_attempt(provider, current_user, result, key)
+    return result
+
+
+# ─── Admin debug surface ────────────────────────────────────────────────────
+# In-memory ring buffer of the last 50 validation attempts. Master-admin only.
+# Keys are never recorded — we store the prefix + length + masked tail so the
+# operator can correlate which paste failed without leaking the secret.
+_HISTORY: Deque[Dict[str, Any]] = deque(maxlen=50)
+
+
+def _mask_key(key: str) -> str:
+    if not key:
+        return ""
+    if len(key) <= 8:
+        return "*" * len(key)
+    return f"{key[:4]}…{key[-3:]} (len={len(key)})"
+
+
+def _record_attempt(provider: str, user: dict, result: Dict[str, Any], key: str) -> None:
+    _HISTORY.appendleft({
+        "at": datetime.now(timezone.utc).isoformat(),
+        "provider": provider,
+        "valid": bool(result.get("valid")),
+        "message": result.get("message", ""),
+        "elapsed_ms": result.get("elapsed_ms"),
+        "by_user_id": str(user.get("id") or user.get("_id") or ""),
+        "by_user_email": user.get("email", ""),
+        "key_masked": _mask_key(key),
+    })
+
+
+def _is_master_admin(user: dict) -> bool:
+    return user.get("role") in ("master_admin", "owner")
+
+
+@router.get("/api/integrations/validate-key/history")
+async def validate_key_history(current_user: dict = Depends(get_current_user)):
+    """Master-admin debug view of recent pre-validation attempts (last 50)."""
+    if not _is_master_admin(current_user):
+        raise HTTPException(403, "Master admin only.")
+    return {"count": len(_HISTORY), "items": list(_HISTORY)}
+
+
+@router.get("/api/integrations/validate-key/providers")
+async def validate_key_providers(current_user: dict = Depends(get_current_user)):
+    """Lightweight metadata so the frontend can render a complete provider list."""
+    return {"providers": sorted(VALIDATORS.keys())}

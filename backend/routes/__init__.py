@@ -138,6 +138,10 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter108 — ACTION 2: real-time API key pre-validation (single endpoint, 6 providers)
     from .api_key_validator import router as api_key_validator_router
 
+    # Iter108 — ACTION 3: server.py refactor — extracted self-contained endpoints
+    from .assets_routes import router as assets_router
+    from .webhooks_inbound import router as webhooks_inbound_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -174,5 +178,7 @@ def register_all_routes(app: FastAPI) -> None:
         insight_digest_router,
         oauth_integrations_router,
         api_key_validator_router,
+        assets_router,
+        webhooks_inbound_router,
     ):
         app.include_router(router)
