@@ -63,10 +63,14 @@ load_dotenv()
 
 app = FastAPI(title="GenLeadAI LMS API")
 
-# CORS
+# CORS — restricted to known frontend origins. Wildcard removed per iter105 P1 fix.
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+if not _cors_origins:
+    # Fail-safe: if env is missing, allow nothing (deploy must set it).
+    _cors_origins = []
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,6 +122,13 @@ def _auto_migrate_multi_tenant():
     except Exception as e:
         # Never block app startup on a migration error — log and move on.
         print(f"[Startup] Multi-tenant migration skipped due to error: {e}")
+    # Iter105 — P0 fix: ensure secondary performance indexes exist.
+    try:
+        from scripts.create_perf_indexes import main as run_indexes
+        result = run_indexes()
+        print(f"[Startup] perf indexes: created={len(result['created'])} skipped={len(result['skipped'])} errors={len(result['errors'])}")
+    except Exception as e:
+        print(f"[Startup] perf indexes skipped due to error: {e}")
 
     # iter102 — encrypt any plaintext integration secrets on disk. Idempotent.
     try:
@@ -3990,6 +4001,21 @@ async def whatsapp_webhook_receive(request: Request):
                     tenant_id = tenant.get("id") if tenant else None
 
                     if tenant_id:
+                        # iter105 — FIX 15: Send/Dismiss command on a pending insight
+                        # card sent to this owner's WhatsApp. Short-circuits normal
+                        # lead handling so a one-word reply actions the card.
+                        try:
+                            from routes.iter105_fixes import parse_whatsapp_command
+                            cmd_result = parse_whatsapp_command(body, from_phone or "", tenant_id)
+                            if cmd_result and cmd_result.get("matched"):
+                                try:
+                                    await send_whatsapp_text(tenant_id, from_phone or "", cmd_result["confirmation_msg"])
+                                except Exception as _e:
+                                    print(f"[whatsapp] command confirmation send failed: {_e}")
+                                continue  # do not run normal lead pipeline for command messages
+                        except Exception as _e:
+                            print(f"[whatsapp] insight command parse error: {_e}")
+
                         # STOP keyword auto-opt-out
                         if is_stop_keyword(body):
                             opt_out_phone(tenant_id, from_phone or "", reason="stop_keyword")
@@ -4581,6 +4607,13 @@ async def _start_b2b_insight_scan_loop():
     Cheap when no tenants exist; safe when LLM key absent (returns []).
     """
     asyncio.create_task(b2b_insight_scan_loop())
+    # iter105 — snooze-recovery loop (hourly) so snoozed cards re-surface.
+    try:
+        from routes.pt_insights import snooze_recovery_loop
+        asyncio.create_task(snooze_recovery_loop())
+        print("[Iter105] snooze_recovery loop started")
+    except Exception as _e:
+        print(f"[Iter105] snooze_recovery loop NOT started: {_e}")
     print("[B2BInsightScan] Background loop started (24h tick, +5min startup stagger)")
 
 

@@ -465,7 +465,12 @@ class ScanResponse(BaseModel):
 
 
 class InsightActionPayload(BaseModel):
-    action: str = Field(pattern="^(send|copy|dismiss)$")
+    # iter105 — accepts send | copy | dismiss | snooze
+    action: str = Field(pattern="^(send|copy|dismiss|snooze)$")
+    # For "send" — optional edited message body (Edit + Send flow).
+    message: Optional[str] = None
+    # For "snooze" — ISO date/datetime string; card hides until then.
+    snooze_until: Optional[str] = None
 
 
 class IntegrationKeysPayload(BaseModel):
@@ -696,11 +701,60 @@ async def action_on_insight(
     if not card:
         raise HTTPException(404, "Insight not found")
 
-    new_status = {"send": "sent", "copy": "copied", "dismiss": "dismissed"}.get(payload.action)
+    status_map = {"send": "sent", "copy": "copied", "dismiss": "dismissed", "snooze": "snoozed"}
+    new_status = status_map.get(payload.action)
     if not new_status:
         raise HTTPException(400, "Invalid action")
+
+    set_doc: Dict[str, Any] = {
+        "status": new_status,
+        "actioned_at": _now_iso(),
+        "actioned_action": payload.action,
+    }
+
+    # Edit + Send flow — persist the edited body so the audit trail shows what
+    # actually shipped, not the AI's original suggestion.
+    if payload.action == "send" and payload.message and payload.message.strip():
+        set_doc["sent_message"] = payload.message.strip()
+    elif payload.action == "send":
+        set_doc["sent_message"] = card.get("suggested_message") or ""
+
+    # Snooze flow — hide until snooze_until (ISO). Default to 2 days if not given.
+    if payload.action == "snooze":
+        if payload.snooze_until and payload.snooze_until.strip():
+            set_doc["snooze_until"] = payload.snooze_until.strip()
+        else:
+            from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+            set_doc["snooze_until"] = (_dt.now(_tz.utc) + _td(days=2)).isoformat()
+
     insights_col.update_one(
         {"id": insight_id, "tenant_id": tenant["id"]},
-        {"$set": {"status": new_status, "actioned_at": _now_iso(), "actioned_action": payload.action}},
+        {"$set": set_doc},
     )
-    return {"ok": True, "id": insight_id, "status": new_status}
+    return {
+        "ok": True,
+        "id": insight_id,
+        "status": new_status,
+        "snooze_until": set_doc.get("snooze_until"),
+        "sent_message": set_doc.get("sent_message"),
+    }
+
+
+# iter105 — Snooze recovery: every hour, any snoozed card whose snooze_until
+# has passed flips back to "new" so it reappears in the feed.
+async def snooze_recovery_loop():
+    import asyncio
+    from datetime import datetime as _dt, timezone as _tz
+    while True:
+        try:
+            now_iso = _dt.now(_tz.utc).isoformat()
+            res = insights_col.update_many(
+                {"status": "snoozed", "snooze_until": {"$lte": now_iso}},
+                {"$set": {"status": "new"}, "$unset": {"snooze_until": ""}},
+            )
+            if res.modified_count:
+                print(f"[snooze_recovery] reactivated {res.modified_count} card(s)")
+        except Exception as e:
+            print(f"[snooze_recovery] error: {e}")
+        await asyncio.sleep(3600)  # 1h
+

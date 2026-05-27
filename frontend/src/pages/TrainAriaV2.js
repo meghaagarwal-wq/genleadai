@@ -150,6 +150,125 @@ const IcpEditor = ({ icps, onChange }) => {
   );
 };
 
+// iter105 — FIX 10: URL scrape component
+const UrlScraper = ({ onExtracted }) => {
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    const v = url.trim();
+    if (!v) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post('/api/aria/training-profile/scrape-url', { url: v }, { timeout: 60000 });
+      toast.success(`Scraped ${data.char_count} chars — review extracted fields below`);
+      onExtracted?.(data);
+      setUrl('');
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'URL scrape failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="flex gap-2" data-testid="train-aria-url-scraper">
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://yourcompany.com/about"
+        disabled={busy}
+        className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-50"
+        data-testid="train-aria-url-input"
+      />
+      <button
+        type="submit"
+        disabled={busy || !url.trim()}
+        data-testid="train-aria-url-scrape-btn"
+        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg whitespace-nowrap"
+      >
+        {busy ? 'Reading…' : 'Scrape URL'}
+      </button>
+    </form>
+  );
+};
+
+// iter105 — FIX 9: Version history component
+const VersionHistoryButton = ({ onRestored }) => {
+  const [open, setOpen] = useState(false);
+  const [versions, setVersions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/api/aria/training-profile/history');
+      setVersions(data.versions || []);
+    } catch (e) {
+      toast.error('Could not load history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const restore = async (v) => {
+    if (!window.confirm(`Restore training profile to v${v}? Current draft will be overwritten.`)) return;
+    try {
+      await api.post(`/api/aria/training-profile/restore/${v}`);
+      toast.success(`Restored to v${v}`);
+      setOpen(false);
+      onRestored?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Restore failed');
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => { setOpen(true); load(); }}
+        data-testid="train-aria-version-history-btn"
+        className="text-xs font-semibold text-violet-700 hover:text-violet-900 underline underline-offset-2"
+      >
+        Version History
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6 max-h-[80vh] overflow-y-auto" data-testid="train-aria-version-history-modal">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-slate-900">Version History</h3>
+              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+            </div>
+            {loading && <div className="text-sm text-slate-500">Loading…</div>}
+            {!loading && versions.length === 0 && (
+              <div className="text-sm text-slate-500">No saved versions yet. Save your training profile to create a checkpoint.</div>
+            )}
+            {!loading && versions.map((v) => (
+              <div key={v.version} className="flex items-center justify-between gap-3 py-3 border-b border-slate-100" data-testid={`version-row-${v.version}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900">v{v.version}{v.is_current ? ' · current' : ''}</div>
+                  <div className="text-xs text-slate-500 truncate">{v.saved_at}</div>
+                  {v.summary && <div className="text-xs text-slate-600 mt-1 truncate">{v.summary}</div>}
+                </div>
+                {!v.is_current && (
+                  <button
+                    onClick={() => restore(v.version)}
+                    data-testid={`version-restore-${v.version}-btn`}
+                    className="px-3 py-1.5 border border-violet-300 hover:bg-violet-50 text-violet-700 text-xs font-semibold rounded-lg whitespace-nowrap"
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 const TrainAriaV2 = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -341,6 +460,17 @@ const TrainAriaV2 = () => {
           {extracting && (
             <div className="mt-2 text-xs text-violet-600 font-medium">Aria is reading your document…</div>
           )}
+
+          {/* iter105 — FIX 10: URL scrape */}
+          <div className="border-t border-slate-200 mt-4 pt-4">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Or paste your website URL</div>
+            <UrlScraper onExtracted={() => load()} />
+          </div>
+
+          {/* iter105 — FIX 9: Version history */}
+          <div className="border-t border-slate-200 mt-4 pt-4">
+            <VersionHistoryButton onRestored={() => load()} />
+          </div>
         </div>
       </div>
 

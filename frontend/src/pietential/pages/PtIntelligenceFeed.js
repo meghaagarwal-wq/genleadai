@@ -19,6 +19,7 @@ const StatusBadge = ({ status }) => {
     sent:      'bg-emerald-50 text-emerald-700 ring-emerald-200',
     copied:    'bg-sky-50 text-sky-700 ring-sky-200',
     dismissed: 'bg-slate-100 text-slate-500 ring-slate-200',
+    snoozed:   'bg-amber-50 text-amber-700 ring-amber-200',
   };
   return (
     <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ring-1 ${map[status] || map.new}`}>
@@ -106,6 +107,10 @@ const IntegrationsCard = ({ status, onSave }) => {
 
 const InsightCard = ({ card, onAction }) => {
   const sig = SIGNAL_LABELS[card.signal_type] || { label: card.signal_type, color: 'bg-slate-100 text-slate-700' };
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(card.suggested_message || '');
+  const [showSnoozeMenu, setShowSnoozeMenu] = useState(false);
+
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(card.suggested_message || '');
@@ -117,6 +122,45 @@ const InsightCard = ({ card, onAction }) => {
   };
   const send = () => onAction(card.id, 'send');
   const dismiss = () => onAction(card.id, 'dismiss');
+
+  // iter105 — Edit + Send
+  const sendEdited = () => {
+    const body = (draft || '').trim();
+    if (!body) { toast.error('Message cannot be empty'); return; }
+    onAction(card.id, 'send', { message: body });
+    setEditing(false);
+  };
+
+  // iter105 — Snooze (2d / 5d / custom)
+  const snoozeFor = (days) => {
+    const until = new Date(Date.now() + days * 86400 * 1000).toISOString();
+    onAction(card.id, 'snooze', { snooze_until: until });
+    setShowSnoozeMenu(false);
+  };
+  const snoozeCustom = () => {
+    const v = window.prompt('Snooze until (YYYY-MM-DD):');
+    if (!v) return;
+    const parsed = new Date(v);
+    if (Number.isNaN(parsed.getTime())) { toast.error('Invalid date'); return; }
+    onAction(card.id, 'snooze', { snooze_until: parsed.toISOString() });
+    setShowSnoozeMenu(false);
+  };
+
+  // iter105 — Download PDF
+  const downloadPdf = async () => {
+    try {
+      const res = await api.get(`/api/pt/insights/${card.id}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aria-insight-${(card.prospect_name || 'card').replace(/\s+/g, '-').toLowerCase()}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('PDF downloaded');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'PDF download failed');
+    }
+  };
 
   return (
     <div className="border border-slate-200 rounded-xl p-5 bg-white" data-testid={`insight-card-${card.id}`}>
@@ -139,18 +183,56 @@ const InsightCard = ({ card, onAction }) => {
         </div>
       )}
 
-      {card.suggested_message && (
+      {card.suggested_message && !editing && (
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-3">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Suggested message</div>
           <pre className="text-sm text-slate-700 whitespace-pre-wrap font-sans">{card.suggested_message}</pre>
         </div>
       )}
 
-      {card.status === 'new' && (
-        <div className="flex gap-2 flex-wrap">
+      {editing && (
+        <div className="bg-violet-50 border border-violet-200 rounded-lg p-3 mb-3" data-testid={`insight-${card.id}-edit-pane`}>
+          <div className="text-xs font-semibold text-violet-600 uppercase tracking-wide mb-1.5">Edit message before sending</div>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={5}
+            className="w-full px-3 py-2 text-sm border border-violet-300 rounded-md focus:outline-none focus:ring-2 focus:ring-violet-400 font-sans"
+            data-testid={`insight-${card.id}-edit-textarea`}
+          />
+          <div className="flex gap-2 mt-2">
+            <button data-testid={`insight-${card.id}-edit-send-btn`} onClick={sendEdited}
+                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">
+              Send now
+            </button>
+            <button data-testid={`insight-${card.id}-edit-cancel-btn`} onClick={() => { setEditing(false); setDraft(card.suggested_message || ''); }}
+                    className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {card.status === 'new' && !editing && (
+        <div className="flex gap-2 flex-wrap relative">
           <button data-testid={`insight-${card.id}-send-btn`} onClick={send} className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">Send via Aria</button>
+          <button data-testid={`insight-${card.id}-edit-btn`} onClick={() => setEditing(true)} className="px-3 py-1.5 border border-violet-300 hover:bg-violet-50 text-violet-700 text-xs font-semibold rounded-lg">Edit + Send</button>
           <button data-testid={`insight-${card.id}-copy-btn`} onClick={copy} className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg">Copy</button>
+          <button data-testid={`insight-${card.id}-snooze-btn`} onClick={() => setShowSnoozeMenu(v => !v)} className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-500 text-xs font-semibold rounded-lg">Snooze</button>
+          <button data-testid={`insight-${card.id}-pdf-btn`} onClick={downloadPdf} className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-500 text-xs font-semibold rounded-lg">Download PDF</button>
           <button data-testid={`insight-${card.id}-dismiss-btn`} onClick={dismiss} className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-500 text-xs font-semibold rounded-lg">Dismiss</button>
+          {showSnoozeMenu && (
+            <div className="absolute top-full mt-1 left-0 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[140px]" data-testid={`insight-${card.id}-snooze-menu`}>
+              <button onClick={() => snoozeFor(2)} className="px-3 py-1.5 text-xs text-left hover:bg-slate-50 rounded">Snooze 2 days</button>
+              <button onClick={() => snoozeFor(5)} className="px-3 py-1.5 text-xs text-left hover:bg-slate-50 rounded">Snooze 5 days</button>
+              <button onClick={snoozeCustom} className="px-3 py-1.5 text-xs text-left hover:bg-slate-50 rounded">Pick date…</button>
+            </div>
+          )}
+        </div>
+      )}
+      {card.status === 'snoozed' && card.snooze_until && (
+        <div className="text-xs text-amber-700 mt-2">
+          Snoozed until {new Date(card.snooze_until).toLocaleDateString()}
         </div>
       )}
     </div>
@@ -252,9 +334,9 @@ const PtIntelligenceFeed = () => {
     }
   };
 
-  const onAction = async (id, action) => {
+  const onAction = async (id, action, extra = {}) => {
     try {
-      await api.post(`/api/pt/insights/${id}/action`, { action });
+      await api.post(`/api/pt/insights/${id}/action`, { action, ...extra });
       load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Action failed');

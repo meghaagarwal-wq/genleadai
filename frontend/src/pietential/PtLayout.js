@@ -84,6 +84,17 @@ const PtLayout = ({ children }) => {
     return item.modes.includes(workspaceType);
   });
 
+  // iter105 — Route-level mode guard. If the current path is gated by mode and
+  // the active workspace mode isn't in that gate's modes list, redirect Home.
+  // Prevents direct-URL bypass of the nav-hide behaviour.
+  useEffect(() => {
+    const relativePath = location.pathname.replace(prefix, '');
+    const guarded = NAV.find(n => n.modes && n.to && n.to === relativePath);
+    if (guarded && !guarded.modes.includes(workspaceType)) {
+      navigate(`${prefix}`, { replace: true });
+    }
+  }, [location.pathname, workspaceType, prefix, navigate]);
+
   // iter87-89 — pin the active tenant to ten_pietential whenever we're
   // inside /pt. Done SYNCHRONOUSLY first so the X-Tenant-Id header is set
   // before any child page fires its initial fetch.

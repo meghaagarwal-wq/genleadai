@@ -124,6 +124,11 @@ def register_all_routes(app: FastAPI) -> None:
     from .leads_csv import router as leads_csv_router
     from .realtime_onboarding import router as realtime_onboarding_router
 
+    # Iter105 — P2 fixes batched (PDF, history/restore, URL scrape,
+    # insights_enabled, admin job trigger, reports icp/channels, sequences,
+    # WhatsApp command parser helper).
+    from .iter105_fixes import router as iter105_fixes_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -156,5 +161,6 @@ def register_all_routes(app: FastAPI) -> None:
         automation_rules_router,
         leads_csv_router,
         realtime_onboarding_router,
+        iter105_fixes_router,
     ):
         app.include_router(router)

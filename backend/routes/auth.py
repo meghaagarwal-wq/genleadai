@@ -174,9 +174,26 @@ async def login(credentials: UserLogin, request: Request):
     }
 
 
+def _safe_user(user: dict) -> dict:
+    """Whitelist only the fields safe to return to the authenticated user.
+    NEVER expose password_hash, _id, or other internal Mongo fields.
+    """
+    if not user:
+        return {}
+    return {
+        "id": user.get("id"),
+        "email": user.get("email"),
+        "full_name": user.get("full_name"),
+        "role": user.get("role"),
+        "avatar_url": user.get("avatar_url"),
+        "workspace_id": user.get("workspace_id") or user.get("tenant_id"),
+        "created_at": user.get("created_at"),
+    }
+
+
 @router.get("/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
-    return current_user
+    return _safe_user(current_user)
 
 
 @router.post("/change-password")
