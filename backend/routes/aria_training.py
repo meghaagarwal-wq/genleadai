@@ -1,4 +1,4 @@
-"""Aria Master Training Profile + Dynamic System Prompt Assembly (Phase 1).
+"""Aria Master Training Profile + Dynamic System Prompt Assembly (Phase 1 + 2).
 
 Implements the v2 master prompt described in /app/memory/ARIA_MASTER_SPEC.md.
 The workspace owner trains Aria once (via document upload or manual edits);
@@ -8,12 +8,14 @@ message on every Aria conversation.
 
 Endpoints
 ─────────
-GET  /api/aria/training-profile     — current training data (decrypted)
-PUT  /api/aria/training-profile     — replace training fields, re-assemble + encrypt
-GET  /api/aria/system-prompt-preview — preview the assembled prompt as plain text
-POST /api/aria/training-profile/reassemble — force a re-assembly (no data change)
-GET  /api/aria/workspace-type       — current workspace_type
-PUT  /api/aria/workspace-type       — set b2b | b2c | hybrid
+GET  /api/aria/training-profile                    — current training data (decrypted)
+PUT  /api/aria/training-profile                    — replace training fields, re-assemble + encrypt
+GET  /api/aria/system-prompt-preview               — preview the assembled prompt as plain text
+POST /api/aria/training-profile/reassemble         — force a re-assembly (no data change)
+POST /api/aria/training-profile/extract-from-document — upload a doc, extract fields via Claude (strict JSON), merge into profile
+POST /api/aria/training-profile/auto-train-from-workspace — seed profile from existing business_profile + icps collection
+GET  /api/aria/workspace-type                      — current workspace_type
+PUT  /api/aria/workspace-type                      — set b2b | b2c | hybrid
 
 Storage
 ───────
@@ -583,4 +585,377 @@ async def set_workspace_type_endpoint(
         "ok": True,
         "workspace_type": payload.workspace_type,
         "reassembled_at": out["assembled_at"],
+    }
+
+
+# ─── Phase 2: Document extraction (zero-hallucination JSON) ──────────────
+# Implements PROMPT 2 from ARIA_MASTER_SPEC.md. Rules:
+#   1. Only extract what's explicitly stated or clearly implied.
+#   2. Missing field → exactly "NOT_FOUND".
+#   3. No fabrication, no general knowledge filler.
+#   4. Concise summaries — never copy paragraphs verbatim.
+
+_EXTRACTION_SYSTEM_PROMPT = """You are a structured data extraction agent. Your job is to read the document provided and extract specific fields to populate a workspace training profile.
+
+RULES — READ BEFORE EXTRACTING:
+1. Extract only what is explicitly stated or clearly implied in the document.
+2. If a field is not present or not inferable, return exactly the string "NOT_FOUND".
+3. Do not infer, assume, fabricate, or fill gaps with general knowledge.
+4. Do not copy entire paragraphs. Summarise concisely in your own words.
+5. For array fields, return a JSON array (empty [] is fine if no items found).
+6. For text fields, return a string (use "NOT_FOUND" if missing, never empty string).
+7. Return ONLY the JSON object. No preamble, no explanation, no markdown fences.
+
+Output schema (every field must be present):
+{
+  "what_you_sell": "string",
+  "who_you_sell_to": "string",
+  "problem_you_solve": "string",
+  "differentiator": "string",
+  "services_or_products": ["array of strings"],
+  "icp_profiles": [{
+    "icp_name": "string",
+    "target_industries": ["array"],
+    "target_titles_or_roles": ["array"],
+    "company_size": "string",
+    "geography": "string",
+    "budget_range": "string",
+    "high_intent_signals": ["array"],
+    "disqualification_signals": ["array"]
+  }],
+  "qualification_questions": ["array"],
+  "qualified_criteria": ["array"],
+  "low_priority_criteria": ["array"],
+  "book_call_trigger": "string",
+  "instinct_trigger": "string",
+  "automation_trigger": "string",
+  "brand_voice_style": "string",
+  "custom_tone_instructions": "string",
+  "founder_sample_message": "string",
+  "pricing_objection_responses": ["array"],
+  "timing_objection_responses": ["array"],
+  "trust_objection_responses": ["array"],
+  "competitor_responses": ["array"],
+  "custom_faq": [{"question": "string", "answer": "string"}],
+  "calendar_link": "string",
+  "booking_criteria": "string",
+  "pre_call_questions": ["array"],
+  "reminder_timing": "string",
+  "no_show_message": "string",
+  "knowledge_base_notes": "string"
+}"""
+
+
+def _strip_not_found(value):
+    """Recursively convert "NOT_FOUND" sentinels to empty defaults."""
+    if isinstance(value, str):
+        return "" if value.strip().upper() == "NOT_FOUND" else value.strip()
+    if isinstance(value, list):
+        out = []
+        for v in value:
+            cleaned = _strip_not_found(v)
+            # Drop empty strings from lists (NOT_FOUND items should disappear)
+            if cleaned != "" or isinstance(v, dict):
+                out.append(cleaned)
+        return out
+    if isinstance(value, dict):
+        return {k: _strip_not_found(v) for k, v in value.items()}
+    return value
+
+
+def _merge_into_profile(existing: dict, extracted: dict) -> dict:
+    """Merge extracted JSON into the existing training profile.
+
+    Rules:
+    - Non-empty extracted scalar → overwrites existing (most recent wins).
+    - Extracted lists → APPENDED to existing, deduped (preserves order).
+    - ICP profiles → APPENDED if the icp_name doesn't already exist; if
+      it does, the existing ICP wins (no silent overwrite of curated data).
+    """
+    out = dict(existing)  # shallow copy
+    # Scalar fields
+    for k in (
+        "what_you_sell", "who_you_sell_to", "problem_you_solve",
+        "differentiator", "book_call_trigger", "instinct_trigger",
+        "automation_trigger", "brand_voice_style", "custom_tone_instructions",
+        "founder_sample_message", "calendar_link", "booking_criteria",
+        "reminder_timing", "no_show_message",
+    ):
+        v = extracted.get(k)
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip()
+
+    # Simple string lists — append + dedupe (case-insensitive)
+    for k in (
+        "services_or_products", "qualification_questions", "qualified_criteria",
+        "low_priority_criteria", "pricing_objection_responses",
+        "timing_objection_responses", "trust_objection_responses",
+        "competitor_responses", "pre_call_questions",
+    ):
+        new_items = [str(x).strip() for x in (extracted.get(k) or []) if str(x).strip()]
+        if not new_items:
+            continue
+        existing_items = list(out.get(k) or [])
+        seen = {x.lower() for x in existing_items}
+        for ni in new_items:
+            if ni.lower() not in seen:
+                existing_items.append(ni)
+                seen.add(ni.lower())
+        out[k] = existing_items
+
+    # ICP profiles — append by icp_name, never overwrite curated ones
+    new_icps = extracted.get("icp_profiles") or []
+    if new_icps:
+        existing_icps = list(out.get("icp_profiles") or [])
+        existing_names = {(i.get("icp_name") or "").strip().lower() for i in existing_icps}
+        for icp in new_icps:
+            nm = (icp.get("icp_name") or "").strip()
+            if nm and nm.lower() not in existing_names:
+                # Fill in any missing keys with empty defaults
+                full = {**_empty_icp(), **icp}
+                existing_icps.append(full)
+                existing_names.add(nm.lower())
+        out["icp_profiles"] = existing_icps
+
+    # FAQ — append by question, never overwrite an existing answer
+    new_faq = extracted.get("custom_faq") or []
+    if new_faq:
+        existing_faq = list(out.get("custom_faq") or [])
+        existing_qs = {(f.get("question") or "").strip().lower() for f in existing_faq}
+        for f in new_faq:
+            q = (f.get("question") or "").strip()
+            a = (f.get("answer") or "").strip()
+            if q and a and q.lower() not in existing_qs:
+                existing_faq.append({"question": q, "answer": a})
+                existing_qs.add(q.lower())
+        out["custom_faq"] = existing_faq
+
+    # Knowledge base notes — append as a new chunk if non-trivial
+    kb_note = (extracted.get("knowledge_base_notes") or "").strip()
+    if kb_note and len(kb_note) > 20:
+        chunks = list(out.get("knowledge_base_chunks") or [])
+        chunks.append(kb_note)
+        out["knowledge_base_chunks"] = chunks
+
+    return out
+
+
+async def _extract_with_claude(text: str) -> Dict[str, Any]:
+    """Run the strict extraction prompt against Claude Haiku.
+
+    Returns the parsed JSON dict. Raises HTTPException on extraction error.
+    """
+    import os as _os
+    import re as _re
+    import json as _json
+    api_key = _os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(503, "Aria's brain is not configured (missing EMERGENT_LLM_KEY).")
+
+    # Cap input size for predictable latency.
+    max_chars = 12000
+    excerpt = text[:max_chars]
+    if len(text) > max_chars:
+        excerpt += "\n\n[...truncated for length...]"
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except ImportError:
+        raise HTTPException(500, "Claude SDK not installed.")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"aria-train-extract-{_now_iso()}",
+        system_message=_EXTRACTION_SYSTEM_PROMPT,
+    ).with_model("anthropic", "claude-haiku-4-5-20251001")
+
+    try:
+        resp = await chat.send_message(UserMessage(text=excerpt))
+    except Exception as e:
+        raise HTTPException(502, f"Aria's brain didn't respond: {str(e)[:160]}")
+
+    raw = (resp or "").strip()
+    # Strip code fences if present
+    raw = _re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = _re.sub(r"\s*```$", "", raw).strip()
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError as e:
+        # Try to salvage the first {...} block from the response
+        m = _re.search(r"\{[\s\S]+\}", raw)
+        if m:
+            try:
+                parsed = _json.loads(m.group(0))
+            except Exception:
+                raise HTTPException(502, f"Aria returned malformed JSON: {str(e)[:120]}")
+        else:
+            raise HTTPException(502, f"Aria returned malformed JSON: {str(e)[:120]}")
+
+    if not isinstance(parsed, dict):
+        raise HTTPException(502, "Aria returned non-object JSON.")
+    return _strip_not_found(parsed)
+
+
+_ALLOWED_EXTRACT_MIMES = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "text/plain",
+    "text/csv",
+    "application/octet-stream",  # some browsers
+}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+from fastapi import UploadFile, File  # noqa: E402
+
+
+@router.post("/training-profile/extract-from-document")
+async def extract_from_document(
+    file: UploadFile = File(...),
+    tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
+):
+    """Upload a document → extract Aria training fields → merge + re-assemble."""
+    from routes.aria_auto_map import _extract_text
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "Empty file.")
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB).")
+
+    text = _extract_text(file.filename or "", content)
+    if not text or len(text.strip()) < 50:
+        raise HTTPException(
+            400,
+            "Couldn't read enough text from this file. Try .txt, .docx, or a text-based PDF "
+            "(scanned PDFs need OCR first)."
+        )
+
+    extracted = await _extract_with_claude(text)
+
+    settings = (tenants_col.find_one({"id": tenant["id"]}, {"_id": 0}) or {}).get("settings") or {}
+    existing = ((settings.get("aria_training_profile") or {}).get("data")) or _empty_profile()
+    merged = _merge_into_profile(existing, extracted)
+
+    tenants_col.update_one(
+        {"id": tenant["id"]},
+        {"$set": {"settings.aria_training_profile.data": merged}},
+    )
+    assembled = reassemble_for_tenant(tenant["id"])
+
+    fields_filled = sum(1 for k, v in extracted.items() if v and v != "NOT_FOUND" and v != [])
+    return {
+        "ok": True,
+        "filename": file.filename,
+        "text_chars": len(text),
+        "fields_extracted": fields_filled,
+        "icps_extracted": len(extracted.get("icp_profiles") or []),
+        "icps_merged_total": len(merged.get("icp_profiles") or []),
+        "version": assembled["version"],
+        "assembled_at": assembled["assembled_at"],
+        "extracted_preview": {
+            "what_you_sell": (extracted.get("what_you_sell") or "")[:120],
+            "who_you_sell_to": (extracted.get("who_you_sell_to") or "")[:120],
+            "icp_names": [i.get("icp_name") for i in (extracted.get("icp_profiles") or [])],
+        },
+    }
+
+
+# ─── Phase 2: Auto-train from existing workspace data ────────────────────
+@router.post("/training-profile/auto-train-from-workspace")
+async def auto_train_from_workspace(
+    tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
+):
+    """Seed the training profile from data already in the workspace.
+
+    Sources (in priority order — non-empty wins):
+      1. `tenants.settings.business_profile`  → identity fields
+      2. `tenants.settings.aria_persona`      → tone hints
+      3. `icps` collection (filtered by tenant) → ICP profiles
+      4. `tenants.settings.calendly` / `calendar_link` → booking
+      5. `tenants.settings.sales_channels`    → channel preferences (kb chunk)
+
+    Non-destructive: only fills empty fields. If a field is already
+    populated in the existing training profile, it's left alone.
+    """
+    settings = tenant.get("settings") or {}
+    bp = settings.get("business_profile") or {}
+    persona = settings.get("aria_persona") or {}
+    existing = (settings.get("aria_training_profile") or {}).get("data") or _empty_profile()
+
+    seeded: List[str] = []
+    out = dict(existing)
+
+    def _fill(field: str, value: str):
+        if value and value.strip() and not (out.get(field) or "").strip():
+            out[field] = value.strip()
+            seeded.append(field)
+
+    _fill("what_you_sell", bp.get("offering") or bp.get("description") or "")
+    _fill("who_you_sell_to", bp.get("target_audience") or bp.get("primary_market") or "")
+    _fill("problem_you_solve", bp.get("problem_solved") or bp.get("value_prop") or "")
+    _fill("differentiator", bp.get("unique_value") or bp.get("differentiator") or "")
+    _fill("brand_voice_style", persona.get("tone") or "")
+    _fill("calendar_link", (settings.get("calendly") or {}).get("link") or settings.get("calendar_link") or "")
+
+    # Services / products list — only fill if empty
+    services = bp.get("services") or bp.get("products") or []
+    if isinstance(services, list) and services and not out.get("services_or_products"):
+        out["services_or_products"] = [str(s).strip() for s in services if str(s).strip()]
+        seeded.append("services_or_products")
+
+    # ICPs from the icps collection
+    icp_docs = list(db["icps"].find({"tenant_id": tenant["id"]}, {"_id": 0}).limit(20))
+    if icp_docs:
+        existing_names = {
+            (i.get("icp_name") or "").strip().lower()
+            for i in (out.get("icp_profiles") or [])
+        }
+        appended = 0
+        for icp in icp_docs:
+            label = (icp.get("label") or "").strip()
+            if not label or label.lower() in existing_names:
+                continue
+            mapped = {**_empty_icp(),
+                      "icp_name": label,
+                      "target_industries": [icp.get("industry")] if icp.get("industry") else [],
+                      "target_titles_or_roles": list(icp.get("title_targets") or []),
+                      "company_size": icp.get("company_size") or "",
+                      "budget_range": icp.get("deal_size") or "",
+                      "high_intent_signals": [icp.get("pain_point")] if icp.get("pain_point") else [],
+                      }
+            out.setdefault("icp_profiles", []).append(mapped)
+            existing_names.add(label.lower())
+            appended += 1
+        if appended:
+            seeded.append(f"icp_profiles (+{appended})")
+
+    # Knowledge base chunk from sales_channels prefs
+    sc = settings.get("sales_channels") or {}
+    if sc and not (out.get("knowledge_base_chunks")):
+        primary = sc.get("primary_channel") or "—"
+        order = ", ".join(sc.get("priority_order") or [])
+        chunk = f"Sales channel preferences: primary={primary}; order={order}."
+        out["knowledge_base_chunks"] = [chunk]
+        seeded.append("knowledge_base_chunks")
+
+    if not seeded:
+        return {
+            "ok": True,
+            "seeded": [],
+            "message": "Nothing to seed — your workspace doesn't have business_profile or icps populated yet, or the training profile is already filled.",
+        }
+
+    tenants_col.update_one(
+        {"id": tenant["id"]},
+        {"$set": {"settings.aria_training_profile.data": out}},
+    )
+    assembled = reassemble_for_tenant(tenant["id"])
+    return {
+        "ok": True,
+        "seeded": seeded,
+        "version": assembled["version"],
+        "message": f"Seeded {len(seeded)} field(s) from existing workspace data.",
     }

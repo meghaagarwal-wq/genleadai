@@ -1,3 +1,104 @@
+## Iter 93 — Aria v2 Master Prompt (Phase 2 of 4) (Feb 2026)
+
+### What landed
+
+**Phase 2 — Document extraction + auto-train + Train Aria UI**
+
+Three new backend endpoints + a full frontend page:
+
+**1. `POST /api/aria/training-profile/extract-from-document`** (multipart upload)
+- Accepts PDF, DOCX, TXT, XLSX, CSV up to 10 MB.
+- Reuses `aria_auto_map._extract_text()` for parsing.
+- Runs Claude Haiku 4.5 with the strict **Prompt 2** from the spec —
+  zero-hallucination rules, `NOT_FOUND` for missing fields, no fabrication.
+- Strips `NOT_FOUND` sentinels via `_strip_not_found()` (recursive, handles
+  nested dicts + lists).
+- **Merge semantics (non-destructive):**
+  - Scalars: blank-existing → overwrite with new; populated → keep existing.
+  - String lists: append + dedupe case-insensitive.
+  - ICPs: append only when `icp_name` is new; existing curated ICPs are
+    never overwritten.
+  - FAQ: append only when `question` is new.
+  - KB notes: append as new chunk if >20 chars.
+- Returns extraction summary: filename, text_chars, fields_extracted,
+  icps_extracted, icps_merged_total, version, extracted_preview.
+
+**2. `POST /api/aria/training-profile/auto-train-from-workspace`**
+- Seeds the training profile from existing workspace data:
+  - `tenants.settings.business_profile` → identity fields
+  - `tenants.settings.aria_persona` → tone hints
+  - `icps` collection (filtered by tenant_id) → ICP profiles
+  - `tenants.settings.calendly` / `calendar_link` → booking
+  - `tenants.settings.sales_channels` → KB chunk
+- **Non-destructive**: only fills empty fields. Existing curated data
+  is never overwritten.
+- Returns list of seeded fields + helpful message when nothing to seed.
+
+**3. Frontend `/pages/TrainAriaV2.js`** (mounted at `/pt/train-aria` for
+   Pietential layout + `/train-aria-v2` for the main layout):
+- 8 tabbed sections matching the spec (identity, ICPs, qualification,
+  voice, objections + FAQ, booking, insights, knowledge base).
+- Workspace type picker (B2B / B2C / Hybrid) — switches insights
+  section visibility in real time.
+- Doc upload widget — drag-and-drop or click, shows extraction toast
+  on success.
+- "Seed from existing" button → auto-train endpoint.
+- "Preview Aria prompt" button → modal with the fully-assembled,
+  decrypted master prompt (with char count + version badge).
+- "Save & re-assemble" button → PUT profile + reassemble + re-encrypt.
+- Full ICP editor (add/remove ICPs, list inputs for industries / titles
+  / signals / etc.) and FAQ editor (paired question/answer cards).
+- All interactive elements carry `data-testid` per house style.
+
+### Live state (Pietential workspace, end of iter93)
+- **Profile version:** v11 (curated by Megha + 3 doc extractions + tests)
+- **Assembled prompt length:** 7,592 chars, Fernet-encrypted
+- **Workspace type:** Hybrid → Section 7 (Insights Engine) renders
+- **Sidebar link:** "Train Aria" under "AI Setup" in PtLayout, icon
+  `GraduationCap`
+
+### Tests — `tests/test_iter93_aria_training_extraction.py`
+**14/14 PASS** across 4 classes:
+- Merge unit (7): `_strip_not_found` for scalar / list / nested dict,
+  scalar overwrite when existing blank, list dedupe case-insensitive,
+  ICP append-only-by-name (curated wins), FAQ append-only-by-question.
+- Auto-train (2): sales_rep blocked, admin gets response shape.
+- Extraction (4): sales_rep blocked, empty file rejected (400), tiny
+  file rejected (400), real end-to-end synthetic GTM doc extraction
+  (Claude → merge → reassemble in ~30s).
+- Integration (1): preview contains extracted marker after upload —
+  proves the doc-extraction → merge → reassemble → encrypt → decrypt
+  → preview path works end-to-end.
+
+### Combined: 60/60 pass across iter90 + iter92 + iter93.
+
+### Frontend verification
+- Login as `megha@contentvista.com` → navigate to `/pt/train-aria`
+- All 8 tabs render, profile data pre-populated
+- "Preview Aria prompt" modal shows the full assembled prompt with
+  "represent Pietential" branding, Section 7 (because Hybrid),
+  Section 1 with extracted fields
+- ICP tab shows the curated CHRO at Mid-Market SaaS card
+
+### Out of scope (Phase 3 — next iter)
+- **B2B Insights Engine** — daily prospect scanning, 8-signal classification,
+  insight cards, intelligence feed UI. Requires paid APIs:
+  - **Proxycurl** or **Apollo** for LinkedIn profile + posts enrichment
+  - **NewsAPI** or **Mediastack** for company news monitoring
+  - **Clearbit** or **Apollo** for firmographic enrichment
+  Will add API-key fields in tenant settings + handshake checks when
+  user provides credentials.
+
+### Out of scope (Phase 4 — final iter)
+- Adaptive dashboard section visibility per `workspace_type` (B2B /
+  B2C / Hybrid) — show/hide Intelligence Feed, Lead Inbox,
+  32-Touchpoint Journey per the spec's section matrix.
+- Settings → Dashboard Layout toggle UI for per-workspace overrides.
+
+---
+
+
+
 ## Iter 92 — Aria v2 Master Prompt (Phase 1 of 4) (Feb 2026)
 
 ### What landed
