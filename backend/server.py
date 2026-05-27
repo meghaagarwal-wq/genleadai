@@ -119,6 +119,15 @@ def _auto_migrate_multi_tenant():
         # Never block app startup on a migration error — log and move on.
         print(f"[Startup] Multi-tenant migration skipped due to error: {e}")
 
+    # iter102 — encrypt any plaintext integration secrets on disk. Idempotent.
+    try:
+        from scripts.encrypt_integration_configs import run as run_enc_mig
+        summary = run_enc_mig()
+        if summary["fields_encrypted"] > 0:
+            print(f"[Startup] Encrypted {summary['fields_encrypted']} integration secret(s) across {summary['docs_touched']} doc(s)")
+    except Exception as e:
+        print(f"[Startup] integration-config encryption migration skipped: {e}")
+
 # Resend Email
 resend.api_key = os.getenv("RESEND_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")

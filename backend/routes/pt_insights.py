@@ -440,6 +440,18 @@ async def _scan_one_prospect(
         insights_col.insert_one(card.copy())
         card.pop("_id", None)
         inserted.append(card)
+
+        # iter102 — auto-fire matching automation rules. Never raises.
+        try:
+            from routes.automation_rules import evaluate_and_fire_rules
+            evaluate_and_fire_rules(
+                tenant["id"],
+                "insight.classified",
+                {"insight": card, "prospect": prospect},
+                triggered_by="insight_scan",
+            )
+        except Exception:
+            pass
     return inserted
 
 

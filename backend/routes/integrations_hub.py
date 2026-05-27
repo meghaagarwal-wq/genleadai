@@ -65,6 +65,61 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ─── Iter102 — encrypt-at-rest for integration secrets ──────────────────────
+# Fields whose values are secrets and must be stored Fernet-encrypted.
+# Anything containing one of these substrings in its key (case-insensitive)
+# is auto-encrypted on write and decrypted on read. Same pattern as
+# `_mask_secrets()` below, but ground-truth at the storage layer.
+_SECRET_KEY_HINTS = ("token", "secret", "key", "password", "access", "pixel")
+
+
+def _is_secret_field(k: str) -> bool:
+    kl = (k or "").lower()
+    return any(s in kl for s in _SECRET_KEY_HINTS)
+
+
+def _encrypt_config_secrets(cfg: dict) -> dict:
+    """Return a copy of `cfg` with every secret-looking string field
+    encrypted. Idempotent — already-encrypted (prefix `enc::`) values
+    pass through unchanged."""
+    from security.encryption import encrypt
+    if not cfg:
+        return cfg
+    out = {}
+    for k, v in cfg.items():
+        if _is_secret_field(k) and isinstance(v, str) and v:
+            out[k] = encrypt(v)
+        else:
+            out[k] = v
+    return out
+
+
+def _decrypt_config_secrets(cfg: dict) -> dict:
+    """Inverse of `_encrypt_config_secrets`. Decrypts every secret-looking
+    field. Safe to call on plaintext values (decrypt is a no-op when the
+    prefix is missing)."""
+    from security.encryption import decrypt
+    if not cfg:
+        return cfg
+    out = {}
+    for k, v in cfg.items():
+        if _is_secret_field(k) and isinstance(v, str) and v:
+            out[k] = decrypt(v)
+        else:
+            out[k] = v
+    return out
+
+
+def get_decrypted_config(tenant_id: str, integration_type: str) -> dict:
+    """Public helper for other modules — returns the integration config
+    with secret fields decrypted. Returns {} if not connected."""
+    doc = configs_col.find_one(
+        {"tenant_id": tenant_id, "integration_type": integration_type},
+        {"_id": 0},
+    ) or {}
+    return _decrypt_config_secrets(doc.get("config") or {})
+
+
 # ─── Config CRUD (tenant-side) ──────────────────────────────────────────────
 class ConfigPayload(BaseModel):
     config: dict = Field(default_factory=dict)
@@ -92,11 +147,16 @@ async def list_integrations(tenant: dict = Depends(get_active_tenant)):
 
 
 def _mask_secrets(cfg: dict) -> dict:
-    """Mask secret-y fields so they don't leak when returned to UI."""
+    """Mask secret-y fields so they don't leak when returned to UI.
+    iter102 — auto-decrypts encrypted values first so the mask renders
+    consistent characters regardless of storage state.
+    """
+    from security.encryption import decrypt
     masked = {}
     for k, v in (cfg or {}).items():
         if isinstance(v, str) and any(s in k.lower() for s in ("token", "secret", "key", "pixel", "access")):
-            masked[k] = (v[:4] + "•" * 8 + v[-4:]) if len(v) >= 12 else "•" * 6
+            plain = decrypt(v)
+            masked[k] = (plain[:4] + "•" * 8 + plain[-4:]) if len(plain) >= 12 else "•" * 6
         else:
             masked[k] = v
     return masked
@@ -111,7 +171,11 @@ async def connect(integration_type: str, payload: ConfigPayload, tenant: dict = 
 
     # Merge new config into existing (so PATCHing one field doesn't wipe others)
     existing = configs_col.find_one({"tenant_id": tenant["id"], "integration_type": integration_type}, {"_id": 0}) or {}
-    merged = {**(existing.get("config", {})), **(payload.config or {})}
+    # iter102 — decrypt the existing config so the merge reflects real values,
+    # then encrypt the whole merged dict before writing it back.
+    existing_cfg = _decrypt_config_secrets(existing.get("config", {}))
+    merged_plain = {**existing_cfg, **(payload.config or {})}
+    merged = _encrypt_config_secrets(merged_plain)
 
     doc = {
         "tenant_id": tenant["id"],
@@ -127,7 +191,9 @@ async def connect(integration_type: str, payload: ConfigPayload, tenant: dict = 
         {"$set": doc},
         upsert=True,
     )
-    return {"status": "ok", "integration": {**doc, "config": _mask_secrets(merged)}}
+    # Return masked plaintext (not the encrypted blob) so the UI doesn't show
+    # `enc::gAAAAAB...` in placeholders.
+    return {"status": "ok", "integration": {**doc, "config": _mask_secrets(merged_plain)}}
 
 
 @router.delete("/{integration_type}/disconnect")
@@ -308,7 +374,9 @@ def fire_lifecycle_event(tenant_id: str, event_type: str, lead: dict, extra: dic
 async def _fan_out(tenant_id: str, configs: List[dict], event_type: str, lead: dict, extra: dict | None) -> None:
     for c in configs:
         kind = c["integration_type"]
-        ok, msg = await _dispatch(tenant_id, kind, c.get("config", {}), event_type, lead, extra)
+        # iter102 — decrypt before dispatch so HTTP calls use plaintext keys.
+        cfg_plain = _decrypt_config_secrets(c.get("config", {}))
+        ok, msg = await _dispatch(tenant_id, kind, cfg_plain, event_type, lead, extra)
         events_col.insert_one({
             "id": uuid.uuid4().hex,
             "tenant_id": tenant_id,
@@ -407,7 +475,9 @@ async def retry_event(event_id: str, tenant: dict = Depends(get_active_tenant), 
     if not cfg:
         raise HTTPException(status_code=400, detail="Integration no longer configured")
     lead = leads_col.find_one({"id": ev.get("lead_id"), "tenant_id": tenant["id"]}, {"_id": 0}) or {"id": ev.get("lead_id"), "tenant_id": tenant["id"]}
-    ok, msg = await _dispatch(tenant["id"], ev["integration_type"], cfg.get("config", {}), ev["event_type"], lead, ev.get("raw_payload"))
+    # iter102 — decrypt before handing to _dispatch.
+    cfg_plain = _decrypt_config_secrets(cfg.get("config", {}))
+    ok, msg = await _dispatch(tenant["id"], ev["integration_type"], cfg_plain, ev["event_type"], lead, ev.get("raw_payload"))
     events_col.update_one({"id": event_id}, {"$set": {"processed": ok, "error": None if ok else msg, "retried_at": _now()}})
     return {"ok": ok, "message": msg}
 
@@ -444,6 +514,20 @@ async def _normalize_and_capture(tenant_id: str, raw: dict, source: str, request
         "direction": "inbound", "event_type": "lead.received", "raw_payload": raw,
         "lead_id": res.get("lead_id"), "processed": True, "error": None, "created_at": _now(),
     })
+
+    # iter102 — auto-fire matching automation rules. Decoupled: never raises.
+    try:
+        from routes.automation_rules import evaluate_and_fire_rules
+        lead_doc = leads_col.find_one({"id": res.get("lead_id"), "tenant_id": tenant_id}, {"_id": 0}) or {}
+        evaluate_and_fire_rules(
+            tenant_id,
+            "lead.created",
+            {"lead": lead_doc, "source": source},
+            triggered_by=f"webhook:{source}",
+        )
+    except Exception:
+        pass
+
     return res
 
 
@@ -570,7 +654,7 @@ async def saleshandy_webhook(tenant_id: str, request: Request):
 
     # Pull cfg to access the (optional) signing secret + sequence-to-Aria mapping
     cfg_doc = configs_col.find_one({"tenant_id": tenant_id, "integration_type": "saleshandy"}, {"_id": 0}) or {}
-    cfg = cfg_doc.get("config") or {}
+    cfg = _decrypt_config_secrets(cfg_doc.get("config") or {})  # iter102 — secret_field check
     if not _verify_saleshandy_signature(request, raw_bytes, cfg):
         return JSONResponse({"ok": False, "error": "bad_signature"}, status_code=401)
 
@@ -641,7 +725,7 @@ async def lemlist_webhook(tenant_id: str, request: Request):
         body = {}
 
     cfg_doc = configs_col.find_one({"tenant_id": tenant_id, "integration_type": "lemlist"}, {"_id": 0}) or {}
-    cfg = cfg_doc.get("config") or {}
+    cfg = _decrypt_config_secrets(cfg_doc.get("config") or {})  # iter102
     if not _verify_lemlist_signature(request, raw_bytes, cfg):
         return JSONResponse({"ok": False, "error": "bad_signature"}, status_code=401)
 

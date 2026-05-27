@@ -1,5 +1,66 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 102 (P0 audit fixes shipped · all 3 critical failures resolved)
+
+### Background
+Full V3 audit revealed 3 P0 issues blocking client usage:
+1. Integration credentials stored **plaintext** in MongoDB (verified live).
+2. Automation rule engine had **no event-bus hook** — UI mockup only.
+3. **5-ICP per-tenant cap removed** in iter77 → Pietential had 6 ICPs.
+Plus a pre-existing bug: legacy `_require_master_admin` checked
+`role == "admin"` instead of `master_admin`, blocking `/api/admin/*`.
+
+### Fix 1 — Encryption-at-rest for `integration_configs`
+- New helpers in `routes/integrations_hub.py`:
+  `_encrypt_config_secrets()`, `_decrypt_config_secrets()`,
+  `get_decrypted_config(tenant_id, type)`. Auto-detect secret-looking
+  fields by key name (token/secret/key/password/access/pixel).
+- Patched the `/connect` endpoint to encrypt on write + mask on
+  response.
+- Patched read sites: `outreach_import._get_cfg()`,
+  `integrations_extras._get_cfg()`, `_fan_out()`, retry handler,
+  saleshandy/lemlist webhook signature checks — all decrypt before use.
+- New idempotent migration `scripts/encrypt_integration_configs.py` —
+  scans every `integration_configs` doc, encrypts any plaintext
+  secret-field with the Fernet `enc::` prefix. Wired into startup so
+  prod migrates transparently on next deploy. **Live result:** 2
+  existing plaintext secrets migrated on first run.
+
+### Fix 2 — Automation rule event-bus auto-fire
+- New `evaluate_and_fire_rules(tenant_id, event_type, context,
+  triggered_by)` helper in `routes/automation_rules.py`. Loads enabled
+  rules matching `event_type`, evaluates conditions, stamps fire log
+  per match, increments `fire_count` + `last_fired_at`. Wraps every
+  failure mode — never raises into the producer flow.
+- Wired into two hot paths:
+  1. `_normalize_and_capture()` (inbound webhooks + website pixel)
+     fires `lead.created` event.
+  2. `_scan_one_prospect()` (B2B insight scan + manual run-now) fires
+     `insight.classified` event with the new card + prospect context.
+- **Live verified:** website-pixel form_submit → lead.created → rule
+  `fire_count` incremented from 0→1 within ~50ms.
+
+### Fix 3 — 5-ICP per-tenant cap (re-enforced)
+- `routes/icps.py` `create_icp` now reads `ARIA_ICP_MAX_PER_TENANT`
+  env var (default 5) and returns **403** `icp_limit_reached` if the
+  cap is hit. Spec §8.1/8.2.
+
+### Fix 4 — Legacy master_admin guard bug (mid-audit fix)
+- `routes/audit_log.py:148` + `routes/admin_revenue.py:80` both
+  checked `role == "admin"` only. Updated to accept both legacy
+  `"admin"` and current `"master_admin"`. Verified live:
+  `/api/admin/workspaces` now returns 200 with 38 workspaces.
+
+### Tests
+- `tests/test_iter102_p0_audit_fixes.py` — 8 cases:
+  - Encryption roundtrip in memory · idempotent re-encrypt
+  - Live `/connect` writes encrypted to DB, mask in UI, decrypt at read
+  - Pixel form_submit auto-fires `lead.created` rules
+  - Unmet condition doesn't fire · disabled rule skipped
+  - 1st–5th ICP creates OK · 6th returns 403 with clear message
+- **Full V3 sweep: 66/66 tests pass** (iter95 + 97 + 98 + 99 + 100 + 101 + 102).
+
+
 ## 2026-02 — Iter 101 (V3 backlog finale · all P1 + P2 items shipped)
 Three deliverables in one cycle — completes the V3 master spec scope.
 

@@ -263,6 +263,56 @@ def evaluate_rule(rule: Dict[str, Any], context: Dict[str, Any]) -> bool:
     return all(_eval_condition(c, context) for c in conds)
 
 
+def evaluate_and_fire_rules(
+    tenant_id: str,
+    event_type: str,
+    context: Dict[str, Any],
+    triggered_by: str = "event",
+) -> Dict[str, Any]:
+    """Iter102 — Event-bus hook called by lead-create / insight-classified
+    / stage-changed flows. Loads every enabled rule for `tenant_id` that
+    matches `event_type`, evaluates conditions, and stamps a fire log for
+    each matching rule. Returns a summary `{evaluated, fired_count,
+    fired_rule_ids}`. Never raises — wraps everything so producers stay
+    decoupled.
+    """
+    summary: Dict[str, Any] = {"evaluated": 0, "fired_count": 0, "fired_rule_ids": []}
+    try:
+        rules = list(rules_col.find(
+            {
+                "tenant_id":         tenant_id,
+                "enabled":           True,
+                "trigger.event_type": event_type,
+            },
+            {"_id": 0},
+        ))
+        for rule in rules:
+            summary["evaluated"] += 1
+            if not evaluate_rule(rule, context):
+                continue
+            fire_doc = {
+                "id":           str(uuid.uuid4()),
+                "rule_id":      rule["id"],
+                "tenant_id":    tenant_id,
+                "triggered_by": triggered_by,
+                "event_type":   event_type,
+                "context":      context,
+                "actions":      rule.get("actions") or [],
+                "created_at":   _now(),
+            }
+            rules_fires_col.insert_one(fire_doc)
+            rules_col.update_one(
+                {"id": rule["id"], "tenant_id": tenant_id},
+                {"$inc": {"fire_count": 1}, "$set": {"last_fired_at": _now()}},
+            )
+            summary["fired_count"] += 1
+            summary["fired_rule_ids"].append(rule["id"])
+    except Exception:
+        # Never break the producer flow.
+        pass
+    return summary
+
+
 class DryRunPayload(BaseModel):
     context: Dict[str, Any]
 

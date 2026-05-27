@@ -26,6 +26,7 @@ Tier gating (mapped to current plan IDs):
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -139,8 +140,15 @@ async def create_icp(payload: IcpCreate, tenant: dict = Depends(get_active_tenan
             detail=f"invalid_tone: must be one of {sorted(ALLOWED_TONES)}",
         )
 
-    # Iter77 — GenLeadAI-managed deployment: no plan-based ICP caps. ICPs are
-    # operational sales segments; agency owners decide how many.
+    # iter102 — V3 spec hard cap: max 5 ICPs per tenant.
+    # (Section 8.1/8.2 of ARIA v3 audit.) Configurable via env var for staging.
+    icp_max = int(os.environ.get("ARIA_ICP_MAX_PER_TENANT", "5"))
+    current = icps_col.count_documents({"tenant_id": tenant["id"]})
+    if current >= icp_max:
+        raise HTTPException(
+            status_code=403,
+            detail=f"icp_limit_reached: this workspace already has {current} ICPs (max {icp_max}). Archive or delete one before creating another.",
+        )
 
     now = _now_iso()
     doc = {

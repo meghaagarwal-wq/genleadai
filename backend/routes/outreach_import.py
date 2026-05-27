@@ -59,7 +59,9 @@ def _get_cfg(tenant_id: str, tool: str) -> dict:
             status_code=400,
             detail=f"{tool.title()} is not connected. Paste your API key in Integrations Hub first.",
         )
-    cfg = doc.get("config") or {}
+    # iter102 — auto-decrypt stored secrets so downstream API calls work.
+    from routes.integrations_hub import _decrypt_config_secrets
+    cfg = _decrypt_config_secrets(doc.get("config") or {})
     if not cfg.get("api_key"):
         raise HTTPException(
             status_code=400,

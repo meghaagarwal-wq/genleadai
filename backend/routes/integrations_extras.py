@@ -60,7 +60,9 @@ def _get_cfg(tenant_id: str, integration_type: str) -> Dict[str, Any]:
             status_code=400,
             detail=f"{integration_type.title()} is not connected — paste your API key in the Integrations Hub first.",
         )
-    return doc.get("config") or {}
+    # iter102 — auto-decrypt so callers get plaintext secrets.
+    from routes.integrations_hub import _decrypt_config_secrets
+    return _decrypt_config_secrets(doc.get("config") or {})
 
 
 def _base_url(request: Request) -> str:
