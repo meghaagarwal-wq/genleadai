@@ -104,6 +104,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Pietential B2B Insights Engine (iter94 — Phase 3)
     from .pt_insights import router as pt_insights_router
 
+    # Admin Dashboard v3 (iter95 — PART D)
+    from .admin_v3 import router as admin_v3_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -129,5 +132,6 @@ def register_all_routes(app: FastAPI) -> None:
         health_router, failed_messages_router,
         aria_training_router,
         pt_insights_router,
+        admin_v3_router,
     ):
         app.include_router(router)

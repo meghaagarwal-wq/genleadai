@@ -1,3 +1,115 @@
+## Iter 95 — ARIA Master Build v3.0 Phase 5a Foundation (Feb 2026)
+
+> User pasted the full v3.0 master spec ("deliver me this exact thing").
+> Spec scope is 4-6 sessions end-to-end. This iter ships the highest-impact
+> foundation pieces; remaining work is broken into Phases 5b/5c/5d below.
+
+### What landed this iter — Phase 5a
+
+**Pietential pre-built per PART E v3.0:**
+- Mode flipped to **B2B Instinct** (was Hybrid).
+- 4 ICPs pre-seeded in `icps` collection (idempotent by `label`):
+  1. CHRO — Enterprise (500+ HR Tech / Future of Work)
+  2. CFO — Mid-Market SaaS (100-500, cost-of-workforce focus)
+  3. People Analytics Leader — Enterprise (1000+, reports to CHRO)
+  4. VP People / Head of HR — Growth-Stage (50-250, Series B+)
+- Each ICP includes `title_targets`, `company_size`, `geography`,
+  `deal_size`, `pain_point`, `value_prop`, `tone`.
+
+**Admin Dashboard (PART D) — backend + frontend:**
+- New module `routes/admin_v3.py` with master-admin-only endpoints:
+  - `GET  /api/admin/v3/overview` — workspaces count, leads today,
+    active conversations, insights today, API cost today, errors 24h.
+  - `GET  /api/admin/v3/workspaces` — full table with mode, owner,
+    lead volume, training status, active flag.
+  - `POST /api/admin/v3/workspaces/{id}/action` — suspend / activate /
+    delete (soft); writes to `audit_log`.
+  - `POST /api/admin/v3/workspaces/{id}/impersonate` — returns workspace
+    context + banner config; logs audit.
+  - `GET  /api/admin/v3/usage` — per-workspace API spend breakdown by
+    provider this month.
+  - `GET  /api/admin/v3/system-health` — last-24h audit aggregation +
+    integration error log.
+- New `frontend/src/admin/AdminLayout.js` with full 5-page nav
+  (Overview / Workspaces / Usage / System Health / Settings).
+- Workspaces table renders mode badges, lead counts, training ✓,
+  Impersonate + Suspend buttons.
+- **Impersonation banner** (`ImpersonationBanner` in App.js) — fixed
+  amber bar at top of screen when admin is impersonating, with
+  "Stop & return to admin" button that clears localStorage and routes
+  back.
+
+**PART C.2 Sidebar — 8-item mode-adaptive nav:**
+- PtLayout NAV reduced from 16 items to spec's exact 8:
+  Home · Intelligence Feed · Lead Inbox · Conversations · ICPs ·
+  Train ARIA · Integrations · Reports · Settings.
+- `modes` array on each item: Intelligence Feed visible only in
+  `b2b` / `hybrid`; Lead Inbox visible only in `b2c` / `hybrid`.
+- Verified live: Pietential (b2b) → Intelligence Feed visible (count=1),
+  Lead Inbox hidden (count=0).
+- Routes wired for all 8 nav items (reusing existing Conversations,
+  ICPManager, Integrations, Reports, Settings pages under /pt/*).
+
+**Frontend Auth — Role Gate:**
+- `<ProtectedRoute requireRole="master_admin">` — added role param so
+  `/admin/*` is hard-gated; non-admins are redirected to `/`.
+
+### Critical migration helper preserved
+- `upsert()` still uses `$setOnInsert` (the iter94 fix). The iter95
+  ICP seeding uses explicit `find_one` + `insert_one` per ICP so re-runs
+  never duplicate. Verified via test:
+  `TestMigrationStillIdempotent::test_re_run_does_not_duplicate_icps`.
+
+### Tests — `tests/test_iter95_v3_foundation.py`
+**12/12 PASS** across 3 classes:
+- Admin v3 endpoints (8): role gate on overview + workspaces, shape
+  of overview / workspaces / usage / system-health, impersonate happy
+  path + 404, suspend-action contract.
+- Pietential v3 config (3): mode==b2b, 4 ICPs by label, every ICP has
+  the required fields.
+- Migration idempotency (1): re-running migration twice doesn't
+  duplicate ICPs.
+
+### Combined: 62/62 PASS across iter92 + iter93 + iter94 + iter95
+
+---
+
+### What remains for v3.0 (Phases 5b / 5c / 5d)
+
+**Phase 5b — Unified client dashboard `/app`** (1 session):
+- Migrate the active app shell off `/pt` to a generic `/app` workspace
+  shell so every workspace (not just Pietential) uses the same layout.
+- Workspace switcher (top left dropdown) + Tenant switcher (below)
+  per PART C.1. Currently the app is single-tenant-per-user.
+- Move PtOverview → generic WorkspaceHome that adapts content per mode
+  (PART C.3 — B2B panels vs B2C panels vs Hybrid both).
+
+**Phase 5c — Lead source integrations** (1-2 sessions):
+- Meta Ads (Facebook + Instagram lead forms) — webhook receiver.
+- Google Ads (lead form extensions) — webhook receiver.
+- YouTube Ads (lead form) — webhook receiver.
+- LinkedIn Ads (Lead Gen Forms) — OAuth + sync.
+- Website Forms (Typeform, Webflow, generic HTML POST) — webhook receiver.
+- Website Pixel — `pixel_events` collection + workspace-specific JS
+  snippet generator per PART F.2.
+- Email Outreach platform parity — Instantly + Smartlead webhooks.
+- Gmail / Outlook OAuth reply tracking.
+- Custom API Endpoint generator per workspace.
+
+**Phase 5d — Reports + Sequences + Automation Rules + Onboarding rebuild** (1-2 sessions):
+- PART C.10 Reports — funnel chart, ICP distribution, reply rate by
+  channel, ARIA-actions-vs-owner-actions, exportable CSV/PDF.
+- PART G.3 Nurture Sequences UI (builder + enrolment manager).
+- PART G.4 Visual Automation Rule builder (IF-trigger-THEN-action).
+- PART H.1 Scheduled daily `b2b_insight_scan` background loop at
+  workspace digest time (currently manual-trigger only).
+- PART M 5-step onboarding rebuild (replaces current onboarding flow).
+- PART C.8 Resource Library inside Train ARIA (sales asset tagging).
+
+---
+
+
+
 ## Iter 94 — Aria v2 Phases 3+4 + Test Aria + Critical Migration Fix (Feb 2026)
 
 ### Critical bug fixed first

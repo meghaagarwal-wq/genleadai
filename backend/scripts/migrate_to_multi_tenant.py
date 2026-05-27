@@ -150,11 +150,10 @@ def main():
     print(f"[Migrate] Tenants ensured: {DEMO_TENANT['id']}, {PIETENTIAL_TENANT['id']}")
 
     # 1b. Default workspace_type — iter92 v2 master prompt schema.
-    # Use $setOnInsert-like semantics: only set if not already configured,
-    # so existing workspaces aren't silently changed.
+    # PART E (v3.0): Pietential is B2B Instinct mode (was hybrid pre-iter95).
     tenants_col.update_one(
         {"id": "ten_pietential", "settings.workspace_type": {"$exists": False}},
-        {"$set": {"settings.workspace_type": "hybrid"}},
+        {"$set": {"settings.workspace_type": "b2b"}},
     )
     tenants_col.update_one(
         {"id": "ten_demo", "settings.workspace_type": {"$exists": False}},
@@ -165,7 +164,80 @@ def main():
         {"settings.workspace_type": {"$exists": False}},
         {"$set": {"settings.workspace_type": "hybrid"}},
     )
-    print("[Migrate] workspace_type defaulted to 'hybrid' on tenants missing it")
+    print("[Migrate] workspace_type defaulted (Pietential=b2b, others=hybrid)")
+
+    # 1c. PART E v3.0 — Pre-seed 4 Pietential ICPs (idempotent: by label).
+    icps_col = db["icps"]
+    PIETENTIAL_ICPS = [
+        {
+            "id": "icp_pt_chro_enterprise",
+            "tenant_id": "ten_pietential",
+            "label": "CHRO — Enterprise",
+            "industry": "HR Tech / Future of Work",
+            "title_targets": ["CHRO", "Chief People Officer", "Chief HR Officer"],
+            "company_size": "500+ employees",
+            "geography": "USA, EU, India",
+            "deal_size": "$80k-300k/year",
+            "pain_point": "Disengaged senior leaders, low retention, expensive talent ops",
+            "value_prop": "AI-driven engagement intelligence + executive HR workflows",
+            "tone": "Sharp, peer-to-peer, no fluff",
+            "created_at": NOW,
+            "updated_at": NOW,
+        },
+        {
+            "id": "icp_pt_cfo_midmarket",
+            "tenant_id": "ten_pietential",
+            "label": "CFO — Mid-Market SaaS",
+            "industry": "SaaS",
+            "title_targets": ["CFO", "Chief Financial Officer", "VP Finance"],
+            "company_size": "100-500 employees",
+            "geography": "USA, EU",
+            "deal_size": "$40k-120k/year",
+            "pain_point": "Workforce cost is largest line item with zero visibility into engagement ROI",
+            "value_prop": "Quantify the cost of disengagement, automate HR ops, reduce attrition spend",
+            "tone": "Numbers-first, ROI-led",
+            "created_at": NOW,
+            "updated_at": NOW,
+        },
+        {
+            "id": "icp_pt_people_analytics",
+            "tenant_id": "ten_pietential",
+            "label": "People Analytics Leader — Enterprise",
+            "industry": "Enterprise HR",
+            "title_targets": ["Head of People Analytics", "Director People Analytics", "VP People Analytics"],
+            "company_size": "1000+ employees",
+            "geography": "USA, EU",
+            "deal_size": "$60k-200k/year",
+            "pain_point": "Manual engagement reporting, no real-time signals, reports to CHRO with stale data",
+            "value_prop": "Real-time engagement signals + auto-generated executive reports",
+            "tone": "Data-driven, technical",
+            "created_at": NOW,
+            "updated_at": NOW,
+        },
+        {
+            "id": "icp_pt_vp_people_growth",
+            "tenant_id": "ten_pietential",
+            "label": "VP People / Head of HR — Growth-Stage",
+            "industry": "Growth-stage SaaS / Series B+",
+            "title_targets": ["VP People", "VP HR", "Head of HR", "Director of People"],
+            "company_size": "50-250 employees",
+            "geography": "USA, EU, India",
+            "deal_size": "$20k-60k/year",
+            "pain_point": "Scaling team fast, engagement dropping, no time for manual surveys",
+            "value_prop": "AI-powered pulse + automated coaching nudges to managers",
+            "tone": "Warm, fast-moving, founder-aware",
+            "created_at": NOW,
+            "updated_at": NOW,
+        },
+    ]
+    seeded_icps = 0
+    for icp in PIETENTIAL_ICPS:
+        existing = icps_col.find_one({"tenant_id": "ten_pietential", "label": icp["label"]})
+        if not existing:
+            icps_col.insert_one(icp.copy())
+            seeded_icps += 1
+    if seeded_icps:
+        print(f"[Migrate] Pietential ICPs seeded: {seeded_icps} new (PART E v3.0)")
 
     # 2. Create memberships
     admin_email = "admin@demo.com"

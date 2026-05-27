@@ -40,6 +40,7 @@ import Integrations from './pages/Integrations';
 import TrainAria from './pages/TrainAria';
 import TrainAriaV2 from './pages/TrainAriaV2';
 import PtIntelligenceFeed from './pietential/pages/PtIntelligenceFeed';
+import AdminLayout from './admin/AdminLayout';
 import Playbooks from './pages/Playbooks';
 import AISalesJourneys from './pages/AISalesJourneys';
 import FounderBriefs from './pages/FounderBriefs';
@@ -102,7 +103,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ children, requireOnboarded = true }) {
+function ProtectedRoute({ children, requireOnboarded = true, requireRole = null }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   const [gateState, setGateState] = React.useState({ checked: false, completed: true, tenantId: null });
@@ -126,6 +127,11 @@ function ProtectedRoute({ children, requireOnboarded = true }) {
     return () => { alive = false; };
   }, [user]);
 
+  // Role gate — added for /admin (master_admin only)
+  if (requireRole && user && user.role !== requireRole) {
+    return <Navigate to="/" replace />;
+  }
+
   if (loading || (user && !gateState.checked)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
@@ -148,6 +154,30 @@ function ProtectedRoute({ children, requireOnboarded = true }) {
   return children;
 }
 
+function ImpersonationBanner() {
+  const [info, setInfo] = React.useState(null);
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('impersonating');
+      if (raw) setInfo(JSON.parse(raw));
+    } catch (e) { /* ignore */ }
+  }, []);
+  if (!info) return null;
+  const stop = () => {
+    localStorage.removeItem('impersonating');
+    localStorage.removeItem('X-Tenant-Id');
+    window.location.href = '/admin/workspaces';
+  };
+  return (
+    <div className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-amber-950 px-4 py-2 flex items-center justify-between text-sm shadow-md" data-testid="impersonation-banner">
+      <div>
+        <strong>Admin view:</strong> impersonating <strong>{info.workspace_name}</strong> ({info.mode})
+      </div>
+      <button data-testid="stop-impersonation-btn" onClick={stop} className="px-3 py-1 bg-amber-900 hover:bg-amber-800 text-white rounded text-xs font-semibold">Stop & return to admin</button>
+    </div>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -156,6 +186,7 @@ function App() {
         <PlanProvider>
           <WorkspaceProvider>
           <Router>
+            <ImpersonationBanner />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Navigate to="/signup" replace />} />
@@ -185,6 +216,14 @@ function App() {
 
               {/* Pietential workspace — parallel protected app */}
               <Route
+                path="/admin/*"
+                element={
+                  <ProtectedRoute requireRole="master_admin">
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/pt/*"
                 element={
                   <ProtectedRoute>
@@ -194,6 +233,11 @@ function App() {
                         <Route path="/ai-setup" element={<AISetupAssistant />} />
                         <Route path="/train-aria" element={<TrainAriaV2 />} />
                         <Route path="/intelligence" element={<PtIntelligenceFeed />} />
+                        <Route path="/conversations" element={<Conversations />} />
+                        <Route path="/icps" element={<ICPManager />} />
+                        <Route path="/integrations" element={<Integrations />} />
+                        <Route path="/reports" element={<Reports />} />
+                        <Route path="/settings" element={<Settings />} />
                         <Route path="/leads" element={<PtLeadFeed />} />
                         <Route path="/leads/:id" element={<PtLeadDetail />} />
                         <Route path="/saleshandy" element={<PtSaleshandy />} />

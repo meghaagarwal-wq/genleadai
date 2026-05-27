@@ -8,23 +8,19 @@ import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
+// PART C.2 v3.0 — 8-item nav max, mode-adaptive.
+// - Intelligence Feed: B2B + Hybrid only
+// - Lead Inbox: B2C + Hybrid only
 const NAV = [
-  { to: '/pt',                  label: 'Overview',       icon: Gauge },
-  { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
-  { to: '/pt/intelligence',     label: 'Intelligence Feed', icon: Brain, b2cHidden: true },
-  { to: '/pt/ai-setup',         label: 'AI Setup',       icon: Sparkle },
-  { to: '/pt/train-aria',       label: 'Train Aria',     icon: GraduationCap },
-  { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
-  { to: '/pt/lemlist',          label: 'Lemlist',        icon: LinkedinLogo },
-  { to: '/pt/campaigns',        label: 'Campaigns',      icon: Megaphone },
-  { to: '/pt/accounts',         label: 'Accounts',       icon: Buildings },
-  { to: '/pt/touchpoints',      label: 'Touchpoint Map', icon: MapTrifold },
-  { to: '/pt/tasks',            label: 'Tasks',          icon: ListChecks },
-  { to: '/pt/logs',             label: 'Automation Logs', icon: Pulse },
-  { to: '/pt/reports',          label: 'Reports',        icon: ChartBar },
-  { to: '/pt/integrations',     label: 'Integrations',   icon: Plugs },
-  { to: '/pt/team',             label: 'Team',           icon: UsersThree },
-  { to: '/pt/settings',         label: 'Settings',       icon: GearSix },
+  { to: '/pt',                  label: 'Home',              icon: Gauge },
+  { to: '/pt/intelligence',     label: 'Intelligence Feed', icon: Brain,        modes: ['b2b', 'hybrid'] },
+  { to: '/pt/leads',            label: 'Lead Inbox',        icon: Users,        modes: ['b2c', 'hybrid'] },
+  { to: '/pt/conversations',    label: 'Conversations',     icon: EnvelopeOpen },
+  { to: '/pt/icps',             label: 'ICPs',              icon: UsersThree },
+  { to: '/pt/train-aria',       label: 'Train ARIA',        icon: GraduationCap },
+  { to: '/pt/integrations',     label: 'Integrations',      icon: Plugs },
+  { to: '/pt/reports',          label: 'Reports',           icon: ChartBar },
+  { to: '/pt/settings',         label: 'Settings',          icon: GearSix },
 ];
 
 const WorkspaceSwitcher = () => {
@@ -77,8 +73,8 @@ const PtLayout = ({ children }) => {
   }, []);
 
   const visibleNav = NAV.filter((item) => {
-    if (workspaceType === 'b2c' && item.b2cHidden) return false;
-    return true;
+    if (!item.modes) return true;  // always visible
+    return item.modes.includes(workspaceType);
   });
 
   // iter87-89 — pin the active tenant to ten_pietential whenever we're
