@@ -4584,6 +4584,22 @@ async def _start_b2b_insight_scan_loop():
     print("[B2BInsightScan] Background loop started (24h tick, +5min startup stagger)")
 
 
+@app.on_event("startup")
+async def _start_iter103_audit_loops():
+    """Iter103 — V3 audit §18 gap-fillers. Three small loops:
+       - saleshandy_poll (30m): import recent Saleshandy replies
+       - enrichment_retry (24h): retry failed Proxycurl/Serper enrichments
+       - pixel_attribution (10m): attribute pageviews to leads by email/IP
+    """
+    from routes.audit_loops import (
+        saleshandy_poll_loop, enrichment_retry_loop, pixel_attribution_loop,
+    )
+    asyncio.create_task(saleshandy_poll_loop())
+    asyncio.create_task(enrichment_retry_loop())
+    asyncio.create_task(pixel_attribution_loop())
+    print("[Iter103] saleshandy_poll + enrichment_retry + pixel_attribution loops started")
+
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # ARIA End-of-Day Wrap — emails the founder a 6pm summary of today's progress

@@ -25,11 +25,46 @@ const PtLeadFeed = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // iter103 — Real-time polling. Every 10s, fetch /realtime/since and bump
+  // the live-badge count when new leads arrive. Auto-refreshes the table
+  // so users don't have to manually reload.
+  const [liveCursor, setLiveCursor] = useState(new Date().toISOString());
+  const [newSinceLastSeen, setNewSinceLastSeen] = useState(0);
+  useEffect(() => {
+    let timer = null;
+    const poll = async () => {
+      try {
+        const r = await ptApi.get('/api/realtime/since', { params: { ts: liveCursor } });
+        const cnt = r.data.lead_count || 0;
+        if (cnt > 0) {
+          setNewSinceLastSeen(n => n + cnt);
+          await load();  // refresh table
+        }
+        if (r.data.now) setLiveCursor(r.data.now);
+      } catch { /* silent */ }
+      timer = setTimeout(poll, 10000);
+    };
+    timer = setTimeout(poll, 10000);
+    return () => { if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveCursor]);
+  const dismissLiveBadge = () => setNewSinceLastSeen(0);
+
   return (
     <div data-testid="pt-leadfeed-page">
       <PageHeader title="Lead Feed" subtitle="Real leads who have engaged. No samples."
         right={
           <div className="flex items-center gap-2">
+            {newSinceLastSeen > 0 && (
+              <button
+                onClick={dismissLiveBadge}
+                data-testid="pt-leadfeed-live-badge"
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700 bg-emerald-50 ring-1 ring-emerald-200 rounded-full px-2.5 py-1 animate-pulse"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                {newSinceLastSeen} new
+              </button>
+            )}
             <button onClick={() => setShowCsv(true)} data-testid="pt-leadfeed-upload-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
               <Upload size={14} weight="bold" /> Upload CSV

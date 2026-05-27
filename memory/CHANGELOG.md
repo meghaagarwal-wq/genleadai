@@ -1,5 +1,68 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 103 (P1+P2 audit sweep · full V3 audit complete)
+
+### Decision logged
+- **Nav is officially 9 items** (was 8 in original spec). "Automations" was
+  added in iter101 and is too operationally valuable to bury. Spec
+  amendment noted in `ARIA_MASTER_SPEC.md`.
+
+### 1. CSV lead import (audit §10.7)
+- **New `routes/leads_csv.py`** with two endpoints:
+  - `POST /api/leads/import-csv/preview` — returns headers, 5-row
+    sample, and **auto-suggested column→aria-field mapping** based on
+    header-keyword hints (firstname/fname/given → first_name, etc).
+  - `POST /api/leads/import-csv` — actually imports, given a
+    user-confirmed mapping. Streams every row through the existing
+    `_normalize_and_capture` pipeline so dedup + scoring + event-log
+    match webhook inbound. Limits: 8MB / 5,000 rows.
+
+### 2. Real-time polling (audit §6.6)
+- **New `GET /api/realtime/since?ts=<iso>`** — returns new leads +
+  insight cards created strictly after `ts`. UI polls every 10s for
+  near-real-time refresh without SSE complexity.
+- **`PtLeadFeed.js`** wired to the poll: animated "N new" pulse badge
+  appears when new leads arrive; table auto-refreshes; click the badge
+  to dismiss.
+
+### 3. Resumable onboarding + persistence (audit §19.8)
+- **`routes/realtime_onboarding.py`** — `GET /api/onboarding/state` and
+  `PUT /api/onboarding/state`. Per-user persistence (follows the human,
+  not the workspace). Stores `step`, `business_name`, `mode`,
+  `lead_source`, `completed`, and arbitrary `payload`.
+- **`OnboardingWizardV3.js`** now hydrates from saved state on mount,
+  persists step on every Next/Back, and stamps `completed=true` on
+  finish so returning users land on the dashboard instead of the
+  wizard.
+
+### 4. Missing background loops (audit §18.4 / §18.7 / §18.8)
+- **New `routes/audit_loops.py`** with three lightweight async loops:
+  - `saleshandy_poll_loop()`  — 30 min · imports recent Saleshandy
+    replies into `integration_events`
+  - `enrichment_retry_loop()` — 24 h · re-runs insight scans for
+    tenants that had Proxycurl/Serper errors in the last day
+  - `pixel_attribution_loop()` — 10 min · attributes website-pixel
+    pageviews to leads by email/IP match; bumps
+    `pixel_pageviews` counter and `last_pageview_at` stamp on the
+    matched lead.
+- Wired into server.py startup with `_start_iter103_audit_loops`.
+  Verified live: `[Iter103] saleshandy_poll + enrichment_retry +
+  pixel_attribution loops started`.
+
+### Tests
+- `tests/test_iter103_p1_p2_sweep.py` — 10 cases:
+  CSV preview/import/validation, realtime polling empty + live new
+  lead, onboarding default state + persist + resume, all 3 audit-loop
+  helpers return summary dicts.
+- **Full V3 + audit sweep: 76/76 tests pass** (iter95→103).
+
+### Deferred (need user-provided secrets)
+- **Gmail OAuth** + **Calendly OAuth** (audit §10.3) — both require
+  Google Cloud / Calendly developer-app client IDs and secrets that
+  the workspace owner must provide. Will execute in a dedicated cycle
+  once credentials are available.
+
+
 ## 2026-02 — Iter 102 (P0 audit fixes shipped · all 3 critical failures resolved)
 
 ### Background

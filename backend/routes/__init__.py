@@ -120,6 +120,10 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter101 — Visual Automation Rule Builder
     from .automation_rules import router as automation_rules_router
 
+    # Iter103 — CSV lead import + Real-time polling + Onboarding state
+    from .leads_csv import router as leads_csv_router
+    from .realtime_onboarding import router as realtime_onboarding_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -150,5 +154,7 @@ def register_all_routes(app: FastAPI) -> None:
         admin_v3_router,
         aria_resources_router,
         automation_rules_router,
+        leads_csv_router,
+        realtime_onboarding_router,
     ):
         app.include_router(router)

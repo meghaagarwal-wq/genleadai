@@ -59,6 +59,7 @@ const OnboardingWizardV3 = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [stateLoaded, setStateLoaded] = useState(false);
 
   // Form state
   const [businessName, setBusinessName] = useState('');
@@ -69,13 +70,42 @@ const OnboardingWizardV3 = () => {
   const [leadApiKey, setLeadApiKey] = useState('');
   const [icps, setIcps] = useState([{ name: '', industry: '', pain: '' }]);
 
+  // iter103 — Resume from persisted state on first mount.
+  useState(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get('/api/onboarding/state');
+        if (cancelled) return;
+        const s = r.data?.state || {};
+        if (s.business_name) setBusinessName(s.business_name);
+        if (s.mode)          setMode(s.mode);
+        if (s.lead_source)   setLeadSource(s.lead_source);
+        if (typeof s.step === 'number' && !s.completed) setStep(Math.min(s.step, STEPS.length - 1));
+      } catch (e) { /* first visit / not authed yet */ }
+      setStateLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  });
+
+  // iter103 — Persist state on every step change (after initial load).
+  const persistState = (partial = {}) => {
+    if (!stateLoaded) return;
+    const body = {
+      step, business_name: businessName, mode, lead_source: leadSource,
+      completed: false, payload: {},
+      ...partial,
+    };
+    api.put('/api/onboarding/state', body).catch(() => {});
+  };
+
   const canAdvance = () => {
     if (step === 0) return businessName.trim().length >= 2;
     return true;  // every other step is skippable
   };
 
-  const next = () => setStep(Math.min(STEPS.length - 1, step + 1));
-  const back = () => setStep(Math.max(0, step - 1));
+  const next = () => { const s = Math.min(STEPS.length - 1, step + 1); setStep(s); persistState({ step: s }); };
+  const back = () => { const s = Math.max(0, step - 1); setStep(s); persistState({ step: s }); };
 
   // ─── Persist helpers ──────────────────────────────────────────────────
   const saveWorkspaceMode = async () => {
@@ -125,6 +155,9 @@ const OnboardingWizardV3 = () => {
     try {
       await saveWorkspaceMode();
       if (icps.some(i => i.name)) await saveIcps();
+      // iter103 — mark wizard completed so user lands directly on dashboard
+      // on next login instead of being looped back into onboarding.
+      try { await api.put('/api/onboarding/state', { step: STEPS.length - 1, business_name: businessName, mode, lead_source: leadSource, completed: true, payload: {} }); } catch { /* ignore */ }
       toast.success("You're all set — Aria is live.");
       navigate('/pt');
     } catch (e) { toast.error('Could not finalize'); }
