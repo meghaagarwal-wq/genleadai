@@ -1,0 +1,161 @@
+/* Iter104 — ARIA Landing page styles (converted from Tailwind v4 source). */
+
+/* ─── Brand tokens scoped to landing only via .aria-landing parent ─── */
+.aria-landing {
+  --aria-radius: 1rem;
+  --aria-primary: #7c3aed;
+  --aria-primary-fg: #ffffff;
+  --aria-background: #fafaff;
+  --aria-foreground: #1a103a;
+  --aria-card: #ffffff;
+  --aria-muted: #f4f1fa;
+  --aria-muted-fg: #6b6486;
+  --aria-border: #e7e3f0;
+  --aria-input: #ede9f5;
+
+  --aria-lavender: #c4a8ff;
+  --aria-magenta: #e879f9;
+  --aria-success: #16a34a;
+  --aria-amber: #f59e0b;
+
+  --aria-gradient-brand: linear-gradient(135deg, #4c1d95 0%, #6d28d9 35%, #a855f7 70%, #ec4899 100%);
+  --aria-gradient-pill: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
+  --aria-gradient-text: linear-gradient(100deg, #a855f7 0%, #ec4899 100%);
+
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--aria-foreground);
+  background: var(--aria-background);
+}
+.aria-landing h1,
+.aria-landing h2,
+.aria-landing h3,
+.aria-landing h4 {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--aria-foreground);
+}
+
+/* ─── Keyframes ──────────────────────────────────────────────────── */
+@keyframes aria-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes aria-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes aria-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(2deg); }
+}
+@keyframes aria-pulse-ring {
+  0%        { transform: scale(0.85); opacity: 0.7; }
+  80%, 100% { transform: scale(1.8);  opacity: 0; }
+}
+@keyframes aria-orb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes aria-gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes caret {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+@keyframes signal {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1); }
+}
+@keyframes pulse-ring {
+  0%        { transform: scale(0.85); opacity: 0.7; }
+  80%, 100% { transform: scale(1.8);  opacity: 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(2deg); }
+}
+
+/* ─── Utility classes ────────────────────────────────────────────── */
+.aria-landing .section-label {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--aria-primary);
+}
+.aria-landing .text-gradient {
+  background: var(--aria-gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.aria-landing .brand-gradient {
+  background: var(--aria-gradient-brand);
+  background-size: 200% 200%;
+  animation: aria-gradient-shift 14s ease infinite;
+}
+.aria-landing .pill-gradient {
+  background: var(--aria-gradient-pill);
+  color: white;
+  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 20px -8px rgba(124, 58, 237, 0.6);
+}
+.aria-landing .pill-gradient:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -10px rgba(124, 58, 237, 0.75);
+}
+.aria-landing .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid var(--aria-border);
+  background-color: rgba(255, 255, 255, 0.85);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--aria-foreground);
+  backdrop-filter: blur(6px);
+}
+.aria-landing .chip-on-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.12);
+  padding: 0.4rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: white;
+  backdrop-filter: blur(8px);
+}
+.aria-landing .soft-card {
+  background-color: var(--aria-card);
+  border: 1px solid var(--aria-border);
+  border-radius: var(--aria-radius);
+}
+.aria-landing .shimmer-text {
+  background: linear-gradient(90deg, #fff 0%, #ffd4f0 25%, #ffb1e8 50%, #ffd4f0 75%, #fff 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: aria-shimmer 6s linear infinite;
+}
+.aria-landing .grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
+          mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
+}
+.aria-landing .animate-marquee {
+  animation: aria-marquee 40s linear infinite;
+}
