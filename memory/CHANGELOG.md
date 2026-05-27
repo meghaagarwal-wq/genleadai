@@ -1,5 +1,59 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 101 (V3 backlog finale · all P1 + P2 items shipped)
+Three deliverables in one cycle — completes the V3 master spec scope.
+
+### 1. Shell unification (P1) — `/app/*` ↔ `/pt/*`
+- `/app/*` route added in `App.js` mirroring all `/pt/*` nested routes
+  through the **same** `PtLayout`. Both prefixes work; bookmarks +
+  external links to `/pt/*` continue functioning.
+- `PtLayout.js` made prefix-adaptive via `useLocation()`. NavLinks now
+  resolve relative to whichever shell the user landed on (`/app/foo`
+  if on `/app/*`, otherwise `/pt/foo`).
+- Added **Automations** nav item between Train ARIA and Integrations.
+
+### 2. Visual Automation Rule Builder (P2)
+- **New `routes/automation_rules.py`** — tenant-scoped CRUD for
+  `when X then Y` rules:
+    - `GET    /api/automation-rules`           — list
+    - `GET    /api/automation-rules/catalog`   — supported triggers/ops/actions
+    - `POST   /api/automation-rules`           — create
+    - `PATCH  /api/automation-rules/{id}`      — edit
+    - `DELETE /api/automation-rules/{id}`      — delete
+    - `POST   /api/automation-rules/{id}/dry-run` — evaluate against sample context
+    - `POST   /api/automation-rules/{id}/run-now` — manual fire + counter bump
+    - `GET    /api/automation-rules/{id}/fires`   — fire history
+- **Catalog:** 7 trigger types, 8 operators, 7 action types, 12 common
+  fields. Pure helpers `evaluate_rule()` + `_eval_condition()` exposed
+  for the event-engine to consume.
+- **New page `pietential/pages/PtAutomations.js`** at
+  `/pt/automations` + `/app/automations`. Form-based composer (not
+  drag-and-drop) — rule cards with toggle/run/edit/delete, modal editor
+  with WHEN (event + N conditions) and THEN (N actions) panels, and a
+  dry-run "Test against sample context" feature that highlights which
+  conditions failed.
+
+### 3. 5-step V3 Onboarding wizard (P2)
+- **New `pages/OnboardingWizardV3.js`** at `/onboarding-v3`. Legacy
+  7-step wizard preserved at `/onboarding` for backwards-compat.
+- Five focused steps: **Workspace** (name + mode) → **Train ARIA**
+  (upload doc, calls existing `/api/aria/training-profile/extract-from-document`)
+  → **Lead source** (Saleshandy / Lemlist / Apollo / Pixel) →
+  **ICPs** (add 1–3 quick ICPs, merged into training profile) →
+  **Ready** (summary + go to dashboard).
+- Persists via existing endpoints — `PUT /api/aria/workspace-type` for
+  mode and `PUT /api/aria/training-profile` for ICPs. Every step except
+  step 1 is skippable.
+
+### Tests + verification
+- `tests/test_iter101_automation_rules.py` — 13/13 pass (catalog, CRUD,
+  validation, dry-run truth-table, run-now counter, disabled-rule
+  block, fires log).
+- Full iter95+97+98+99+100+101 sweep: **58/58 backend tests pass**.
+- UI verified live on Pietential (`/app/automations` renders with empty
+  state, `/onboarding-v3` renders with stepper + mode picker).
+
+
 ## 2026-02 — Iter 100 (Aria Resource Library · V3 P2 shipped)
 - **New backend module `routes/aria_resources.py`** — tenant-scoped CRUD
   for sales collateral with these endpoints:

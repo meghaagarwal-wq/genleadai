@@ -28,6 +28,7 @@ import YourFiveToday from './pages/YourFiveToday';
 import SleepingLeads from './pages/SleepingLeads';
 import AuditLog from './pages/AuditLog';
 import OnboardingWizard from './pages/OnboardingWizard';
+import OnboardingWizardV3 from './pages/OnboardingWizardV3';
 import Billing from './pages/Billing';
 import Invoices from './pages/Invoices';
 import Troubleshooting from './pages/Troubleshooting';
@@ -76,6 +77,7 @@ import PtTouchpointMap from './pietential/pages/PtTouchpointMap';
 import PtTeam from './pietential/pages/PtTeam';
 import PtCampaigns from './pietential/pages/PtCampaigns';
 import PtAutomationLogs from './pietential/pages/PtAutomationLogs';
+import PtAutomations from './pietential/pages/PtAutomations';
 import AriaHome from './public/pages/AriaHome';
 import DemoDashboard from './public/pages/DemoDashboard';
 import LeadFeedSEO from './public/pages/LeadFeedSEO';
@@ -245,6 +247,42 @@ function App() {
                         <Route path="/touchpoints" element={<PtTouchpointMap />} />
                         <Route path="/tasks" element={<PtTasks />} />
                         <Route path="/logs" element={<PtAutomationLogs />} />
+                        <Route path="/automations" element={<PtAutomations />} />
+                        <Route path="/reports" element={<PtReports />} />
+                        <Route path="/integrations" element={<PtIntegrations />} />
+                        <Route path="/team" element={<PtTeam />} />
+                        <Route path="/settings" element={<PtSettings />} />
+                      </Routes>
+                    </PtLayout>
+                  </ProtectedRoute>
+                }
+              />
+              {/* iter101 — Unified `/app/*` alias for the V3 client dashboard.
+                  Same PtLayout, same nested routes. Kept `/pt/*` working for
+                  backwards-compat with bookmarks & external links. */}
+              <Route
+                path="/app/*"
+                element={
+                  <ProtectedRoute>
+                    <PtLayout>
+                      <Routes>
+                        <Route path="/" element={<PtOverview />} />
+                        <Route path="/ai-setup" element={<AISetupAssistant />} />
+                        <Route path="/train-aria" element={<TrainAriaV2 />} />
+                        <Route path="/intelligence" element={<PtIntelligenceFeed />} />
+                        <Route path="/conversations" element={<Conversations />} />
+                        <Route path="/icps" element={<ICPManager />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="/leads" element={<PtLeadFeed />} />
+                        <Route path="/leads/:id" element={<PtLeadDetail />} />
+                        <Route path="/saleshandy" element={<PtSaleshandy />} />
+                        <Route path="/lemlist" element={<PtLemlist />} />
+                        <Route path="/campaigns" element={<PtCampaigns />} />
+                        <Route path="/accounts" element={<PtAccounts />} />
+                        <Route path="/touchpoints" element={<PtTouchpointMap />} />
+                        <Route path="/tasks" element={<PtTasks />} />
+                        <Route path="/logs" element={<PtAutomationLogs />} />
+                        <Route path="/automations" element={<PtAutomations />} />
                         <Route path="/reports" element={<PtReports />} />
                         <Route path="/integrations" element={<PtIntegrations />} />
                         <Route path="/team" element={<PtTeam />} />
@@ -259,6 +297,16 @@ function App() {
                 element={
                   <ProtectedRoute requireOnboarded={false}>
                     <OnboardingWizard />
+                  </ProtectedRoute>
+                }
+              />
+              {/* iter101 — V3 5-step onboarding (opt-in via /onboarding-v3).
+                  Legacy `/onboarding` kept for backwards-compat. */}
+              <Route
+                path="/onboarding-v3"
+                element={
+                  <ProtectedRoute requireOnboarded={false}>
+                    <OnboardingWizardV3 />
                   </ProtectedRoute>
                 }
               />

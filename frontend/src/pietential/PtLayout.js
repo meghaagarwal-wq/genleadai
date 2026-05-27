@@ -1,26 +1,29 @@
 import { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
-  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse, Sparkle, GraduationCap, Brain,
+  Gauge, Users, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
+  EnvelopeOpen, UsersThree, GraduationCap, Brain, Lightning,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
 import api from '../config/api';
 
 // PART C.2 v3.0 — 8-item nav max, mode-adaptive.
+// iter101 — relative paths so the same layout works under /pt/* AND /app/*.
+//   The leading slash is reattached at render time using the active prefix.
 // - Intelligence Feed: B2B + Hybrid only
 // - Lead Inbox: B2C + Hybrid only
 const NAV = [
-  { to: '/pt',                  label: 'Home',              icon: Gauge },
-  { to: '/pt/intelligence',     label: 'Intelligence Feed', icon: Brain,        modes: ['b2b', 'hybrid'] },
-  { to: '/pt/leads',            label: 'Lead Inbox',        icon: Users,        modes: ['b2c', 'hybrid'] },
-  { to: '/pt/conversations',    label: 'Conversations',     icon: EnvelopeOpen },
-  { to: '/pt/icps',             label: 'ICPs',              icon: UsersThree },
-  { to: '/pt/train-aria',       label: 'Train ARIA',        icon: GraduationCap },
-  { to: '/pt/integrations',     label: 'Integrations',      icon: Plugs },
-  { to: '/pt/reports',          label: 'Reports',           icon: ChartBar },
-  { to: '/pt/settings',         label: 'Settings',          icon: GearSix },
+  { to: '',               label: 'Home',              icon: Gauge },
+  { to: '/intelligence',  label: 'Intelligence Feed', icon: Brain,        modes: ['b2b', 'hybrid'] },
+  { to: '/leads',         label: 'Lead Inbox',        icon: Users,        modes: ['b2c', 'hybrid'] },
+  { to: '/conversations', label: 'Conversations',     icon: EnvelopeOpen },
+  { to: '/icps',          label: 'ICPs',              icon: UsersThree },
+  { to: '/train-aria',    label: 'Train ARIA',        icon: GraduationCap },
+  { to: '/automations',   label: 'Automations',       icon: Lightning },
+  { to: '/integrations',  label: 'Integrations',      icon: Plugs },
+  { to: '/reports',       label: 'Reports',           icon: ChartBar },
+  { to: '/settings',      label: 'Settings',          icon: GearSix },
 ];
 
 const WorkspaceSwitcher = () => {
@@ -55,6 +58,10 @@ const WorkspaceSwitcher = () => {
 const PtLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  // iter101 — auto-detect prefix so NavLinks resolve relative to current shell.
+  // `/app/foo` if user is on the unified V3 path, otherwise legacy `/pt/foo`.
+  const prefix = location.pathname.startsWith('/app') ? '/app' : '/pt';
   const [workspaceType, setWorkspaceType] = useState('hybrid');
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -134,21 +141,24 @@ const PtLayout = ({ children }) => {
         {/* Nav */}
         <nav className="flex-1 px-2 py-3" data-testid="pt-nav">
           <div className="space-y-0.5">
-            {visibleNav.map(item => (
-              <NavLink key={item.to} to={item.to} end={item.to === '/pt'}
-                data-testid={`pt-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-                className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-[#7C35DC]/8 text-[#7C35DC] border-l-2 border-[#7C35DC]'
-                      : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9] border-l-2 border-transparent'
-                  }`
-                }
-              >
-                <item.icon size={16} weight="duotone" />
-                {item.label}
-              </NavLink>
-            ))}
+            {visibleNav.map(item => {
+              const fullTo = `${prefix}${item.to}`;
+              return (
+                <NavLink key={fullTo} to={fullTo} end={item.to === ''}
+                  data-testid={`pt-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-[#7C35DC]/8 text-[#7C35DC] border-l-2 border-[#7C35DC]'
+                        : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F1F5F9] border-l-2 border-transparent'
+                    }`
+                  }
+                >
+                  <item.icon size={16} weight="duotone" />
+                  {item.label}
+                </NavLink>
+              );
+            })}
           </div>
         </nav>
 
