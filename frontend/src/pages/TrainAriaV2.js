@@ -456,7 +456,7 @@ const TrainAriaV2 = () => {
         <div className="border border-slate-200 rounded-xl p-5 bg-white" data-testid="train-aria-doc-upload-card">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Train from a document</div>
           <p className="text-sm text-slate-600 mb-3">
-            Upload a GTM brief, pitch deck, or sales playbook (PDF, DOCX, TXT, XLSX).
+            Upload a GTM brief, pitch deck, sales playbook, or marketing image (PDF, DOCX, PPT, PPTX, XLSX, JPG, PNG, WEBP, TXT).
             Aria extracts strictly — never invents content.
           </p>
           <input
@@ -464,7 +464,7 @@ const TrainAriaV2 = () => {
             type="file"
             data-testid="train-aria-doc-input"
             onChange={onFile}
-            accept=".pdf,.docx,.txt,.xlsx,.xls,.csv"
+            accept=".pdf,.docx,.txt,.xlsx,.xls,.csv,.ppt,.pptx,.jpg,.jpeg,.png,.webp"
             disabled={extracting}
             className="block text-sm text-slate-600 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-violet-600 file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-violet-700 disabled:opacity-50"
           />

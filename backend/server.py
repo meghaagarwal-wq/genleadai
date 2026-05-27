@@ -4621,6 +4621,13 @@ async def _start_b2b_insight_scan_loop():
         print("[Iter105] insight_digest_sender loop started")
     except Exception as _e:
         print(f"[Iter105] insight_digest_sender loop NOT started: {_e}")
+    # iter106 — OAuth token refresh (6h tick)
+    try:
+        from routes.oauth_integrations import oauth_token_refresh_loop
+        asyncio.create_task(oauth_token_refresh_loop())
+        print("[Iter106] oauth_token_refresh loop started")
+    except Exception as _e:
+        print(f"[Iter106] oauth_token_refresh loop NOT started: {_e}")
     print("[B2BInsightScan] Background loop started (24h tick, +5min startup stagger)")
 
 

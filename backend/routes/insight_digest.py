@@ -40,6 +40,10 @@ memberships_col = db["tenant_memberships"]
 audit_col = db["audit_log"]
 
 PUBLIC_APP_URL = "https://app.genleadai.com"
+# iter106 — ACTION 2: production sender. The domain must be verified in Resend
+# before this works without the test_mode_forwarded fallback in email_delivery.
+DIGEST_FROM_ADDRESS = "aria@genleadai.com"
+DIGEST_FROM_NAME = "ARIA · GenLeadAI"
 
 
 def _now() -> datetime:
@@ -274,6 +278,7 @@ def _send_digest_for_tenant(tenant: Dict[str, Any], dry_run: bool = False) -> Di
         subject=subject,
         html=html_body,
         purpose="insight_digest",
+        from_address=f"{DIGEST_FROM_NAME} <{DIGEST_FROM_ADDRESS}>",
     )
 
     # Mark these cards so they don't re-appear in tomorrow's digest as "new"
@@ -390,29 +395,56 @@ async def update_digest_prefs(
 # ─────────────────────────────────────────────────────────────────────────
 async def insight_digest_sender_loop():
     """Wakes every 15 minutes. For every tenant with insight_digest.enabled=true,
-    if the current UTC hour matches the configured send_at_hour AND we have not
-    already sent today's digest, send it. (Workspace timezone refinement is left
-    as a follow-up — current default is UTC for simplicity.)
+    if the current hour in the workspace's timezone matches the configured
+    send_at_hour AND we have not already sent today's digest (in that timezone),
+    send it.
+
+    Workspace timezone is read from `tenants.settings.timezone` (IANA name like
+    'Asia/Kolkata') or `tenants.timezone` as a fallback. Defaults to UTC.
     """
+    try:
+        from zoneinfo import ZoneInfo  # py3.9+
+    except ImportError:
+        ZoneInfo = None  # type: ignore
+
+    def _tenant_now(tenant_doc: Dict[str, Any]):
+        tz_name = (
+            ((tenant_doc.get("settings") or {}).get("timezone"))
+            or tenant_doc.get("timezone")
+            or "UTC"
+        )
+        if ZoneInfo is None:
+            return _now(), tz_name
+        try:
+            return _now().astimezone(ZoneInfo(tz_name)), tz_name
+        except Exception:
+            return _now(), "UTC"
+
     while True:
         try:
-            now = _now()
-            today_iso = now.date().isoformat()
-            cur_hour = now.hour
-            for tenant in tenants_col.find({}, {"_id": 0, "id": 1, "name": 1, "settings": 1}):
+            for tenant in tenants_col.find({}, {"_id": 0, "id": 1, "name": 1, "settings": 1, "timezone": 1}):
                 tid = tenant.get("id")
                 if not tid:
                     continue
                 prefs = _get_prefs(tid)
                 if not prefs["enabled"]:
                     continue
-                if prefs["send_at_hour"] != cur_hour:
+                local_now, tz_name = _tenant_now(tenant)
+                if local_now.hour != prefs["send_at_hour"]:
                     continue
-                if prefs["last_sent_on"] == today_iso:
+                local_today = local_now.date().isoformat()
+                if prefs["last_sent_on"] == local_today:
                     continue
                 result = _send_digest_for_tenant(tenant, dry_run=False)
                 if result.get("sent"):
-                    print(f"[insight_digest] sent for {tid}: {result.get('card_count')} cards → {result.get('email')}")
+                    # Re-stamp last_sent_on using workspace-local date
+                    prefs_col.update_one(
+                        {"tenant_id": tid},
+                        {"$set": {"insight_digest.last_sent_on": local_today,
+                                  "insight_digest.last_sent_tz": tz_name}},
+                        upsert=True,
+                    )
+                    print(f"[insight_digest] sent for {tid} ({tz_name}): {result.get('card_count')} cards → {result.get('email')}")
                 elif result.get("reason") not in {"no_cards"}:
                     print(f"[insight_digest] skipped {tid}: {result.get('reason')}")
         except Exception as e:

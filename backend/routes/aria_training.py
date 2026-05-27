@@ -930,8 +930,9 @@ async def extract_from_document(
     if not text or len(text.strip()) < 50:
         raise HTTPException(
             400,
-            "Couldn't read enough text from this file. Try .txt, .docx, or a text-based PDF "
-            "(scanned PDFs need OCR first)."
+            "Couldn't read enough text from this file. Accepted types: "
+            "PDF, DOCX, PPT, PPTX, XLSX, JPG, PNG, WEBP, TXT. "
+            "For scanned PDFs, save as image (JPG/PNG) so OCR runs."
         )
 
     extracted = await _extract_with_claude(text)

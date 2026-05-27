@@ -36,6 +36,117 @@ const WEBHOOK_HINTS = {
   ga4: ['/api/pt/webhooks/ga4/high-intent-page-visit'],
 };
 
+// iter106 — OAuth integrations panel
+const OAUTH_PROVIDERS = [
+  { id: 'calendly',  label: 'Calendly',     desc: 'Auto-register no-show + booked + cancelled webhooks.' },
+  { id: 'gmail',     label: 'Gmail',        desc: 'Track replies on outbound email threads.' },
+  { id: 'outlook',   label: 'Outlook',      desc: 'Track replies on outbound email threads.' },
+  { id: 'meta',      label: 'Meta Ads',     desc: 'Pull Lead Gen Form submissions every 15 min.' },
+  { id: 'linkedin',  label: 'LinkedIn',     desc: 'Organic posting + profile data.' },
+  { id: 'googleads', label: 'Google Ads',   desc: 'Pull lead form conversions every 15 min.' },
+];
+
+const OAuthIntegrations = () => {
+  const [statuses, setStatuses] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  const refresh = async () => {
+    try {
+      const { data } = await ptApi.get('/api/integrations/list');
+      const map = {};
+      for (const item of (data?.integrations || [])) {
+        if (OAUTH_PROVIDERS.find(p => p.id === item.platform)) {
+          map[item.platform] = item;
+        }
+      }
+      setStatuses(map);
+    } catch (e) { /* silent — list endpoint optional */ }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const connect = async (id) => {
+    setBusyId(id);
+    try {
+      const { data } = await ptApi.get(`/api/integrations/${id}/connect`);
+      const w = window.open(data.auth_url, '_blank', 'width=520,height=720');
+      const onMsg = (e) => {
+        if (e?.data?.type === 'oauth_done' && e.data.provider === id) {
+          window.removeEventListener('message', onMsg);
+          refresh();
+          toast.success(`${id} connected`);
+          try { w && w.close(); } catch (_) {}
+        }
+      };
+      window.addEventListener('message', onMsg);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || `Could not start ${id} OAuth — check provider credentials in backend env`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const disconnect = async (id) => {
+    if (!window.confirm(`Disconnect ${id}? You'll need to reconnect to use this integration.`)) return;
+    setBusyId(id);
+    try {
+      await ptApi.delete(`/api/integrations/${id}`);
+      toast.success(`${id} disconnected`);
+      refresh();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Disconnect failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="mb-6" data-testid="pt-integ-oauth-section">
+      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2">OAuth integrations</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {OAUTH_PROVIDERS.map(p => {
+          const cur = statuses[p.id];
+          const connected = cur?.status === 'connected';
+          return (
+            <div key={p.id} className="border border-[#E2E8F0] rounded-xl p-4 bg-white" data-testid={`pt-integ-oauth-card-${p.id}`}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="font-semibold text-sm text-[#0F172A]">{p.label}</div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: connected ? '#DCFCE7' : '#F1F5F9', color: connected ? '#15803D' : '#64748B' }}>
+                  {connected ? 'Connected' : 'Not connected'}
+                </span>
+              </div>
+              <p className="text-xs text-[#64748B] mb-3">{p.desc}</p>
+              {connected && cur?.last_sync && (
+                <div className="text-[10px] text-[#64748B] mb-2">Last sync: {fmtDateTime(cur.last_sync)}</div>
+              )}
+              <div className="flex gap-2">
+                {!connected && (
+                  <button
+                    onClick={() => connect(p.id)}
+                    disabled={busyId === p.id}
+                    data-testid={`pt-integ-oauth-connect-${p.id}`}
+                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg">
+                    {busyId === p.id ? 'Opening…' : 'Connect'}
+                  </button>
+                )}
+                {connected && (
+                  <button
+                    onClick={() => disconnect(p.id)}
+                    disabled={busyId === p.id}
+                    data-testid={`pt-integ-oauth-disconnect-${p.id}`}
+                    className="px-3 py-1.5 border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-semibold rounded-lg">
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+
 const PtIntegrations = () => {
   const [primary, setPrimary] = useState([]);
   const [future, setFuture] = useState([]);
@@ -81,6 +192,9 @@ const PtIntegrations = () => {
         <div className="text-sm text-[#64748B]">Loading…</div>
       ) : (
         <>
+          {/* iter106 — OAuth integrations (Calendly / Gmail / Outlook / Meta / LinkedIn / Google Ads) */}
+          <OAuthIntegrations />
+
           <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2" data-testid="pt-integ-primary-heading">Primary platforms</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
             {primary.map(r => (

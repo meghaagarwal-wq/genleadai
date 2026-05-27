@@ -137,6 +137,10 @@ const InsightDigestCard = () => {
   const [cfg, setCfg] = useState({ enabled: true, send_at_hour: 7 });
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  // iter106 — ACTION 4: preview modal state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
 
   useEffect(() => {
     api.get('/api/pt/notifications/digest/prefs')
@@ -156,13 +160,29 @@ const InsightDigestCard = () => {
     }
   };
 
+  const openPreview = async () => {
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewData(null);
+    try {
+      const { data } = await api.post('/api/pt/notifications/digest/send', { dry_run: true });
+      setPreviewData(data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Preview failed');
+      setPreviewOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const sendNow = async () => {
     setSending(true);
     try {
       const { data } = await api.post('/api/pt/notifications/digest/send', { dry_run: false });
-      if (data.sent) toast.success(`Digest sent (${data.card_count} cards) → ${data.email}`);
+      if (data.sent) toast.success(`Digest sent to ${data.email}`);
       else if (data.reason === 'no_cards') toast.info('No new or resurfaced cards to digest right now');
       else toast.error(data.reason || 'Digest could not be sent');
+      setPreviewOpen(false);
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Send failed');
     } finally {
@@ -172,6 +192,7 @@ const InsightDigestCard = () => {
 
   if (loading) return null;
   return (
+    <>
     <div className="aria-card-lift bg-white border border-[#E8E0F5] rounded-2xl p-5" style={{ boxShadow: 'var(--shadow-card)' }} data-testid="insight-digest-card">
       <div className="flex items-center gap-2 mb-3">
         <EnvelopeSimple size={16} weight="fill" className="text-[#7C35DC]" />
@@ -179,7 +200,7 @@ const InsightDigestCard = () => {
       </div>
       <p className="text-xs text-[#5A4A7A] mb-4">
         One email per day bundling new + resurfaced signals from the last 24 hours.
-        Uses your workspace's timezone (defaults to UTC).
+        Uses your workspace's timezone.
       </p>
       <div className="flex items-center gap-4 flex-wrap">
         <Toggle on={!!cfg.enabled} onClick={() => update({ enabled: !cfg.enabled })} testid="digest-enabled-toggle" />
@@ -195,17 +216,78 @@ const InsightDigestCard = () => {
             {Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
           </select>
         </div>
-        <button
-          type="button"
-          onClick={sendNow}
-          disabled={sending || !cfg.enabled}
-          data-testid="digest-send-now-btn"
-          className="ml-auto px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg"
-        >
-          {sending ? 'Sending…' : 'Send now'}
-        </button>
+        <div className="ml-auto flex gap-2">
+          <button
+            type="button"
+            onClick={openPreview}
+            disabled={!cfg.enabled}
+            data-testid="digest-preview-btn"
+            className="px-4 py-1.5 border border-violet-300 hover:bg-violet-50 disabled:opacity-50 text-violet-700 text-xs font-semibold rounded-lg"
+          >
+            Preview Email
+          </button>
+          <button
+            type="button"
+            onClick={sendNow}
+            disabled={sending || !cfg.enabled}
+            data-testid="digest-send-now-btn"
+            className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg"
+          >
+            {sending ? 'Sending…' : 'Send now'}
+          </button>
+        </div>
       </div>
     </div>
+
+    {/* iter106 — Preview modal */}
+    {previewOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPreviewOpen(false)} data-testid="digest-preview-modal">
+        <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>Digest Preview — what your owners will receive</h3>
+              {previewData?.subject && (
+                <div className="text-xs text-slate-500 mt-0.5">Subject: <span className="font-medium text-slate-700">{previewData.subject}</span></div>
+              )}
+            </div>
+            <button onClick={() => setPreviewOpen(false)} className="text-slate-400 hover:text-slate-700 text-lg leading-none" data-testid="digest-preview-close-btn">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto bg-slate-50">
+            {previewLoading && <div className="p-8 text-sm text-slate-500 text-center">Generating preview…</div>}
+            {!previewLoading && previewData && previewData.card_count === 0 && (
+              <div className="p-12 text-center" data-testid="digest-preview-empty">
+                <div className="text-3xl mb-3">📭</div>
+                <div className="text-sm font-semibold text-slate-700">No signals in the last 24 hours.</div>
+                <div className="text-xs text-slate-500 mt-1">Your digest would not send right now.</div>
+              </div>
+            )}
+            {!previewLoading && previewData?.html && previewData.card_count > 0 && (
+              <iframe
+                title="digest-preview-html"
+                srcDoc={previewData.html}
+                className="w-full"
+                style={{ height: 'calc(85vh - 130px)', border: 'none', background: '#F4F1FA' }}
+                data-testid="digest-preview-iframe"
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-white">
+            <button onClick={() => setPreviewOpen(false)} className="px-4 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg">
+              Close
+            </button>
+            <button
+              onClick={sendNow}
+              disabled={sending || !previewData || previewData.card_count === 0}
+              data-testid="digest-preview-send-btn"
+              className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg"
+            >
+              {sending ? 'Sending…' : 'Send Now'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

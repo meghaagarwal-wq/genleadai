@@ -72,14 +72,17 @@ def send_email_safe(
     reply_to: Optional[str] = None,
     purpose: str = "generic",
     attachments: Optional[list] = None,
+    from_address: Optional[str] = None,
 ) -> DeliveryResult:
     """Best-effort email send with test-mode fallback. Never raises.
 
     attachments: list of dicts like
         {"filename": "invoice.pdf", "content": <bytes>}
+    from_address: override default SENDER_EMAIL — useful for per-feature
+        sender domains (e.g. aria@genleadai.com for insight digests).
     """
     api_key = os.getenv("RESEND_API_KEY")
-    sender = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
+    sender = from_address or os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
     if not api_key:
         result = DeliveryResult(delivered=False, delivery_status="skipped", detail="RESEND_API_KEY not set")
         _record(to_email, subject, result)

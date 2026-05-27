@@ -95,6 +95,40 @@ def _extract_text(filename: str, content: bytes) -> str:
                     if line.strip():
                         chunks.append(line)
             return "\n".join(chunks)
+        # iter106 — ACTION 7: PPT / PPTX (title + body + speaker notes)
+        if name.endswith(".pptx") or name.endswith(".ppt"):
+            from pptx import Presentation
+            prs = Presentation(io.BytesIO(content))
+            chunks = []
+            for idx, slide in enumerate(prs.slides, start=1):
+                slide_text = []
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            t = "".join(run.text for run in para.runs).strip()
+                            if t:
+                                slide_text.append(t)
+                # Speaker notes
+                if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
+                    notes = slide.notes_slide.notes_text_frame.text.strip()
+                    if notes:
+                        slide_text.append(f"[speaker notes] {notes}")
+                if slide_text:
+                    chunks.append(f"--- Slide {idx} ---\n" + "\n".join(slide_text))
+            return "\n\n".join(chunks)
+        # iter106 — ACTION 7: image OCR
+        if name.endswith((".jpg", ".jpeg", ".png", ".webp")):
+            try:
+                import pytesseract
+                from PIL import Image
+                img = Image.open(io.BytesIO(content))
+                # Improve OCR on small / low-contrast images
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                return pytesseract.image_to_string(img) or ""
+            except Exception as e:
+                print(f"[auto-map] OCR failed for {filename}: {e}")
+                return ""
         # txt / csv / unknown → decode best effort
         return content.decode("utf-8", errors="ignore")
     except Exception as e:

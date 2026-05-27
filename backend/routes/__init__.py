@@ -132,6 +132,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter105 — Task 2: Insight Digest daily email
     from .insight_digest import router as insight_digest_router
 
+    # Iter106 — ACTION 5: OAuth scaffolds (Calendly, Gmail, Outlook, Meta, LinkedIn, Google Ads)
+    from .oauth_integrations import router as oauth_integrations_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -166,5 +169,6 @@ def register_all_routes(app: FastAPI) -> None:
         realtime_onboarding_router,
         iter105_fixes_router,
         insight_digest_router,
+        oauth_integrations_router,
     ):
         app.include_router(router)

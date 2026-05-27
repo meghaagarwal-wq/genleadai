@@ -312,6 +312,7 @@ _REGISTERED_JOBS = {
     "pixel_attribution",
     "snooze_recovery",
     "insight_digest_sender",
+    "oauth_token_refresh",
 }
 
 
