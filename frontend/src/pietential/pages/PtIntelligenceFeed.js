@@ -157,12 +157,58 @@ const InsightCard = ({ card, onAction }) => {
   );
 };
 
+const LastScanChip = ({ last_scan_at, last_scan_count, status_counts }) => {
+  if (!last_scan_at) {
+    return (
+      <div
+        data-testid="pt-insights-last-scan-chip-empty"
+        className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-100 ring-1 ring-slate-200 rounded-full px-3 py-1"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+        Never scanned — hit “Run scan now” to start
+      </div>
+    );
+  }
+  // Pretty relative time
+  let rel = '';
+  try {
+    const diff = (Date.now() - new Date(last_scan_at).getTime()) / 1000;
+    if (diff < 60)         rel = 'just now';
+    else if (diff < 3600)  rel = `${Math.round(diff / 60)}m ago`;
+    else if (diff < 86400) rel = `${Math.round(diff / 3600)}h ago`;
+    else                   rel = `${Math.round(diff / 86400)}d ago`;
+  } catch { rel = '—'; }
+  const newCount = (status_counts || {}).new || 0;
+  return (
+    <div
+      data-testid="pt-insights-last-scan-chip"
+      className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-violet-700 bg-violet-50 ring-1 ring-violet-200 rounded-full px-3 py-1"
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+      Last scanned · <span className="text-slate-700 font-normal">{rel}</span>
+      <span className="text-slate-300">·</span>
+      <span data-testid="pt-insights-last-scan-count">
+        {last_scan_count} created this run
+      </span>
+      {newCount > 0 && (
+        <>
+          <span className="text-slate-300">·</span>
+          <span className="text-emerald-700">
+            {newCount} unread
+          </span>
+        </>
+      )}
+    </div>
+  );
+};
+
 const PtIntelligenceFeed = () => {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [cards, setCards] = useState([]);
   const [integrationsStatus, setIntegrationsStatus] = useState(null);
   const [filter, setFilter] = useState('new');
+  const [scanMeta, setScanMeta] = useState({ last_scan_at: null, last_scan_count: 0, status_counts: {} });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -172,6 +218,11 @@ const PtIntelligenceFeed = () => {
         api.get('/api/pt/insights/integrations'),
       ]);
       setCards(feed.data.cards || []);
+      setScanMeta({
+        last_scan_at: feed.data.last_scan_at || null,
+        last_scan_count: feed.data.last_scan_count || 0,
+        status_counts: feed.data.status_counts || {},
+      });
       setIntegrationsStatus(integ.data);
     } catch (e) {
       toast.error('Could not load Intelligence Feed');
@@ -220,6 +271,11 @@ const PtIntelligenceFeed = () => {
             acting on. Aria classifies them with confidence ≥ 70% and drafts the
             outreach for you.
           </p>
+          <LastScanChip
+            last_scan_at={scanMeta.last_scan_at}
+            last_scan_count={scanMeta.last_scan_count}
+            status_counts={scanMeta.status_counts}
+          />
         </div>
         <button
           data-testid="pt-insights-scan-btn"

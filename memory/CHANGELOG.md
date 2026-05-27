@@ -1,5 +1,30 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 98 (Insights chip + Reports/Funnel page · V3 P1/P2 ship)
+- **Insights Feed chip:** `GET /api/pt/insights/feed` now returns
+  `last_scan_at`, `last_scan_count`, and `status_counts`. UI renders a
+  pulsing violet chip — *"Last scanned · 2m ago · 0 created this run · N
+  unread"* — directly under the H1 (verified live on Pietential).
+- **New Reports → Funnel tab** (`GET /api/pt/reports/funnel?days=30`):
+  - 4 headline tiles: Total leads · New in window · Progression rate ·
+    Signal action rate.
+  - Lead funnel bar chart (cold → warm → hot → engaged → session_pilot).
+  - Signal-type breakdown (per-type total vs. actioned, with
+    action-rate %).
+  - Conversion tiles: sessions booked, lead→session rate, total signals
+    classified.
+- **Route dedup bugfix:** `/pt/reports` was previously matched by the
+  legacy `Reports` component (line 239 of `App.js`) because it was
+  declared before `PtReports` (line 250). Removed the legacy duplicates
+  for `reports`, `conversations`, `integrations`, and `settings` inside
+  the `/pt/*` subtree so the V3 Pietential components win.
+- **Tests:** `tests/test_iter98_funnel_reports_and_chip.py` — 3 cases
+  covering funnel shape, window clamping, and chip metadata. 10/10
+  backend tests pass (iter97 + iter98).
+- **Live verification:** Reports page loads with Pietential real numbers
+  (23 leads · 14 cold · 2 warm · 7 hot · 30.4% progression rate).
+
+
 ## 2026-02 — Iter 97 (B2B Insight Scan daily cron — P1 V3 backlog)
 - **New cron loop:** `b2b_insight_scan_loop()` in `routes/pt_insights.py`.
   Sweeps every tenant with `mode in (b2b, hybrid)` once per 24h (+5 min

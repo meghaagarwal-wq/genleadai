@@ -624,7 +624,12 @@ async def get_feed(
     status: Optional[str] = None,
     limit: int = 50,
 ):
-    """List insight cards for this tenant, sorted by recency + ICP score."""
+    """List insight cards for this tenant, sorted by recency + ICP score.
+
+    Also returns scan metadata (`last_scan_at`, `last_scan_count`) and
+    per-status counts so the UI can render a "Last scanned · 14m ago · 3 new"
+    chip without a second round-trip.
+    """
     query: Dict[str, Any] = {"tenant_id": tenant["id"]}
     if status in ("new", "sent", "dismissed"):
         query["status"] = status
@@ -633,10 +638,24 @@ async def get_feed(
         ("icp_match_score", -1),
     ]).limit(max(1, min(limit, 200)))
     rows = list(cur)
+
+    # Per-status counts (always tenant-wide, ignore the active filter)
+    status_counts = {"new": 0, "sent": 0, "dismissed": 0, "copied": 0}
+    for r in insights_col.aggregate([
+        {"$match": {"tenant_id": tenant["id"]}},
+        {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+    ]):
+        status_counts[r["_id"] or "new"] = r["n"]
+
+    # Scan metadata from tenant settings (set by run_insight_scan_for_tenant)
+    pt_meta = ((tenant.get("settings") or {}).get("pt_insights") or {})
     return {
         "ok": True,
         "count": len(rows),
         "cards": rows,
+        "status_counts": status_counts,
+        "last_scan_at": pt_meta.get("last_scan_at"),
+        "last_scan_count": pt_meta.get("last_scan_count"),
     }
 
 

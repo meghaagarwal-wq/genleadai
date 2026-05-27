@@ -1140,6 +1140,94 @@ async def monthly_report(current_user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/reports/funnel")
+async def funnel_report(
+    days: int = 30,
+    current_user: dict = Depends(get_current_user),
+):
+    """Iter98 — Funnel + signal-type breakdown + conversion tracking.
+
+    Returns three rollups:
+      1. `funnel`           — lead-count per stage (cold → warm → hot → engaged → session_pilot)
+      2. `signal_breakdown` — per-signal-type insight counts from pt_insights (last N days)
+      3. `conversion`       — % of cold leads that became hot/engaged in window
+    All tenant-scoped via `_tf(current_user)`.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(days=max(1, min(days, 365)))).isoformat()
+    tf = _tf(current_user)
+
+    # 1. Funnel — current lead count per stage
+    funnel_stages = ["cold", "warm", "hot", "engaged", "session_pilot"]
+    stage_counts: Dict[str, int] = {s: 0 for s in funnel_stages}
+    for row in leads_col.aggregate([
+        {"$match": tf},
+        {"$group": {"_id": "$stage", "n": {"$sum": 1}}},
+    ]):
+        if row["_id"] in stage_counts:
+            stage_counts[row["_id"]] = row["n"]
+    funnel = [{"stage": s, "count": stage_counts[s]} for s in funnel_stages]
+    total_leads = sum(stage_counts.values())
+
+    # 2. Signal-type breakdown from pt_insights (the iter94 + iter97 cron output)
+    insights_col_local = db["pt_insights"]
+    signal_rows = list(insights_col_local.aggregate([
+        {"$match": {**tf, "created_at": {"$gte": cutoff}}},
+        {"$group": {
+            "_id": "$signal_type",
+            "total": {"$sum": 1},
+            "actioned": {"$sum": {"$cond": [{"$in": ["$status", ["sent", "copied"]]}, 1, 0]}},
+            "dismissed": {"$sum": {"$cond": [{"$eq": ["$status", "dismissed"]}, 1, 0]}},
+        }},
+        {"$sort": {"total": -1}},
+    ]))
+    signal_breakdown = [
+        {
+            "signal_type": r["_id"] or "unknown",
+            "total": r["total"],
+            "actioned": r["actioned"],
+            "dismissed": r["dismissed"],
+            "action_rate": round((r["actioned"] / r["total"]) * 100, 1) if r["total"] else 0,
+        }
+        for r in signal_rows
+    ]
+    total_signals = sum(r["total"] for r in signal_breakdown) if signal_breakdown else 0
+    total_actioned = sum(r["actioned"] for r in signal_breakdown) if signal_breakdown else 0
+
+    # 3. Conversion — cold leads that progressed to hot+ within window
+    new_in_window = leads_col.count_documents({**tf, "created_at": {"$gte": cutoff}})
+    progressed_in_window = leads_col.count_documents({
+        **tf,
+        "created_at": {"$gte": cutoff},
+        "stage": {"$in": ["hot", "engaged", "session_pilot"]},
+    })
+    sessions_booked = events_col.count_documents({
+        **tf,
+        "event_type": "calendly.session_booked",
+        "created_at": {"$gte": cutoff},
+    })
+
+    return {
+        "window_days": days,
+        "from": cutoff,
+        "total_leads": total_leads,
+        "funnel": funnel,
+        "signal_breakdown": signal_breakdown,
+        "signal_totals": {
+            "total": total_signals,
+            "actioned": total_actioned,
+            "action_rate": round((total_actioned / total_signals) * 100, 1) if total_signals else 0,
+        },
+        "conversion": {
+            "new_leads_in_window":        new_in_window,
+            "progressed_to_hot_or_above": progressed_in_window,
+            "progression_rate":           round((progressed_in_window / new_in_window) * 100, 1) if new_in_window else 0,
+            "sessions_booked":            sessions_booked,
+            "leads_to_session_rate":      round((sessions_booked / new_in_window) * 100, 1) if new_in_window else 0,
+        },
+    }
+
+
 # ─── Integrations endpoints ─────────────────────────────────────────────────
 PRIMARY_INTEGRATIONS = ["saleshandy", "lemlist"]
 FUTURE_INTEGRATIONS = [

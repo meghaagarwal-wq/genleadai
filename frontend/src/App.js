@@ -235,8 +235,6 @@ function App() {
                         <Route path="/intelligence" element={<PtIntelligenceFeed />} />
                         <Route path="/conversations" element={<Conversations />} />
                         <Route path="/icps" element={<ICPManager />} />
-                        <Route path="/integrations" element={<Integrations />} />
-                        <Route path="/reports" element={<Reports />} />
                         <Route path="/settings" element={<Settings />} />
                         <Route path="/leads" element={<PtLeadFeed />} />
                         <Route path="/leads/:id" element={<PtLeadDetail />} />
