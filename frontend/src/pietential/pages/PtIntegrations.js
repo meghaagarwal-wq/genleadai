@@ -3,6 +3,13 @@ import { Plugs, ArrowClockwise, Copy } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, fmtDateTime } from '../shared';
 import PtIntegrationsExtras from './PtIntegrationsExtras';
+import ApiKeyInput from '../../components/ApiKeyInput';
+
+// iter108 — providers that have a real-time `/api/integrations/validate-key`
+// implementation. For any other integration card the legacy plain input is
+// used (no functional change). Keep this in sync with VALIDATORS in
+// /app/backend/routes/api_key_validator.py.
+const VALIDATED_PROVIDERS = ['saleshandy', 'proxycurl', 'serper', 'apollo', '360dialog', 'resend'];
 
 const PRETTY = {
   saleshandy: 'Saleshandy',
@@ -219,6 +226,7 @@ const PtIntegrations = () => {
 const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }) => {
   const sm = STATUS_META[integ.status] || STATUS_META.not_connected;
   const [apiKey, setApiKey] = useState('');
+  const [keyValid, setKeyValid] = useState(false);  // iter108 — gates Save for validated providers
   const [webhookSecret, setWebhookSecret] = useState('');
   const [webhookUrl, setWebhookUrl] = useState(integ.webhook_url || '');
 
@@ -252,14 +260,38 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }
       <div className="space-y-2.5">
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">API key {integ.api_key_masked && <span className="text-[#94A3B8] normal-case ml-1">· current: {integ.api_key_masked}</span>}</label>
-          <div className="flex items-center gap-1.5">
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
-              data-testid={`pt-integ-key-${integ.name}`}
-              className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
-            <button onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })} disabled={!apiKey}
-              data-testid={`pt-integ-save-${integ.name}`}
-              className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>Save</button>
-          </div>
+          {VALIDATED_PROVIDERS.includes(integ.name) ? (
+            <>
+              <ApiKeyInput
+                provider={integ.name}
+                value={apiKey}
+                onChange={setApiKey}
+                onValidityChange={setKeyValid}
+                placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
+                testIdBase={`pt-integ-key-${integ.name}`}
+              />
+              <div className="flex justify-end mt-2">
+                <button
+                  onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })}
+                  disabled={!apiKey || !keyValid}
+                  data-testid={`pt-integ-save-${integ.name}`}
+                  className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50"
+                  style={{ background: '#7C35DC' }}
+                >
+                  Save
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
+                data-testid={`pt-integ-key-${integ.name}`}
+                className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
+              <button onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })} disabled={!apiKey}
+                data-testid={`pt-integ-save-${integ.name}`}
+                className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>Save</button>
+            </div>
+          )}
         </div>
 
         {!compact && (

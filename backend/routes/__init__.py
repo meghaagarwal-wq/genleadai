@@ -135,6 +135,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter106 — ACTION 5: OAuth scaffolds (Calendly, Gmail, Outlook, Meta, LinkedIn, Google Ads)
     from .oauth_integrations import router as oauth_integrations_router
 
+    # Iter108 — ACTION 2: real-time API key pre-validation (single endpoint, 6 providers)
+    from .api_key_validator import router as api_key_validator_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -170,5 +173,6 @@ def register_all_routes(app: FastAPI) -> None:
         iter105_fixes_router,
         insight_digest_router,
         oauth_integrations_router,
+        api_key_validator_router,
     ):
         app.include_router(router)
