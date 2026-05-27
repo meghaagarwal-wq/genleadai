@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Gauge, Users, Buildings, ListChecks, ChartBar, Plugs, GearSix, SignOut, ArrowsLeftRight,
-  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse, Sparkle, GraduationCap,
+  EnvelopeOpen, LinkedinLogo, MapTrifold, UsersThree, Megaphone, Pulse, Sparkle, GraduationCap, Brain,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace, WORKSPACES } from '../context/WorkspaceContext';
@@ -11,6 +11,7 @@ import api from '../config/api';
 const NAV = [
   { to: '/pt',                  label: 'Overview',       icon: Gauge },
   { to: '/pt/leads',            label: 'Lead Feed',      icon: Users },
+  { to: '/pt/intelligence',     label: 'Intelligence Feed', icon: Brain, b2cHidden: true },
   { to: '/pt/ai-setup',         label: 'AI Setup',       icon: Sparkle },
   { to: '/pt/train-aria',       label: 'Train Aria',     icon: GraduationCap },
   { to: '/pt/saleshandy',       label: 'Saleshandy',     icon: EnvelopeOpen },
@@ -58,7 +59,27 @@ const WorkspaceSwitcher = () => {
 const PtLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [workspaceType, setWorkspaceType] = useState('hybrid');
   const handleLogout = () => { logout(); navigate('/login'); };
+
+  // Fetch workspace type for adaptive sidebar (Phase 4)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.get('/api/aria/workspace-type');
+        if (!cancelled) setWorkspaceType(r.data?.workspace_type || 'hybrid');
+      } catch (e) {
+        // default to hybrid (shows everything)
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const visibleNav = NAV.filter((item) => {
+    if (workspaceType === 'b2c' && item.b2cHidden) return false;
+    return true;
+  });
 
   // iter87-89 — pin the active tenant to ten_pietential whenever we're
   // inside /pt. Done SYNCHRONOUSLY first so the X-Tenant-Id header is set
@@ -117,7 +138,7 @@ const PtLayout = ({ children }) => {
         {/* Nav */}
         <nav className="flex-1 px-2 py-3" data-testid="pt-nav">
           <div className="space-y-0.5">
-            {NAV.map(item => (
+            {visibleNav.map(item => (
               <NavLink key={item.to} to={item.to} end={item.to === '/pt'}
                 data-testid={`pt-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 className={({ isActive }) =>

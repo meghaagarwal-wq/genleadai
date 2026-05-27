@@ -30,6 +30,7 @@ tenants.settings.aria_training_profile = {
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -562,6 +563,92 @@ async def reassemble_endpoint(
         "ok": True,
         "assembled_at": out["assembled_at"],
         "version": out["version"],
+    }
+
+
+# ─── Test Aria — live chat against the assembled prompt ─────────────────
+class TestChatPayload(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    history: List[Dict[str, str]] = Field(default_factory=list, max_length=20)
+
+
+@router.post("/test-chat")
+async def test_chat(
+    payload: TestChatPayload,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Run a single Aria response against the workspace's assembled prompt.
+
+    Lets the workspace owner verify training quality before going live —
+    paste a sample prospect message, see exactly how trained-Aria responds.
+
+    No leads or conversations are stored. Pure dry-run.
+    """
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(503, "Aria's brain is not configured.")
+
+    system_prompt = get_assembled_prompt(tenant)
+    if not system_prompt:
+        # Fall back to a stub built from the empty profile
+        persona = _resolve_persona(tenant)
+        system_prompt = assemble_aria_prompt(
+            persona["workspace_name"], persona["founder_name"],
+            persona["aria_name"], get_workspace_type(tenant), _empty_profile(),
+        )
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except ImportError:
+        raise HTTPException(500, "Claude SDK not installed.")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"aria-test-{tenant['id']}-{_now_iso()}",
+        system_message=system_prompt,
+    ).with_model("anthropic", "claude-haiku-4-5-20251001")
+
+    # Replay history so the test feels like a real conversation
+    for turn in (payload.history or []):
+        role = (turn.get("role") or "user").lower()
+        text = (turn.get("text") or "").strip()
+        if not text:
+            continue
+        # We only feed user turns into the LlmChat (assistant turns are
+        # surfaced as Aria's own prior responses; emergentintegrations
+        # handles them via session_id continuity within this single call).
+        if role == "user":
+            try:
+                await chat.send_message(UserMessage(text=text))
+            except Exception:
+                pass
+
+    try:
+        resp = await chat.send_message(UserMessage(text=payload.message))
+    except Exception as e:
+        raise HTTPException(502, f"Aria didn't respond: {str(e)[:160]}")
+
+    raw = (resp or "").strip()
+    # Aria's output contract returns JSON. Try parsing; if it fails, surface raw.
+    parsed_msg = raw
+    action = "NONE"
+    try:
+        import json as _json
+        import re as _re
+        cleaned = _re.sub(r"^```(?:json)?\s*", "", raw)
+        cleaned = _re.sub(r"\s*```$", "", cleaned).strip()
+        obj = _json.loads(cleaned)
+        if isinstance(obj, dict):
+            parsed_msg = obj.get("message") or raw
+            action = obj.get("action") or "NONE"
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "message": parsed_msg,
+        "action": action,
+        "raw": raw,
     }
 
 

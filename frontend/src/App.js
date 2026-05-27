@@ -39,6 +39,7 @@ import AIAssistant from './pages/AIAssistant';
 import Integrations from './pages/Integrations';
 import TrainAria from './pages/TrainAria';
 import TrainAriaV2 from './pages/TrainAriaV2';
+import PtIntelligenceFeed from './pietential/pages/PtIntelligenceFeed';
 import Playbooks from './pages/Playbooks';
 import AISalesJourneys from './pages/AISalesJourneys';
 import FounderBriefs from './pages/FounderBriefs';
@@ -192,6 +193,7 @@ function App() {
                         <Route path="/" element={<PtOverview />} />
                         <Route path="/ai-setup" element={<AISetupAssistant />} />
                         <Route path="/train-aria" element={<TrainAriaV2 />} />
+                        <Route path="/intelligence" element={<PtIntelligenceFeed />} />
                         <Route path="/leads" element={<PtLeadFeed />} />
                         <Route path="/leads/:id" element={<PtLeadDetail />} />
                         <Route path="/saleshandy" element={<PtSaleshandy />} />

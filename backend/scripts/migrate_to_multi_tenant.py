@@ -119,7 +119,9 @@ PIETENTIAL_COLLECTIONS = [
 
 
 def upsert(col, query, doc):
-    col.update_one(query, {"$set": doc}, upsert=True)
+    """Idempotent upsert: only sets fields on INSERT, never overwrites
+    existing tenants. Use $set explicitly elsewhere for forced updates."""
+    col.update_one(query, {"$setOnInsert": doc}, upsert=True)
 
 
 def backfill(collection_name: str, tenant_id: str) -> int:

@@ -158,6 +158,9 @@ const TrainAriaV2 = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewText, setPreviewText] = useState('');
   const [extracting, setExtracting] = useState(false);
+  const [testMessages, setTestMessages] = useState([]);  // [{role, text}]
+  const [testInput, setTestInput] = useState('');
+  const [testSending, setTestSending] = useState(false);
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -248,6 +251,26 @@ const TrainAriaV2 = () => {
     } finally {
       setExtracting(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const sendTest = async () => {
+    const msg = testInput.trim();
+    if (!msg) return;
+    setTestSending(true);
+    const newHistory = [...testMessages, { role: 'user', text: msg }];
+    setTestMessages(newHistory);
+    setTestInput('');
+    try {
+      const { data } = await api.post('/api/aria/test-chat', {
+        message: msg,
+        history: testMessages,  // prior turns (without current msg)
+      }, { timeout: 60000 });
+      setTestMessages([...newHistory, { role: 'aria', text: data.message, action: data.action }]);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Aria did not respond');
+    } finally {
+      setTestSending(false);
     }
   };
 
@@ -440,6 +463,91 @@ const TrainAriaV2 = () => {
           </div>
         </div>
       )}
+
+      {/* Test Aria chat panel — floating widget bottom-right */}
+      <TestAriaPanel
+        messages={testMessages}
+        input={testInput}
+        onInput={setTestInput}
+        onSend={sendTest}
+        sending={testSending}
+        onClear={() => setTestMessages([])}
+      />
+    </div>
+  );
+};
+
+// ─── Test Aria chat panel — floating widget ──────────────────────────────
+const TestAriaPanel = ({ messages, input, onInput, onSend, sending, onClear }) => {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button
+        data-testid="test-aria-open-btn"
+        onClick={() => setOpen(true)}
+        className="fixed bottom-6 right-6 z-40 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-full shadow-lg flex items-center gap-2"
+      >
+        <span className="text-base">💬</span> Test Aria
+      </button>
+    );
+  }
+  return (
+    <div className="fixed bottom-6 right-6 z-40 w-[420px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[80vh] bg-white border border-slate-200 rounded-2xl shadow-2xl flex flex-col" data-testid="test-aria-panel">
+      <div className="flex items-center justify-between p-4 border-b border-slate-200">
+        <div>
+          <div className="text-sm font-bold text-slate-900">Test Aria</div>
+          <div className="text-xs text-slate-500">Live response using your trained prompt</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button data-testid="test-aria-clear-btn" onClick={onClear} className="text-xs text-slate-500 hover:text-slate-900">Clear</button>
+          <button data-testid="test-aria-close-btn" onClick={() => setOpen(false)} className="text-slate-500 hover:text-slate-900 text-2xl leading-none">×</button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-3" data-testid="test-aria-messages">
+        {messages.length === 0 && (
+          <div className="text-xs text-slate-400 text-center pt-12">
+            Paste a sample prospect message below to see how trained Aria responds.
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            data-testid={`test-msg-${i}-${m.role}`}
+            className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+              m.role === 'user'
+                ? 'ml-auto bg-violet-600 text-white'
+                : 'mr-auto bg-slate-100 text-slate-800'
+            }`}
+          >
+            <div className="whitespace-pre-wrap">{m.text}</div>
+            {m.role === 'aria' && m.action && m.action !== 'NONE' && (
+              <div className="mt-1.5 text-[10px] uppercase tracking-wide font-semibold text-violet-600">
+                action: {m.action}
+              </div>
+            )}
+          </div>
+        ))}
+        {sending && (
+          <div className="mr-auto bg-slate-100 text-slate-500 rounded-2xl px-3 py-2 text-sm">Aria is thinking…</div>
+        )}
+      </div>
+      <div className="p-3 border-t border-slate-200 flex gap-2">
+        <input
+          data-testid="test-aria-input"
+          value={input}
+          onChange={(e) => onInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+          placeholder="Hi, I'm the CHRO at a 400-person SaaS…"
+          disabled={sending}
+          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-slate-50"
+        />
+        <button
+          data-testid="test-aria-send-btn"
+          onClick={onSend}
+          disabled={sending || !input.trim()}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+        >Send</button>
+      </div>
     </div>
   );
 };

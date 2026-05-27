@@ -101,6 +101,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Aria training (v2 master prompt — iter92)
     from .aria_training import router as aria_training_router
 
+    # Pietential B2B Insights Engine (iter94 — Phase 3)
+    from .pt_insights import router as pt_insights_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -125,5 +128,6 @@ def register_all_routes(app: FastAPI) -> None:
         integrations_catalog_router, sales_channels_router, simulate_inbound_router,
         health_router, failed_messages_router,
         aria_training_router,
+        pt_insights_router,
     ):
         app.include_router(router)

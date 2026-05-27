@@ -1,3 +1,128 @@
+## Iter 94 — Aria v2 Phases 3+4 + Test Aria + Critical Migration Fix (Feb 2026)
+
+### Critical bug fixed first
+
+**Pietential's training profile was being wiped on every backend restart.**
+The migration helper `upsert()` was using `$set: full_doc` — which on
+existing tenants overwrote `settings` (containing `aria_training_profile`)
+with the seed-time settings dict. Fix: changed `upsert()` to use
+`$setOnInsert` so it only writes on initial creation; existing tenants
+are never touched. Verified: PIETENTIAL_TENANT training profile now
+survives `sudo supervisorctl restart backend`.
+
+### Phase 3 — B2B Insights Engine
+
+**New module `routes/pt_insights.py`:**
+- `pt_insights` collection: id, tenant_id, prospect_id, signal_type,
+  signal_summary, confidence, rationale, icp_match_name + score,
+  suggested_message, resource_hint, status (new/sent/copied/dismissed),
+  created_at, high_confidence flag.
+- 8 signal types matching the spec: `deal_closed`, `funding_round`,
+  `event_attending`, `job_change`, `hiring_signal`, `content_published`,
+  `company_news`, `social_activity`.
+- Confidence threshold: 0.70 to surface, ≥0.85 for high-confidence
+  WhatsApp alerts.
+- 30-day dedup window: same prospect + same signal_type within 30 days
+  is skipped.
+- Resource mapping per spec: deal_closed→case_study, funding_round→
+  roi_overview, event_attending→thought_leadership, etc.
+- ICP matching per spec weights: title 35% + industry 30% + size 20% +
+  content 15%.
+
+**Enrichment clients (HTTP, fallback to Claude-only mode):**
+- **Proxycurl** (LinkedIn): `_proxycurl_profile()` — Bearer auth, 15s
+  timeout, returns compacted profile dict.
+- **NewsAPI**: `_newsapi_company_news()` — pulls up to 5 recent
+  English-language articles for the prospect's company.
+- Both API keys stored Fernet-encrypted at
+  `tenants.settings.pt_enrichment.proxycurl_api_key` /
+  `tenants.settings.pt_enrichment.newsapi_key`.
+- If keys are absent, Aria classifies signals from prospect data alone
+  (conservative — returns empty signal arrays rather than fabricate).
+
+**Signal classifier:**
+- Claude Haiku 4.5 via Emergent LLM Key.
+- Strict JSON output, no markdown fences.
+- Always validates: signal_type in known list, confidence ≥ 0.70,
+  non-empty summary. Filters out anything else.
+
+**Suggested message generator:**
+- Per-card Claude draft using workspace's brand voice + founder name
+  from training profile.
+- <120 words, signal as the natural hook, soft CTA.
+
+**6 new endpoints:**
+- `GET /api/pt/insights/integrations` — handshake status (no raw keys).
+- `PUT /api/pt/insights/integrations` — set/clear encrypted keys.
+- `POST /api/pt/insights/scan/run-now` — manual scan up to 20 prospects
+  (hot → warm → cold priority), skips DNC/suppressed.
+- `GET /api/pt/insights/feed?status=new|sent|dismissed&limit=50` —
+  sorted by recency + ICP score.
+- `POST /api/pt/insights/{id}/action` — `send` | `copy` | `dismiss`.
+
+**Frontend `/pietential/pages/PtIntelligenceFeed.js`:**
+- Integration keys card with handshake dots (green = connected).
+- "Run scan now" button → toast with scan summary +
+  enrichment status (Proxycurl ✓/—, NewsAPI ✓/—, Claude ✓).
+- 8 signal-type badges with distinct colors.
+- Per-card actions: [Send via Aria] [Copy] [Dismiss].
+- Filter tabs: New / Sent / Dismissed / All.
+- ICP match score shown per card.
+
+### Phase 4 — Adaptive Dashboard
+
+**PtLayout** fetches `/api/aria/workspace-type` on mount and filters
+the nav based on `b2cHidden` flags per NAV item:
+- `Intelligence Feed` is hidden when workspace_type === 'b2c'.
+- Verified end-to-end via Playwright: switching workspace to B2C
+  hides the link (count: 0), switching back to Hybrid restores it
+  (count: 1).
+
+### Improvement — Test Aria chat panel
+
+`POST /api/aria/test-chat` — runs the workspace's assembled prompt
+against any message in dry-run mode (no leads, no conversation
+storage). Optional `history` array replays prior turns. Parses Aria's
+JSON output contract, returns `{message, action, raw}`.
+
+**Frontend:** floating Test Aria widget on the Train Aria page
+(bottom-right). Bubble-style chat history, action badges on Aria's
+responses, Clear button to reset. Verified live with the Pietential
+prompt — Aria responds in character with `LOG_QUALIFICATION` action
+when given a CHRO prospect.
+
+### Tests — `tests/test_iter94_insights_engine_and_test_chat.py`
+**18/18 PASS:**
+- Integrations (3): handshake shape, role gate, set+verify encrypted+clear.
+- Feed/scan (5): empty feed, role gate on scan, scan runs returns status,
+  invalid action 422, action on missing card 404.
+- Unit (5): ICP score title match, no-match, best-icp returns highest,
+  empty ICP list returns None, resource map covers all 8 signal types.
+- Test chat (3): trained workspace responds, empty message 422,
+  untrained tenant works.
+- Migration preservation (2): training survives re-run, upsert helper
+  uses `$setOnInsert` not `$set`.
+
+### Combined: 50/50 across iter92 + iter93 + iter94
+
+### Pietential live state (end of iter94)
+- Training profile: v10, 7,531-char assembled prompt
+- Workspace type: hybrid → Intelligence Feed visible in sidebar
+- 4 sidebar items added across phases: Train Aria, Intelligence Feed,
+  Test Aria floating widget
+- Enrichment keys: not yet provided (Aria runs in conservative
+  Claude-only mode until user adds Proxycurl + NewsAPI keys)
+
+### Not in scope this iter (future backlog)
+- Scheduled daily scan (cron) — currently manual-trigger only. To enable
+  the spec's daily cadence, will add an asyncio loop in iter95.
+- Retire legacy `/train-aria` v1 page — kept for back-compat.
+- Refactor `_ai_founder_brief()` complexity 56 — deferred.
+
+---
+
+
+
 ## Iter 93 — Aria v2 Master Prompt (Phase 2 of 4) (Feb 2026)
 
 ### What landed
