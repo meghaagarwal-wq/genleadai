@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plugs, ArrowClockwise, Copy } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, fmtDateTime } from '../shared';
-import PtIntegrationsExtras from './PtIntegrationsExtras';
+import IntegrationsExtras from './IntegrationsExtras';
 import ApiKeyInput from '../../components/ApiKeyInput';
 
 // iter108 — providers that have a real-time `/api/integrations/validate-key`
@@ -158,14 +158,23 @@ const PtIntegrations = () => {
   const [primary, setPrimary] = useState([]);
   const [future, setFuture] = useState([]);
   const [loading, setLoading] = useState(true);
+  // iter108 P3 — last-validation status per provider so cards can render
+  // "✓ Last validated 3 min ago" without re-hitting the third-party.
+  const [keyStatus, setKeyStatus] = useState({});
   const base = process.env.REACT_APP_BACKEND_URL;
 
   const load = async () => {
     setLoading(true);
     try {
-      const r = await ptApi.get('/api/pt/integrations');
-      setPrimary(r.data.primary || []);
-      setFuture(r.data.future || []);
+      const [integ, st] = await Promise.all([
+        ptApi.get('/api/pt/integrations'),
+        ptApi.get('/api/integrations/validate-key/status').catch(() => ({ data: { items: [] } })),
+      ]);
+      setPrimary(integ.data.primary || []);
+      setFuture(integ.data.future || []);
+      const map = {};
+      (st.data.items || []).forEach(it => { map[it.provider] = it; });
+      setKeyStatus(map);
     }
     finally { setLoading(false); }
   };
@@ -205,25 +214,25 @@ const PtIntegrations = () => {
           <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2" data-testid="pt-integ-primary-heading">Primary platforms</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
             {primary.map(r => (
-              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} />
+              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} keyStatus={keyStatus[r.name]} />
             ))}
           </div>
 
           <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#94A3B8] mb-2" data-testid="pt-integ-future-heading">Future / optional integrations</div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {future.map(r => (
-              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} compact />
+              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} keyStatus={keyStatus[r.name]} compact />
             ))}
           </div>
 
-          <PtIntegrationsExtras />
+          <IntegrationsExtras />
         </>
       )}
     </div>
   );
 };
 
-const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }) => {
+const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact, keyStatus }) => {
   const sm = STATUS_META[integ.status] || STATUS_META.not_connected;
   const [apiKey, setApiKey] = useState('');
   const [keyValid, setKeyValid] = useState(false);  // iter108 — gates Save for validated providers
@@ -269,6 +278,8 @@ const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact }
                 onValidityChange={setKeyValid}
                 placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
                 testIdBase={`pt-integ-key-${integ.name}`}
+                lastValidatedAt={keyStatus?.last_validated_at}
+                lastValid={keyStatus?.last_valid}
               />
               <div className="flex justify-end mt-2">
                 <button

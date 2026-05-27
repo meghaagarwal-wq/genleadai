@@ -50,21 +50,21 @@ import AdminLayout from './admin/AdminLayout';
 
 // Client app shell + pages (the unified /app/* tree)
 import AppLayout from './components/AppLayout';
-import PtOverview from './pietential/pages/PtOverview';
-import PtLeadFeed from './pietential/pages/PtLeadFeed';
-import PtLeadDetail from './pietential/pages/PtLeadDetail';
-import PtIntelligenceFeed from './pietential/pages/PtIntelligenceFeed';
-import PtReports from './pietential/pages/PtReports';
-import PtIntegrations from './pietential/pages/PtIntegrations';
-import PtAutomations from './pietential/pages/PtAutomations';
-import PtAutomationLogs from './pietential/pages/PtAutomationLogs';
-import PtCampaigns from './pietential/pages/PtCampaigns';
-import PtAccounts from './pietential/pages/PtAccounts';
-import PtTouchpointMap from './pietential/pages/PtTouchpointMap';
-import PtTasks from './pietential/pages/PtTasks';
-import PtTeam from './pietential/pages/PtTeam';
-import PtSettings from './pietential/pages/PtSettings';
-import { PtSaleshandy, PtLemlist } from './pietential/pages/PtPlatformActivity';
+import Overview from './workspace/pages/Overview';
+import LeadFeed from './workspace/pages/LeadFeed';
+import LeadDetail from './workspace/pages/LeadDetail';
+import IntelligenceFeed from './workspace/pages/IntelligenceFeed';
+import Reports from './workspace/pages/Reports';
+import Integrations from './workspace/pages/Integrations';
+import Automations from './workspace/pages/Automations';
+import AutomationLogs from './workspace/pages/AutomationLogs';
+import Campaigns from './workspace/pages/Campaigns';
+import Accounts from './workspace/pages/Accounts';
+import TouchpointMap from './workspace/pages/TouchpointMap';
+import Tasks from './workspace/pages/Tasks';
+import Team from './workspace/pages/Team';
+import Settings from './workspace/pages/Settings';
+import { Saleshandy, Lemlist } from './workspace/pages/PlatformActivity';
 import AISetupAssistant from './pages/AISetupAssistant';
 import TrainAriaV2 from './pages/TrainAriaV2';
 import Conversations from './pages/Conversations';
@@ -246,27 +246,27 @@ function App() {
                       <ProtectedRoute>
                         <AppLayout>
                           <Routes>
-                            <Route path="/" element={<PtOverview />} />
-                            <Route path="/intelligence" element={<PtIntelligenceFeed />} />
-                            <Route path="/leads" element={<PtLeadFeed />} />
-                            <Route path="/leads/:id" element={<PtLeadDetail />} />
+                            <Route path="/" element={<Overview />} />
+                            <Route path="/intelligence" element={<IntelligenceFeed />} />
+                            <Route path="/leads" element={<LeadFeed />} />
+                            <Route path="/leads/:id" element={<LeadDetail />} />
                             <Route path="/conversations" element={<Conversations />} />
                             <Route path="/icps" element={<ICPManager />} />
                             <Route path="/train-aria" element={<TrainAriaV2 />} />
                             <Route path="/ai-setup" element={<AISetupAssistant />} />
-                            <Route path="/automations" element={<PtAutomations />} />
-                            <Route path="/integrations" element={<PtIntegrations />} />
-                            <Route path="/reports" element={<PtReports />} />
-                            <Route path="/settings" element={<PtSettings />} />
+                            <Route path="/automations" element={<Automations />} />
+                            <Route path="/integrations" element={<Integrations />} />
+                            <Route path="/reports" element={<Reports />} />
+                            <Route path="/settings" element={<Settings />} />
                             {/* Sub-routes kept reachable but absent from main nav */}
-                            <Route path="/saleshandy" element={<PtSaleshandy />} />
-                            <Route path="/lemlist" element={<PtLemlist />} />
-                            <Route path="/campaigns" element={<PtCampaigns />} />
-                            <Route path="/accounts" element={<PtAccounts />} />
-                            <Route path="/touchpoints" element={<PtTouchpointMap />} />
-                            <Route path="/tasks" element={<PtTasks />} />
-                            <Route path="/logs" element={<PtAutomationLogs />} />
-                            <Route path="/team" element={<PtTeam />} />
+                            <Route path="/saleshandy" element={<Saleshandy />} />
+                            <Route path="/lemlist" element={<Lemlist />} />
+                            <Route path="/campaigns" element={<Campaigns />} />
+                            <Route path="/accounts" element={<Accounts />} />
+                            <Route path="/touchpoints" element={<TouchpointMap />} />
+                            <Route path="/tasks" element={<Tasks />} />
+                            <Route path="/logs" element={<AutomationLogs />} />
+                            <Route path="/team" element={<Team />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </AppLayout>

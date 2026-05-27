@@ -1,4 +1,39 @@
-## Iter 108 — NUCLEAR CONSOLIDATION (Feb 2026)
+## Iter 108 — NUCLEAR CONSOLIDATION + P3 backlog (Feb 2026)
+
+### What landed (second batch)
+- **Directory rename**: `/app/frontend/src/pietential/` → `/app/frontend/src/workspace/`.
+  Every page renamed: `PtOverview.js` → `Overview.js`, `PtLeadFeed.js` → `LeadFeed.js`,
+  `PtIntegrationsExtras.js` → `IntegrationsExtras.js`, `PtPlatformActivity.js`
+  → `PlatformActivity.js`, etc. (15 files). Component-name identifiers
+  (`PtLeadFeed`, `PtOverview`, `PtIntegrationsExtras`, `PtAskAriaModal`)
+  all stripped of the Pt prefix. App.js imports + cross-page imports
+  (`./PtIntegrationsExtras` → `./IntegrationsExtras`, `../components/PtAskAriaModal`
+  → `../components/AskAriaModal`) updated. Lint clean, webpack compiles, V1-V10
+  still PASS.
+- **P3 — per-tenant `last_validated_at` on integration cards**:
+  - New Mongo collection `integration_key_status` keyed by `(tenant_id, provider)`.
+  - On every `POST /api/integrations/validate-key` we upsert
+    `{last_validated_at, last_valid, last_message, last_elapsed_ms, last_validated_by}`.
+  - New `GET /api/integrations/validate-key/status` returns the current
+    tenant's status table.
+  - `ApiKeyInput` now accepts `lastValidatedAt` + `lastValid` props and shows
+    a hint like "✓ Last validated 3 min ago" (green) or "⚠︎ Last validated
+    2 min ago" (amber) below the input when no in-flight check is happening
+    — keeps user confidence across page reloads without re-pinging the
+    provider. Verified live.
+- **P3 — CSV export on ICP × Channel matrix**:
+  - New "↓ Download CSV" button in the matrix card header.
+  - Pure client-side blob export — no backend round-trip. Each cell
+    rendered as `"X leads · Y qual · Z won (P%)"` for board-friendly
+    forwarding. Verified live: button visible, click writes
+    `icp-channel-matrix-this_month.csv`.
+
+### Backlog status
+- ✅ Folder rename (cosmetic — completed).
+- ✅ `last_validated_at` timestamp on integration cards.
+- ✅ CSV export on the ICP × Channel matrix.
+
+
 
 ### What you asked for
 ONE frontend, ONE backend, ONE database, TWO dashboard types (`/app` for clients, `/admin` for super-admin). Every workspace looks IDENTICAL — same layout, same chrome, only the data and mode-driven nav items differ.

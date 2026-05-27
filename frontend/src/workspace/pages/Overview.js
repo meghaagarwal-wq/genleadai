@@ -16,7 +16,7 @@ const Tile = ({ icon: Icon, label, value, accent = '#7C35DC', testid }) => (
   </div>
 );
 
-const PtOverview = () => {
+const Overview = () => {
   const [data, setData] = useState(null);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -226,4 +226,4 @@ const SetupHealthPanel = ({ health }) => {
   );
 };
 
-export default PtOverview;
+export default Overview;

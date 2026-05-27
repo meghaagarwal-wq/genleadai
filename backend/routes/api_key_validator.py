@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from deps import get_current_user  # noqa: F401  (kept for symmetry; endpoint is auth'd)
+from deps import db
 
 router = APIRouter(tags=["iter108-key-validator"])
 
@@ -196,6 +197,25 @@ async def validate_api_key(
     elapsed_ms = int((time.monotonic() - started) * 1000)
     result = {"valid": valid, "message": message, "provider": provider, "elapsed_ms": elapsed_ms}
     _record_attempt(provider, current_user, result, key)
+    # iter108 P3 — persist last-validation timestamp per (tenant, provider) so
+    # the integration card can show "✓ Validated 3 min ago" without exposing the key.
+    try:
+        tenant_id = current_user.get("tenant_id") or "default"
+        db["integration_key_status"].update_one(
+            {"tenant_id": tenant_id, "provider": provider},
+            {"$set": {
+                "tenant_id": tenant_id,
+                "provider": provider,
+                "last_validated_at": datetime.now(timezone.utc).isoformat(),
+                "last_valid": bool(valid),
+                "last_message": message,
+                "last_elapsed_ms": elapsed_ms,
+                "last_validated_by": current_user.get("email", ""),
+            }},
+            upsert=True,
+        )
+    except Exception as e:
+        print(f"[api_key_validator] failed to persist last-validation: {e}")
     return result
 
 
@@ -243,3 +263,16 @@ async def validate_key_history(current_user: dict = Depends(get_current_user)):
 async def validate_key_providers(current_user: dict = Depends(get_current_user)):
     """Lightweight metadata so the frontend can render a complete provider list."""
     return {"providers": sorted(VALIDATORS.keys())}
+
+
+# iter108 P3 — per-tenant last-validation status per provider, so the
+# integration card UI can render "✓ Validated 3 min ago" without
+# re-hitting the third-party API on every page load.
+@router.get("/api/integrations/validate-key/status")
+async def validate_key_status(current_user: dict = Depends(get_current_user)):
+    tenant_id = current_user.get("tenant_id") or "default"
+    rows = list(db["integration_key_status"].find(
+        {"tenant_id": tenant_id},
+        {"_id": 0, "tenant_id": 0},
+    ))
+    return {"items": rows}

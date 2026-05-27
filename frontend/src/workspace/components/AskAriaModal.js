@@ -18,7 +18,7 @@ const TONES = [
   { id: 'sharp_closer', label: 'Sharp Closer' },
 ];
 
-const PtAskAriaModal = ({ leadId, leadName, onClose, paused = false }) => {
+const AskAriaModal = ({ leadId, leadName, onClose, paused = false }) => {
   const [channel, setChannel] = useState('linkedin');
   const [tone, setTone] = useState('founder_led');
   const [userNote, setUserNote] = useState('');
@@ -194,4 +194,4 @@ const PtAskAriaModal = ({ leadId, leadName, onClose, paused = false }) => {
   );
 };
 
-export default PtAskAriaModal;
+export default AskAriaModal;

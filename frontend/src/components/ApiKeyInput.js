@@ -27,6 +27,9 @@ const ApiKeyInput = ({
   placeholder = 'Paste API key…',
   disabled = false,
   testIdBase,
+  /** iter108 P3 — optional "Last validated" hint shown below the input. */
+  lastValidatedAt = null,
+  lastValid = null,
 }) => {
   const [status, setStatus] = useState('idle'); // 'idle' | 'checking' | 'valid' | 'invalid'
   const [message, setMessage] = useState('');
@@ -127,8 +130,34 @@ const ApiKeyInput = ({
           {message}
         </div>
       )}
+      {/* iter108 P3 — last-validation hint (only shown when there's no
+          in-flight check AND the input is empty/unedited). Keeps the green
+          confidence after a page reload without re-pinging the provider. */}
+      {!message && lastValidatedAt && (
+        <div
+          className={`mt-1.5 text-[11px] ${lastValid ? 'text-emerald-700' : 'text-amber-700'}`}
+          data-testid={testIdBase ? `${testIdBase}-last-validated` : `apikey-last-${provider}`}
+        >
+          {lastValid ? '✓' : '⚠︎'} Last validated {_formatRelative(lastValidatedAt)}
+        </div>
+      )}
     </div>
   );
 };
+
+/** Compact relative-time formatter, e.g. "3 min ago", "2 hours ago", "yesterday". */
+function _formatRelative(iso) {
+  try {
+    const d = new Date(iso);
+    const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.round(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.round(diff / 3600)} h ago`;
+    if (diff < 7 * 86400) return `${Math.round(diff / 86400)} d ago`;
+    return d.toLocaleDateString();
+  } catch {
+    return 'recently';
+  }
+}
 
 export default ApiKeyInput;

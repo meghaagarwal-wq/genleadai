@@ -4,7 +4,7 @@ import { Plus, Upload, MagnifyingGlass, X } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, EmptyState, StageBadge, SOURCE_LABELS, fmtDate } from '../shared';
 
-const PtLeadFeed = () => {
+const LeadFeed = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ stage: '', source: '', q: '', score_min: '', score_max: '' });
@@ -291,4 +291,4 @@ const CsvModal = ({ onClose, onDone }) => {
   );
 };
 
-export default PtLeadFeed;
+export default LeadFeed;

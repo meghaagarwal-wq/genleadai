@@ -85,6 +85,45 @@ const IcpChannelMatrix = ({ matrix }) => {
     warm: { bg: '#FEF3C7', fg: '#92400E' },
     cold: { bg: '#E0E7FF', fg: '#3730A3' },
   };
+
+  // iter108 P3 — CSV export. Renders a clean, board-friendly file the
+  // founder can forward without taking a screenshot.
+  const downloadCsv = () => {
+    if (!cols.length) return;
+    const safe = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const header = ['Tier', ...cols, 'Total'];
+    const lines = [header.map(safe).join(',')];
+    for (const tier of rows) {
+      const cells_row = (cells[tier] || {});
+      const row = [tier];
+      for (const c of cols) {
+        const v = cells_row[c];
+        row.push(v ? `${v.leads} leads · ${v.qualified} qual · ${v.won} won (${v.conversion_pct}%)` : '—');
+      }
+      const tot = totals_by_row[tier];
+      row.push(`${tot.leads} leads · ${tot.qualified} qual · ${tot.won} won (${tot.conversion_pct}%)`);
+      lines.push(row.map(safe).join(','));
+    }
+    // Totals row
+    const totalsRow = ['TOTAL'];
+    for (const c of cols) {
+      const v = totals_by_col[c];
+      totalsRow.push(`${v.leads} leads · ${v.qualified} qual · ${v.won} won (${v.conversion_pct}%)`);
+    }
+    totalsRow.push(`${grand_total.leads} leads · ${grand_total.qualified} qual · ${grand_total.won} won (${grand_total.conversion_pct}%)`);
+    lines.push(totalsRow.map(safe).join(','));
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `icp-channel-matrix-${matrix.period || 'period'}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (!cols.length) {
     return (
       <div className="bg-white border border-[#E2E8F0] rounded-lg p-8 text-center text-sm text-[#64748B]" data-testid="pt-reports-matrix-empty">
@@ -94,9 +133,18 @@ const IcpChannelMatrix = ({ matrix }) => {
   }
   return (
     <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden" data-testid="pt-reports-matrix">
-      <div className="px-4 py-3 border-b border-[#E2E8F0] text-sm font-bold text-[#0F172A]">
-        ICP tier × source channel · {matrix.period.replace(/_/g, ' ')}
-        <span className="ml-2 text-xs text-[#64748B] font-normal">leads · qualified · won (conv %)</span>
+      <div className="px-4 py-3 border-b border-[#E2E8F0] flex items-center justify-between gap-3">
+        <div className="text-sm font-bold text-[#0F172A]">
+          ICP tier × source channel · {matrix.period.replace(/_/g, ' ')}
+          <span className="ml-2 text-xs text-[#64748B] font-normal">leads · qualified · won (conv %)</span>
+        </div>
+        <button
+          onClick={downloadCsv}
+          data-testid="pt-reports-matrix-csv"
+          className="text-xs font-semibold text-[#7C35DC] hover:text-[#5B1FAA] hover:underline whitespace-nowrap"
+        >
+          ↓ Download CSV
+        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="pt-reports-matrix-table">

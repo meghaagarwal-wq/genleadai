@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus, Brain, Copy, Sparkle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, StageBadge, SOURCE_LABELS, fmtDateTime } from '../shared';
-import PtAskAriaModal from '../components/PtAskAriaModal';
+import AskAriaModal from '../components/AskAriaModal';
 
 const PtLeadDetail = () => {
   const { id } = useParams();
@@ -218,7 +218,7 @@ const PtLeadDetail = () => {
       </div>
 
       {askOpen && (
-        <PtAskAriaModal
+        <AskAriaModal
           leadId={id}
           leadName={`${lead.first_name} ${lead.last_name}`.trim() || lead.email}
           paused={!!company?.pause_required}

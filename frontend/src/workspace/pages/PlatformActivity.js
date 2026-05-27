@@ -155,12 +155,12 @@ const Stat = ({ icon: Icon, label, value, accent }) => (
   </div>
 );
 
-export const PtSaleshandy = () => (
+export const Saleshandy = () => (
   <PlatformActivity platform="saleshandy" label="Saleshandy" color="#7C35DC" accent="#7C35DC" icon={EnvelopeOpen}
     eventLabels={['Opens', 'Clicks', 'Replies']} />
 );
 
-export const PtLemlist = () => (
+export const Lemlist = () => (
   <PlatformActivity platform="lemlist" label="Lemlist" color="#C044E0" accent="#C044E0" icon={ChatCircleDots}
     eventLabels={['Connections', 'DM replies', 'Post engagement']} />
 );

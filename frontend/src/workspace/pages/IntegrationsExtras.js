@@ -238,7 +238,7 @@ const WebsitePixelCard = () => {
   );
 };
 
-const PtIntegrationsExtras = () => (
+const IntegrationsExtras = () => (
   <div data-testid="pt-integrations-extras" className="mt-8">
     <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2">
       V3 lead sources
@@ -252,4 +252,4 @@ const PtIntegrationsExtras = () => (
   </div>
 );
 
-export default PtIntegrationsExtras;
+export default IntegrationsExtras;
