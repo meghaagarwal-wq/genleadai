@@ -8,7 +8,7 @@ import { Toaster } from 'sonner';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Signup from './pages/Signup';
-import LandingPage from './pages/LandingPage';
+import AriaLanding from './pages/landing/AriaLanding';
 import DemoSandbox from './pages/DemoSandbox';
 import InviteAccept from './pages/InviteAccept';
 import Dashboard from './pages/Dashboard';
@@ -145,7 +145,7 @@ function ProtectedRoute({ children, requireOnboarded = true, requireRole = null 
   // Unauthenticated visitors at the root URL land on the public marketing page
   // instead of bouncing to /login. Any other deep-link still requires sign-in.
   if (!user) {
-    if (location.pathname === '/' || location.pathname === '') return <LandingPage />;
+    if (location.pathname === '/' || location.pathname === '') return <AriaLanding />;
     return <Navigate to="/login" replace />;
   }
 

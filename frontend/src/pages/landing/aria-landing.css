@@ -1,30 +1,46 @@
-/* Iter104 — ARIA Landing page styles (converted from Tailwind v4 source). */
+/* ─────────────────────────────────────────────────────────────────────
+   ARIA by GenLeadAI — landing page styles
+   Converted from Tailwind v4 source (@theme inline / OKLCH) to Tailwind v3
+   compatible classes scoped via the `.aria-landing` wrapper. Nothing in
+   this file leaks outside the landing route.
+   ───────────────────────────────────────────────────────────────────── */
 
-/* ─── Brand tokens scoped to landing only via .aria-landing parent ─── */
+/* Brand tokens scoped to the landing only */
 .aria-landing {
   --aria-radius: 1rem;
-  --aria-primary: #7c3aed;
-  --aria-primary-fg: #ffffff;
-  --aria-background: #fafaff;
-  --aria-foreground: #1a103a;
-  --aria-card: #ffffff;
-  --aria-muted: #f4f1fa;
-  --aria-muted-fg: #6b6486;
-  --aria-border: #e7e3f0;
-  --aria-input: #ede9f5;
 
-  --aria-lavender: #c4a8ff;
-  --aria-magenta: #e879f9;
-  --aria-success: #16a34a;
-  --aria-amber: #f59e0b;
+  --aria-bg:           oklch(0.98 0.005 285);
+  --aria-fg:           oklch(0.18 0.04 280);
+  --aria-card:         oklch(1 0 0);
+  --aria-muted:        oklch(0.96 0.01 285);
+  --aria-muted-fg:     oklch(0.48 0.04 280);
+  --aria-border:       oklch(0.9 0.015 285);
+  --aria-input:        oklch(0.92 0.015 285);
+  --aria-accent:       oklch(0.95 0.03 295);
+  --aria-accent-fg:    oklch(0.3 0.15 290);
+  --aria-primary:      oklch(0.55 0.26 290);
+  --aria-primary-fg:   #ffffff;
+  --aria-destructive:  oklch(0.6 0.22 25);
+  --aria-success:      oklch(0.62 0.17 152);
+  --aria-amber:        oklch(0.78 0.16 75);
 
-  --aria-gradient-brand: linear-gradient(135deg, #4c1d95 0%, #6d28d9 35%, #a855f7 70%, #ec4899 100%);
-  --aria-gradient-pill: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%);
-  --aria-gradient-text: linear-gradient(100deg, #a855f7 0%, #ec4899 100%);
+  --aria-gradient-brand: linear-gradient(135deg,
+    oklch(0.42 0.27 280) 0%,
+    oklch(0.52 0.27 295) 35%,
+    oklch(0.6 0.27 320) 70%,
+    oklch(0.68 0.27 340) 100%);
+  --aria-gradient-pill:  linear-gradient(135deg, oklch(0.55 0.27 290) 0%, oklch(0.65 0.27 330) 100%);
+  --aria-gradient-text:  linear-gradient(100deg, oklch(0.65 0.27 295) 0%, oklch(0.7 0.27 335) 100%);
 
-  font-family: 'Inter', system-ui, sans-serif;
-  color: var(--aria-foreground);
-  background: var(--aria-background);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-weight: 400;
+  color: var(--aria-fg);
+  background-color: var(--aria-bg);
+  -webkit-font-smoothing: antialiased;
+}
+.aria-landing,
+.aria-landing * {
+  box-sizing: border-box;
 }
 .aria-landing h1,
 .aria-landing h2,
@@ -33,52 +49,45 @@
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   font-weight: 800;
   letter-spacing: -0.025em;
-  color: var(--aria-foreground);
+  color: var(--aria-fg);
+  line-height: 1.05;
 }
+.aria-landing .font-display { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.aria-landing .font-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
-/* ─── Keyframes ──────────────────────────────────────────────────── */
-@keyframes aria-marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-@keyframes aria-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-@keyframes aria-float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50%      { transform: translateY(-14px) rotate(2deg); }
-}
-@keyframes aria-pulse-ring {
-  0%        { transform: scale(0.85); opacity: 0.7; }
-  80%, 100% { transform: scale(1.8);  opacity: 0; }
-}
-@keyframes aria-orb-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes aria-gradient-shift {
-  0%, 100% { background-position: 0% 50%; }
-  50%      { background-position: 100% 50%; }
-}
-@keyframes caret {
-  0%, 50%   { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-@keyframes signal {
-  0%, 100% { transform: scaleY(0.4); }
-  50%      { transform: scaleY(1); }
-}
-@keyframes pulse-ring {
-  0%        { transform: scale(0.85); opacity: 0.7; }
-  80%, 100% { transform: scale(1.8);  opacity: 0; }
-}
-@keyframes float {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50%      { transform: translateY(-14px) rotate(2deg); }
-}
+/* ─── Color / surface utility overrides (scoped) ─────────────────────── */
+.aria-landing .bg-background       { background-color: var(--aria-bg) !important; }
+.aria-landing .bg-card             { background-color: var(--aria-card) !important; }
+.aria-landing .bg-muted            { background-color: var(--aria-muted) !important; }
+.aria-landing .bg-muted\/40        { background-color: color-mix(in oklch, var(--aria-muted) 40%, transparent) !important; }
+.aria-landing .bg-accent           { background-color: var(--aria-accent) !important; }
+.aria-landing .bg-primary          { background-color: var(--aria-primary) !important; }
+.aria-landing .bg-primary\/10      { background-color: color-mix(in oklch, var(--aria-primary) 10%, transparent) !important; }
+.aria-landing .bg-primary\/20      { background-color: color-mix(in oklch, var(--aria-primary) 20%, transparent) !important; }
+.aria-landing .bg-success          { background-color: var(--aria-success) !important; }
 
-/* ─── Utility classes ────────────────────────────────────────────── */
+.aria-landing .text-foreground          { color: var(--aria-fg) !important; }
+.aria-landing .text-muted-foreground    { color: var(--aria-muted-fg) !important; }
+.aria-landing .text-primary             { color: var(--aria-primary) !important; }
+.aria-landing .text-destructive         { color: var(--aria-destructive) !important; }
+.aria-landing .text-success             { color: var(--aria-success) !important; }
+.aria-landing .text-foreground\/85      { color: color-mix(in oklch, var(--aria-fg) 85%, transparent) !important; }
+.aria-landing .text-foreground\/90      { color: color-mix(in oklch, var(--aria-fg) 90%, transparent) !important; }
+
+.aria-landing .border-border       { border-color: var(--aria-border) !important; }
+.aria-landing .border-border\/60   { border-color: color-mix(in oklch, var(--aria-border) 60%, transparent) !important; }
+.aria-landing .border-primary      { border-color: var(--aria-primary) !important; }
+.aria-landing .border-primary\/30  { border-color: color-mix(in oklch, var(--aria-primary) 30%, transparent) !important; }
+.aria-landing .border-primary\/40  { border-color: color-mix(in oklch, var(--aria-primary) 40%, transparent) !important; }
+.aria-landing .hover\:border-primary:hover           { border-color: var(--aria-primary) !important; }
+.aria-landing .hover\:border-primary\/40:hover       { border-color: color-mix(in oklch, var(--aria-primary) 40%, transparent) !important; }
+.aria-landing .hover\:text-primary:hover             { color: var(--aria-primary) !important; }
+.aria-landing .hover\:text-foreground:hover          { color: var(--aria-fg) !important; }
+.aria-landing .hover\:bg-muted:hover                 { background-color: var(--aria-muted) !important; }
+.aria-landing .focus\:border-primary:focus           { border-color: var(--aria-primary) !important; }
+.aria-landing .focus\:ring-primary\/20:focus         { box-shadow: 0 0 0 3px color-mix(in oklch, var(--aria-primary) 20%, transparent) !important; }
+
+/* ─── Branded utility classes (scoped) ───────────────────────────────── */
 .aria-landing .section-label {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 11px;
@@ -100,27 +109,14 @@
 }
 .aria-landing .pill-gradient {
   background: var(--aria-gradient-pill);
-  color: white;
+  color: #ffffff;
   transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 6px 20px -8px rgba(124, 58, 237, 0.6);
 }
-.aria-landing .pill-gradient:hover {
+.aria-landing .pill-gradient-hover:hover {
   filter: brightness(1.1);
   transform: translateY(-2px);
   box-shadow: 0 12px 30px -10px rgba(124, 58, 237, 0.75);
-}
-.aria-landing .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  border-radius: 9999px;
-  border: 1px solid var(--aria-border);
-  background-color: rgba(255, 255, 255, 0.85);
-  padding: 0.4rem 0.9rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--aria-foreground);
-  backdrop-filter: blur(6px);
 }
 .aria-landing .chip-on-brand {
   display: inline-flex;
@@ -130,18 +126,20 @@
   border: 1px solid rgba(255, 255, 255, 0.25);
   background-color: rgba(255, 255, 255, 0.12);
   padding: 0.4rem 0.9rem;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #ffffff;
   backdrop-filter: blur(8px);
 }
 .aria-landing .soft-card {
   background-color: var(--aria-card);
   border: 1px solid var(--aria-border);
   border-radius: var(--aria-radius);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
 .aria-landing .shimmer-text {
-  background: linear-gradient(90deg, #fff 0%, #ffd4f0 25%, #ffb1e8 50%, #ffd4f0 75%, #fff 100%);
+  background: linear-gradient(90deg, #ffffff 0%, #ffd4f0 25%, #ffb1e8 50%, #ffd4f0 75%, #ffffff 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -156,6 +154,44 @@
   -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
           mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 80%);
 }
-.aria-landing .animate-marquee {
-  animation: aria-marquee 40s linear infinite;
+.aria-landing .animate-marquee { animation: aria-marquee 40s linear infinite; }
+
+/* Inputs inside the landing should match brand */
+.aria-landing input,
+.aria-landing button { font-family: inherit; }
+.aria-landing input::placeholder { color: var(--aria-muted-fg); opacity: 0.7; }
+
+/* Border default on every element inside the landing */
+.aria-landing *,
+.aria-landing ::before,
+.aria-landing ::after { border-color: var(--aria-border); }
+
+/* ─── Keyframes ──────────────────────────────────────────────────────── */
+@keyframes aria-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes aria-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+@keyframes aria-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(2deg); }
+}
+@keyframes pulse-ring {
+  0%        { transform: scale(0.85); opacity: 0.7; }
+  80%, 100% { transform: scale(1.8);  opacity: 0; }
+}
+@keyframes aria-gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+@keyframes caret {
+  0%, 50%   { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+@keyframes signal {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1); }
 }
