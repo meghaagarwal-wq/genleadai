@@ -209,9 +209,43 @@ async def training_restore(
 
 # ─────────────────────────────────────────────────────────────────────────
 # FIX 10 — Train ARIA URL scrape
+# iter108 — P2: enforce robots.txt politeness + cap response body length.
 # ─────────────────────────────────────────────────────────────────────────
 class ScrapeUrlPayload(BaseModel):
     url: str
+
+
+# iter108 — P2 backlog: enforce hard caps on the raw HTML we ever buffer
+# in memory, and respect each site's robots.txt before fetching.
+_SCRAPE_MAX_BYTES = 2 * 1024 * 1024  # 2 MiB hard cap on raw HTML download
+_SCRAPE_UA = "ARIA-Trainer/1.0 (+https://app.genleadai.com/aria)"
+
+
+async def _robots_allows(url: str) -> tuple[bool, str]:
+    """Check the site's robots.txt for our UA. Soft-allow on errors so
+    a missing or unreachable robots.txt never blocks a founder's scrape.
+
+    Returns (allowed, reason).
+    """
+    try:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            return False, "Invalid URL"
+        robots_url = urlunparse((parsed.scheme, parsed.netloc, "/robots.txt", "", "", ""))
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            r = await client.get(robots_url, headers={"User-Agent": _SCRAPE_UA})
+        if r.status_code != 200 or not r.text:
+            return True, "no robots.txt — allowed by default"
+        # Minimal robots parser: scan blocks for User-agent: * (or our token)
+        # and check Disallow patterns against the path.
+        from urllib import robotparser
+        rp = robotparser.RobotFileParser()
+        rp.parse(r.text.splitlines())
+        ok = rp.can_fetch(_SCRAPE_UA, url) and rp.can_fetch("*", url)
+        return (ok, "allowed" if ok else "blocked by robots.txt")
+    except Exception:
+        return True, "robots.txt unreachable — allowed by default"
 
 
 @router.post("/api/aria/training-profile/scrape-url")
@@ -222,11 +256,38 @@ async def training_scrape_url(
     url = (payload.url or "").strip()
     if not url.startswith(("http://", "https://")):
         raise HTTPException(400, "URL must start with http:// or https://")
+
+    # iter108 — robots.txt politeness check.
+    allowed, reason = await _robots_allows(url)
+    if not allowed:
+        raise HTTPException(
+            403,
+            f"Scrape blocked by site's robots.txt ({reason}). Paste the content "
+            f"manually into Train ARIA instead.",
+        )
+
+    # iter108 — cap response body to 2 MiB to avoid memory blow-ups on
+    # malicious / runaway servers.
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 ARIA-Trainer/1.0"})
-            r.raise_for_status()
-            html = r.text
+            async with client.stream("GET", url, headers={"User-Agent": _SCRAPE_UA}) as resp:
+                resp.raise_for_status()
+                content_length = int(resp.headers.get("content-length") or 0)
+                if content_length and content_length > _SCRAPE_MAX_BYTES:
+                    raise HTTPException(
+                        413,
+                        f"Page is too large ({content_length // 1024} KiB > 2 MiB cap). "
+                        f"Try a single article page instead of a sitemap.",
+                    )
+                chunks = bytearray()
+                async for chunk in resp.aiter_bytes(chunk_size=64 * 1024):
+                    chunks.extend(chunk)
+                    if len(chunks) > _SCRAPE_MAX_BYTES:
+                        chunks = bytearray(chunks[:_SCRAPE_MAX_BYTES])
+                        break
+                html = bytes(chunks).decode(resp.encoding or "utf-8", errors="replace")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(502, f"Could not fetch URL: {e}")
 
@@ -236,7 +297,7 @@ async def training_scrape_url(
     text = re.sub(r"<style[\s\S]*?</style>", "", text, flags=re.I)
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    text = text[:20000]  # cap
+    text = text[:20000]  # cap extracted plain-text length too
 
     # Reuse the existing document-extraction prompt if available.
     extracted = {"raw_text_excerpt": text[:1500]}
@@ -252,6 +313,8 @@ async def training_scrape_url(
         "url": url,
         "extracted": extracted,
         "char_count": len(text),
+        "bytes_fetched": len(html.encode("utf-8", errors="ignore")),
+        "robots_status": reason,
     }
 
 

@@ -5,6 +5,7 @@ const TABS = [
   { id: 'funnel',  label: 'Funnel · last 30 days' },
   { id: 'weekly',  label: 'Weekly · last 7 days' },
   { id: 'monthly', label: 'Monthly · last 30 days' },
+  { id: 'matrix',  label: 'ICP × Channel matrix' },  // iter108 P2
 ];
 
 const SIGNAL_LABELS = {
@@ -23,11 +24,13 @@ const PtReports = () => {
   const [funnel, setFunnel] = useState(null);
   const [weekly, setWeekly] = useState(null);
   const [monthly, setMonthly] = useState(null);
+  const [matrix, setMatrix] = useState(null);  // iter108 P2
 
   useEffect(() => {
     ptApi.get('/api/pt/reports/funnel?days=30').then(r => setFunnel(r.data)).catch(() => {});
     ptApi.get('/api/pt/reports/weekly').then(r => setWeekly(r.data)).catch(() => {});
     ptApi.get('/api/pt/reports/monthly').then(r => setMonthly(r.data)).catch(() => {});
+    ptApi.get('/api/reports/icp-channel-matrix?period=this_month').then(r => setMatrix(r.data)).catch(() => {});
   }, []);
 
   return (
@@ -68,6 +71,80 @@ const PtReports = () => {
           </div>
         </div>
       )}
+
+      {tab === 'matrix' && (matrix ? <IcpChannelMatrix matrix={matrix} /> : <Loading testid="pt-reports-matrix-loading" />)}
+    </div>
+  );
+};
+
+// iter108 P2 — ICP × Channel cross-tab. Shows where HOT leads actually come from.
+const IcpChannelMatrix = ({ matrix }) => {
+  const { rows, cols, cells, totals_by_row, totals_by_col, grand_total } = matrix;
+  const tierColors = {
+    hot:  { bg: '#FEE2E2', fg: '#B91C1C' },
+    warm: { bg: '#FEF3C7', fg: '#92400E' },
+    cold: { bg: '#E0E7FF', fg: '#3730A3' },
+  };
+  if (!cols.length) {
+    return (
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-8 text-center text-sm text-[#64748B]" data-testid="pt-reports-matrix-empty">
+        No lead data in the current period yet — start an import or create leads to see this matrix.
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden" data-testid="pt-reports-matrix">
+      <div className="px-4 py-3 border-b border-[#E2E8F0] text-sm font-bold text-[#0F172A]">
+        ICP tier × source channel · {matrix.period.replace(/_/g, ' ')}
+        <span className="ml-2 text-xs text-[#64748B] font-normal">leads · qualified · won (conv %)</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" data-testid="pt-reports-matrix-table">
+          <thead className="bg-[#FAFAFA] text-[#64748B] text-[10px] uppercase tracking-[0.14em] font-bold">
+            <tr>
+              <th className="px-3 py-2 text-left">Tier ↓ · Channel →</th>
+              {cols.map(c => (
+                <th key={c} className="px-3 py-2 text-left whitespace-nowrap">{c.replace(/_/g, ' ')}</th>
+              ))}
+              <th className="px-3 py-2 text-left bg-[#F4F0FF]">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(tier => (
+              <tr key={tier} className="border-t border-[#E2E8F0]">
+                <td className="px-3 py-2 font-bold" style={{ background: tierColors[tier].bg, color: tierColors[tier].fg }}>
+                  {tier.toUpperCase()}
+                </td>
+                {cols.map(c => {
+                  const v = (cells[tier] || {})[c];
+                  return (
+                    <td key={c} className="px-3 py-2 text-xs text-[#0F172A]" data-testid={`pt-reports-matrix-cell-${tier}-${c}`}>
+                      {v ? `${v.leads} · ${v.qualified} · ${v.won} (${v.conversion_pct}%)` : '—'}
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-xs font-bold text-[#0F172A] bg-[#F4F0FF]">
+                  {totals_by_row[tier].leads} · {totals_by_row[tier].qualified} · {totals_by_row[tier].won} ({totals_by_row[tier].conversion_pct}%)
+                </td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-[#7C35DC] bg-[#FAF7FF]">
+              <td className="px-3 py-2 font-extrabold text-[#7C35DC]">TOTAL</td>
+              {cols.map(c => {
+                const v = totals_by_col[c];
+                return (
+                  <td key={c} className="px-3 py-2 text-xs font-bold text-[#0F172A]">
+                    {v.leads} · {v.qualified} · {v.won} ({v.conversion_pct}%)
+                  </td>
+                );
+              })}
+              <td className="px-3 py-2 text-xs font-extrabold text-[#7C35DC]">
+                {grand_total.leads} · {grand_total.qualified} · {grand_total.won} ({grand_total.conversion_pct}%)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

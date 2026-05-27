@@ -141,6 +141,8 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter108 — ACTION 3: server.py refactor — extracted self-contained endpoints
     from .assets_routes import router as assets_router
     from .webhooks_inbound import router as webhooks_inbound_router
+    from .aria_eod_wrap import router as aria_eod_wrap_router
+    from .webhooks_whatsapp import router as webhooks_whatsapp_router
 
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
@@ -180,5 +182,7 @@ def register_all_routes(app: FastAPI) -> None:
         api_key_validator_router,
         assets_router,
         webhooks_inbound_router,
+        aria_eod_wrap_router,
+        webhooks_whatsapp_router,
     ):
         app.include_router(router)

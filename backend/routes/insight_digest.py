@@ -430,10 +430,25 @@ async def insight_digest_sender_loop():
                 if not prefs["enabled"]:
                     continue
                 local_now, tz_name = _tenant_now(tenant)
-                if local_now.hour != prefs["send_at_hour"]:
-                    continue
+                # iter108 — P2: DST-safe hour comparison.
+                # We fire when `local_now.hour >= send_at_hour` AND today's
+                # digest hasn't been sent yet. This way:
+                #  - Spring-forward (the configured hour vanishes): digest
+                #    still fires later that same local day (caught by `>=`).
+                #  - Fall-back (the hour repeats): the `last_sent_on=today`
+                #    guard below prevents double-send.
+                # We only allow firing within a 6-hour window after the
+                # configured time so a misconfigured `send_at_hour=23` won't
+                # immediately fire at 0h on the next day.
                 local_today = local_now.date().isoformat()
                 if prefs["last_sent_on"] == local_today:
+                    continue
+                target_hour = prefs["send_at_hour"]
+                hour_ok = (
+                    local_now.hour == target_hour
+                    or (target_hour <= local_now.hour <= min(23, target_hour + 6))
+                )
+                if not hour_ok:
                     continue
                 result = _send_digest_for_tenant(tenant, dry_run=False)
                 if result.get("sent"):

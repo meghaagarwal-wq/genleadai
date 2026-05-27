@@ -163,6 +163,95 @@ async def sources(period: str = "this_month", tenant: dict = Depends(get_active_
     return {"sources": rows}
 
 
+# iter108 — P2: Reports ICP × channel cross-tab matrix
+# ─────────────────────────────────────────────────────────────────────────
+@router.get("/icp-channel-matrix")
+async def icp_channel_matrix(period: str = "this_month", tenant: dict = Depends(get_active_tenant)):
+    """Cross-tab of lead volume + qualification rate across ICP tier × source channel.
+
+    Returns a matrix-friendly payload:
+      {
+        rows:    ["hot", "warm", "cold"],
+        cols:    ["linkedin", "meta_ads", "google_ads", "website_form", ...],
+        cells:   {[tier]: {[channel]: {leads, qualified, won, conversion_pct}}},
+        totals_by_row: {[tier]: {leads, qualified, ...}},
+        totals_by_col: {[channel]: {leads, qualified, ...}},
+        grand_total:   {leads, qualified, ...},
+      }
+
+    Powers the new "ICP × Channel" matrix tab on the Reports page so
+    founders can see at a glance which channel actually delivers HOT leads
+    (vs. raw volume).
+    """
+    tenant_id = tenant["id"]
+    start, end = _range(period)
+    base = {"tenant_id": tenant_id, "created_at": {"$gte": start.isoformat(), "$lt": end.isoformat()}}
+
+    # Bucket score into tiers in the aggregation pipeline.
+    pipeline = [
+        {"$match": base},
+        {"$addFields": {
+            "tier": {
+                "$switch": {
+                    "branches": [
+                        {"case": {"$gte": ["$icp_score", 70]}, "then": "hot"},
+                        {"case": {"$gte": ["$icp_score", 40]}, "then": "warm"},
+                    ],
+                    "default": "cold",
+                },
+            },
+            "channel": {"$ifNull": ["$source_channel", "manual"]},
+        }},
+        {"$group": {
+            "_id": {"tier": "$tier", "channel": "$channel"},
+            "leads": {"$sum": 1},
+            "qualified": {"$sum": {"$cond": [{"$gte": ["$icp_score", 70]}, 1, 0]}},
+            "won": {"$sum": {"$cond": [{"$eq": ["$status", "closed_won"]}, 1, 0]}},
+        }},
+    ]
+
+    cells: dict[str, dict[str, dict]] = {"hot": {}, "warm": {}, "cold": {}}
+    totals_by_row = {t: {"leads": 0, "qualified": 0, "won": 0} for t in ("hot", "warm", "cold")}
+    totals_by_col: dict[str, dict] = {}
+    grand = {"leads": 0, "qualified": 0, "won": 0}
+    channels_seen: set[str] = set()
+
+    for r in leads_col.aggregate(pipeline):
+        tier = r["_id"]["tier"]
+        channel = r["_id"]["channel"] or "manual"
+        cell = {
+            "leads": r["leads"],
+            "qualified": r["qualified"],
+            "won": r["won"],
+            "conversion_pct": round((r["qualified"] / r["leads"]) * 100, 1) if r["leads"] else 0,
+        }
+        cells.setdefault(tier, {})[channel] = cell
+        for k in ("leads", "qualified", "won"):
+            totals_by_row[tier][k] += cell[k]
+            grand[k] += cell[k]
+        col = totals_by_col.setdefault(channel, {"leads": 0, "qualified": 0, "won": 0})
+        for k in ("leads", "qualified", "won"):
+            col[k] += cell[k]
+        channels_seen.add(channel)
+
+    # Decorate totals with conversion pct
+    for d in (*totals_by_row.values(), *totals_by_col.values(), grand):
+        d["conversion_pct"] = round((d["qualified"] / d["leads"]) * 100, 1) if d["leads"] else 0
+
+    # Sort channels by total volume desc for a stable col order
+    cols = sorted(channels_seen, key=lambda c: -totals_by_col[c]["leads"])
+
+    return {
+        "rows": ["hot", "warm", "cold"],
+        "cols": cols,
+        "cells": cells,
+        "totals_by_row": totals_by_row,
+        "totals_by_col": totals_by_col,
+        "grand_total": grand,
+        "period": period,
+    }
+
+
 @router.get("/export")
 async def export_pdf(period: str = "this_month", tenant: dict = Depends(get_active_tenant), current_user: dict = Depends(get_current_user)):
     """Generate a branded PDF report (reportlab)."""

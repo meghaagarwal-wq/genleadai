@@ -1,10 +1,90 @@
 ## Iter 108 — API-Key Pre-validation + server.py refactor (Feb 2026)
 
 ### Scope (4-action prompt)
-1. **Deploy + /api/health verify** — BLOCKED on user action ("Save to GitHub → Deploy").
-2. **API-key pre-validation** — paste key → live test against provider → green/red → gated Save.
-3. **server.py refactor** — break the 5431-line monolith into per-domain routers.
-4. **OAuth wiring** — Calendly, Gmail, Outlook, Meta, LinkedIn, Google Ads.
+1. **Deploy + /api/health verify** — User deployed mid-iter; production
+   lives at `https://app.genleadai.com`.
+2. **API-key pre-validation** — paste key → live test against provider →
+   green/red → gated Save. ✅
+3. **server.py refactor** — break the 5431-line monolith into per-domain
+   routers. ✅ Partial — 4 modules extracted, 813 lines (15%) removed.
+4. **OAuth wiring** — verified scaffolds for all 6 providers, blocked on
+   credentials.
+
+### Second wave (user said "do this all" — Feb 2026 continuation)
+- ✅ Extracted `routes/aria_eod_wrap.py` (358 lines, 6 endpoints +
+  background loop). server.py: 5152 → 4797.
+- ✅ Extracted `routes/webhooks_whatsapp.py` (Meta + 360dialog inbound,
+  187 lines). server.py: 4797 → 4618.
+- ✅ **P2 — robots.txt politeness in Train ARIA URL scrape**: new
+  `_robots_allows()` helper does a polite GET to `<host>/robots.txt`,
+  parses via `urllib.robotparser`, and returns 403 with a friendly
+  "paste content manually" message when the site disallows our UA.
+  Soft-allows on any robots.txt fetch error (so a missing robots.txt
+  never blocks a founder).
+- ✅ **P2 — scan_url content-length cap**: response body now streamed
+  with a hard 2 MiB cap; bails early on either `Content-Length` header
+  or in-flight chunk accumulator overrun. Returns 413 with a clear
+  message pointing the founder at a single-article page instead.
+- ✅ **P2 — Reports ICP × Channel cross-tab matrix**: new endpoint
+  `GET /api/reports/icp-channel-matrix?period=…` returns rows
+  (hot/warm/cold) × cols (channels) with leads/qualified/won/conv%
+  per cell + row totals + col totals + grand total. Frontend tab
+  "ICP × Channel matrix" added to `PtReports.js` rendering the
+  matrix with tier-coloured row headers and a TOTAL footer row.
+- ✅ **P2 — Workspace-timezone DST in digest loop**: hour comparison
+  switched from strict `==` to `local_now.hour >= send_at_hour AND
+  ≤ send_at_hour + 6h AND not already sent today`. Spring-forward
+  no longer skips the digest entirely (any hour after the configured
+  time within a 6h window catches up); fall-back can't double-fire
+  because the `last_sent_on=today` guard short-circuits the second
+  occurrence of the same wall-clock hour.
+
+### File-by-file change log this session
+- `backend/routes/api_key_validator.py` — new (245 lines, 6 providers
+  + `/history` + `/providers` admin endpoints + ring buffer).
+- `backend/routes/assets_routes.py` — new (111 lines, 5 endpoints).
+- `backend/routes/webhooks_inbound.py` — new (122 lines, Calendly +
+  Meta-Leads).
+- `backend/routes/aria_eod_wrap.py` — new (358 lines, 5 endpoints +
+  `eod_wrap_loop` background task).
+- `backend/routes/webhooks_whatsapp.py` — new (200 lines, GET + POST
+  WhatsApp Cloud webhooks).
+- `backend/routes/iter105_fixes.py` — added `_robots_allows()` and
+  streaming 2 MiB cap to `training_scrape_url`.
+- `backend/routes/reports.py` — added `/icp-channel-matrix` endpoint.
+- `backend/routes/insight_digest.py` — DST-safe `hour_ok` logic.
+- `backend/routes/__init__.py` — register the 4 new routers.
+- `backend/server.py` — −813 lines net; new `_start_eod_wrap_loop`
+  startup hook that lazily imports the loop from the new module.
+- `frontend/src/components/ApiKeyInput.js` — new (135 lines).
+- `frontend/src/admin/AdminLayout.js` — new "Key Validation" nav item
+  + `AdminKeyValidation` page (try-a-key tester + last-50 attempts
+  table).
+- `frontend/src/pietential/pages/PtIntegrations.js` — wires the
+  6 validated providers through `ApiKeyInput` with gated Save.
+- `frontend/src/pietential/pages/PtReports.js` — new "ICP × Channel
+  matrix" tab with cross-tab table.
+
+### Verified 7-point regression after every extraction
+All green on every iteration: `/api/health`, login, `/api/leads`,
+`/api/assets`, calendly + meta-leads + whatsapp webhooks, key
+validator (all 6 providers reject garbage), EOD-wrap config + today,
+PT setup-health, your-5-today, icp-channel-matrix.
+
+### Carried-forward backlog
+- **P0 (user-blocked)**: paste any of the 12 OAuth env vars to bring
+  Calendly/Gmail/Outlook/Meta/LinkedIn/GoogleAds online for real.
+- **P1**: continue server.py breakdown — recommended order
+    1. Lead-magnet flow (~500 lines, tight coupling on
+       `auto_send_lead_magnet` + `lead_magnet_views_collection`).
+    2. Stripe billing + plan catalog (~290 lines, isolated).
+    3. Aria call-priority + best-time-to-call (~600 lines).
+    4. Demo seeder + dev plan switch (~150 lines, fully isolated).
+- All P2 items from the iter108 backlog: ✅ shipped.
+
+---
+
+
 
 ### What landed this iter
 
