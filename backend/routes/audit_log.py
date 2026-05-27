@@ -146,7 +146,7 @@ subs_col = db["subscriptions"]
 
 
 def _require_master_admin(user: dict):
-    if (user.get("role") or "").lower() != "admin":
+    if (user.get("role") or "").lower() not in ("admin", "master_admin"):
         raise HTTPException(status_code=403, detail="Master admin only")
 
 
