@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import api from '../config/api';
 import { toast } from 'sonner';
+import ResourceLibrary from './AriaResourceLibrary';
 
 const SECTIONS = [
   { id: 'identity',    label: '01 — Business Identity' },
@@ -11,6 +12,7 @@ const SECTIONS = [
   { id: 'booking',     label: '06 — Booking Rules' },
   { id: 'insights',    label: '07 — Insights Engine' },
   { id: 'knowledge',   label: '08 — Knowledge Base' },
+  { id: 'resources',   label: '09 — Resource Library' },
 ];
 
 const WORKSPACE_TYPES = [
@@ -441,6 +443,10 @@ const TrainAriaV2 = () => {
               </p>
               <ListInput label="Knowledge base chunks" items={profile.knowledge_base_chunks} onChange={(v) => update({ knowledge_base_chunks: v })} placeholder="Pietential was founded in 2024 by Megha. SOC2-compliant." testid="field-kb-chunks" />
             </div>
+          )}
+
+          {section === 'resources' && (
+            <ResourceLibrary icpProfiles={profile.icp_profiles || []} />
           )}
         </div>
       </div>

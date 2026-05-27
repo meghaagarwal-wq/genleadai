@@ -114,6 +114,9 @@ def register_all_routes(app: FastAPI) -> None:
         public_router as integrations_extras_public_router,
     )
 
+    # Iter100 — Aria Resource Library (CRUD + upload + lead matcher)
+    from .aria_resources import router as aria_resources_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -142,5 +145,6 @@ def register_all_routes(app: FastAPI) -> None:
         aria_training_router,
         pt_insights_router,
         admin_v3_router,
+        aria_resources_router,
     ):
         app.include_router(router)

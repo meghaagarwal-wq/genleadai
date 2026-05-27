@@ -1,5 +1,28 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 100 (Aria Resource Library · V3 P2 shipped)
+- **New backend module `routes/aria_resources.py`** — tenant-scoped CRUD
+  for sales collateral with these endpoints:
+    - `GET    /api/aria/resources`               — list with category/tag filters
+    - `POST   /api/aria/resources`               — create (url-type or file-type)
+    - `PATCH  /api/aria/resources/{id}`          — edit
+    - `DELETE /api/aria/resources/{id}`          — soft-archive
+    - `POST   /api/aria/resources/upload`        — multipart file upload (25MB cap)
+    - `GET    /api/aria/resources/file/{id}`     — **public** file serve (linked from emails)
+    - `GET    /api/aria/resources/match-for-lead/{lead_id}` — top-N picks ranked by
+      ICP match → tag overlap → popularity (`send_count`)
+    - `POST   /api/aria/resources/attach`        — increment `send_count` + stamp `last_used_at`
+- **Storage:** `aria_resources` collection · files at `/app/backend/uploads/aria_resources/`
+  (path-traversal-guarded via realpath + commonpath).
+- **New frontend section** `09 — Resource Library` inside `TrainAriaV2`
+  (`pages/AriaResourceLibrary.js`). Upload PDF, paste URL, tag with
+  free-text + ICP, edit/archive inline. Renders attached-count badge so
+  founders can see what Aria likes to send.
+- **Tests:** `tests/test_iter100_aria_resource_library.py` — 10/10 pass.
+  Covers CRUD validation, file upload + serve, path-traversal block,
+  ICP-then-tag ranking in the matcher, and attach-counter increments.
+
+
 ## 2026-02 — Iter 99 (Missing V3 lead integrations · P1 full scope shipped)
 4 new lead/enrichment integrations to round out the V3 spec — all
 backend-tested (13/13 passing) and surfaced as a "V3 lead sources"
