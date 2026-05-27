@@ -369,6 +369,21 @@ async def _scan_one_prospect(
         proxy_data = await _proxycurl_profile(proxycurl_key, prospect.get("linkedin_url"))
     if prospect.get("company_name"):
         news = await _newsapi_company_news(newsapi_key, prospect.get("company_name"))
+        # Iter99 — Serper fallback when NewsAPI returns empty (or no key set).
+        # Reads the same `integration_configs.serper.config.api_key` the
+        # Integrations Hub already stores, so no extra wiring needed.
+        if not news:
+            try:
+                serper_cfg = db["integration_configs"].find_one(
+                    {"tenant_id": tenant["id"], "integration_type": "serper"},
+                    {"_id": 0, "config": 1},
+                ) or {}
+                serper_key = (serper_cfg.get("config") or {}).get("api_key")
+                if serper_key:
+                    from routes.integrations_extras import serper_company_news
+                    news = await serper_company_news(serper_key, prospect.get("company_name"))
+            except Exception as e:
+                logger.warning(f"[pt-insights] serper fallback failed: {e}")
 
     # Classify
     signals = await _classify_signals_via_claude(prospect, proxy_data, news)

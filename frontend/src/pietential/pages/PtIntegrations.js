@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plugs, Check, X, ArrowClockwise, Copy } from '@phosphor-icons/react';
+import { Plugs, ArrowClockwise, Copy } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, fmtDateTime } from '../shared';
+import PtIntegrationsExtras from './PtIntegrationsExtras';
 
 const PRETTY = {
   saleshandy: 'Saleshandy',
@@ -93,6 +94,8 @@ const PtIntegrations = () => {
               <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} compact />
             ))}
           </div>
+
+          <PtIntegrationsExtras />
         </>
       )}
     </div>

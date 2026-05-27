@@ -107,6 +107,13 @@ def register_all_routes(app: FastAPI) -> None:
     # Admin Dashboard v3 (iter95 — PART D)
     from .admin_v3 import router as admin_v3_router
 
+    # Iter99 — Missing V3 lead integrations (Google Ads URL gen, Apollo
+    # direct pull, Serper enrichment, Website Pixel snippet + tracker)
+    from .integrations_extras import (
+        router as integrations_extras_router,
+        public_router as integrations_extras_public_router,
+    )
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -124,6 +131,8 @@ def register_all_routes(app: FastAPI) -> None:
         data_deletion_router, reports_router,
         lead_capture_router, lead_capture_public_router, lead_capture_widget_public_router,
         integrations_hub_router, integrations_hub_public_router,
+        integrations_extras_router,
+        integrations_extras_public_router,
         outreach_import_router,
         conversations_router, notifications_router,
         icps_router, outreach_router, aria_auto_map_router,

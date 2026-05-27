@@ -1,5 +1,52 @@
 # ARIA / GenLeadAI — Changelog
 
+## 2026-02 — Iter 99 (Missing V3 lead integrations · P1 full scope shipped)
+4 new lead/enrichment integrations to round out the V3 spec — all
+backend-tested (13/13 passing) and surfaced as a "V3 lead sources"
+section on `/pt/integrations`:
+
+1. **Google Ads · Lead Form webhook**
+   - `GET /api/integrations/google-ads/webhook-info` returns the
+     per-tenant webhook URL + auto-rolled webhook key (idempotent across
+     calls — clients can refresh the modal without re-rolling).
+   - Inbound handler `/api/integrations/google-ads/webhook/{tenant_id}`
+     already existed; we only added the URL generator + UI surfacing.
+
+2. **Apollo · direct pull**
+   - `POST /api/integrations/apollo/test-connection` (cheap auth-health
+     ping, no quota burn).
+   - `POST /api/integrations/apollo/pull` with `saved_search_id` or
+     `keyword` — actively pulls from `/v1/mixed_people/search`, runs
+     each person through the shared `_normalize_and_capture` pipeline so
+     dedup + scoring + event logging match the inbound paths.
+
+3. **Serper · web/news enrichment**
+   - `POST /api/integrations/serper/test-connection` (auth ping).
+   - `serper_company_news()` helper called by the B2B Insights Engine
+     as a **NewsAPI fallback** when NewsAPI returns 0 results or no key
+     is set. Returns a NewsAPI-compatible shape so the existing
+     classifier doesn't know which source the news came from.
+
+4. **Website Pixel · one-line client-side snippet**
+   - `GET /api/integrations/website-pixel/snippet` generates the full
+     `<script>` block — beacons pageviews + auto-captures form
+     submissions that have an email/phone input or `data-aria-form`.
+   - **Public** `POST /api/integrations/website-pixel/track/{tenant_id}`
+     (no auth required by design). Pageviews log to
+     `integration_events`; form-submits also flow through
+     `_normalize_and_capture` to create a real lead.
+
+**Route registration order fix:** Moved `integrations_extras_router`
+**before** `outreach_import_router` so `apollo/test-connection` and
+`serper/test-connection` (literal paths) win over the catch-all
+`{tool}/test-connection` pattern. Verified: Saleshandy/Lemlist still
+route correctly (regression covered in test_iter99).
+
+**Tests:** `tests/test_iter99_missing_integrations.py` — 13 cases.
+**Frontend:** `pietential/pages/PtIntegrationsExtras.js` — new V3
+panel with Google Ads / Apollo / Serper / Website Pixel cards.
+
+
 ## 2026-02 — Iter 98 (Insights chip + Reports/Funnel page · V3 P1/P2 ship)
 - **Insights Feed chip:** `GET /api/pt/insights/feed` now returns
   `last_scan_at`, `last_scan_count`, and `status_counts`. UI renders a
