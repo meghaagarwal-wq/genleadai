@@ -169,6 +169,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter119 Batch 7 — Approval Queue (UX for pending_outreach drafts)
     from .approvals import router as approvals_router
 
+    # iter120 Batch 8 — 8 PM Approval Queue Digest
+    from .aria_approval_digest import router as approval_digest_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -224,5 +227,6 @@ def register_all_routes(app: FastAPI) -> None:
         morning_brief_router,
         inbound_reply_router,
         approvals_router,
+        approval_digest_router,
     ):
         app.include_router(router)

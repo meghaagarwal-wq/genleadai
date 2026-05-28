@@ -2894,6 +2894,14 @@ async def _start_linkedin_poller_loop():
     print("[InboundReply] LinkedIn comment poller started (5min tick)")
 
 
+@app.on_event("startup")
+async def _start_approval_digest_loop():
+    """iter120 Batch 8 — 8 PM Approval Queue digest cron."""
+    from routes.aria_approval_digest import approval_digest_loop
+    asyncio.create_task(approval_digest_loop())
+    print("[ApprovalDigest] Background loop started (60s tick)")
+
+
 
 # EOD-wrap module moved to routes/aria_eod_wrap.py (iter108 ACTION 3)
 

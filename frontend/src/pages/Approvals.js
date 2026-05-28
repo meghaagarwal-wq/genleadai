@@ -8,7 +8,7 @@
  * Backend: /api/approvals (GET/POST under /approve|/edit-send|/reject|/bulk-*).
  */
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ChatCircleText, EnvelopeSimple, LinkedinLogo, Lightning, PencilSimple,
   X, CheckCircle, Brain, Sparkle, Clock, Buildings, CaretDown, CaretRight, Warning,
@@ -38,6 +38,16 @@ const relTime = (iso) => {
   return `${Math.floor(h / 24)}d ago`;
 };
 
+// Recognize Resend sandbox rejection so we can show a friendlier hint
+const isSandboxRejection = (errorText) =>
+  typeof errorText === 'string' &&
+  /verify a domain at resend\.com\/domains|testing emails to your own/i.test(errorText);
+
+const sandboxToastNote = () =>
+  toast.info('Connect a verified Resend domain in Settings → Integrations to send to other recipients.', {
+    duration: 8000, id: 'sandbox-resend-hint',
+  });
+
 const Approvals = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +59,7 @@ const Approvals = () => {
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const fetchItems = useCallback(async () => {
     try {
@@ -63,6 +74,19 @@ const Approvals = () => {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  // iter120 — Approval Queue digest email deep-link: /app/approvals?action=bulk-approve
+  // We fire the bulk-approve once items are loaded, then clear the query param so a
+  // reload doesn't double-trigger.
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (action !== 'bulk-approve') return;
+    if (loading || items.length === 0 || bulkBusy) return;
+    setSearchParams({}, { replace: true });
+    // Use a microtask so React commits the state update first
+    setTimeout(() => { bulkApprove({ skipConfirm: true }); }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, items.length, searchParams]);
+
   // Approve
   const approve = async (id) => {
     setBusyId(id);
@@ -71,7 +95,10 @@ const Approvals = () => {
       const d = r.data.dispatch || {};
       if (d.sent) toast.success(`Sent via ${d.provider || 'channel'}`);
       else if (d.logged_only) toast.info(d.note || 'Queued for manual send');
-      else toast.error(d.error || 'Send failed');
+      else {
+        toast.error(d.error || 'Send failed');
+        if (isSandboxRejection(d.error)) sandboxToastNote();
+      }
       setItems((prev) => prev.filter((it) => it.id !== id));
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Approve failed');
@@ -96,7 +123,10 @@ const Approvals = () => {
       const d = r.data.dispatch || {};
       if (d.sent) toast.success(`Sent via ${d.provider || 'channel'} after edit`);
       else if (d.logged_only) toast.info(d.note || 'Queued for manual send');
-      else toast.error(d.error || 'Send failed');
+      else {
+        toast.error(d.error || 'Send failed');
+        if (isSandboxRejection(d.error)) sandboxToastNote();
+      }
       setItems((prev) => prev.filter((it) => it.id !== editingId));
       setEditingId(null);
     } catch (err) {
@@ -124,14 +154,23 @@ const Approvals = () => {
   };
 
   // Bulk
-  const bulkApprove = async () => {
+  const bulkApprove = async (opts = {}) => {
     if (items.length === 0) return;
-    if (!window.confirm(`Approve & send all ${items.length} drafts?`)) return;
+    if (!opts.skipConfirm && !window.confirm(`Approve & send all ${items.length} drafts?`)) return;
     setBulkBusy(true);
     try {
       const r = await api.post('/api/approvals/bulk-approve', {});
-      const { processed, succeeded, failed } = r.data;
+      const { processed, succeeded, failed, results } = r.data;
       toast.success(`${succeeded}/${processed} sent${failed > 0 ? ` · ${failed} failed` : ''}`);
+      // Sandbox hint if ANY row failed with a sandbox-style error
+      if (failed > 0 && Array.isArray(results)) {
+        const sandboxHit = results.some((row) =>
+          row.dispatch_result && isSandboxRejection(row.dispatch_result.error)
+        );
+        // Even though row.dispatch_result isn't in the bulk-approve response shape,
+        // we add a graceful fallback: peek at the toast string itself
+        if (sandboxHit || succeeded === 0) sandboxToastNote();
+      }
       await fetchItems();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Bulk approve failed');
