@@ -11,7 +11,6 @@ import requests
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 from dotenv import load_dotenv
 
 load_dotenv()

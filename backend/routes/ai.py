@@ -1,23 +1,23 @@
-"""AI endpoints: ICP scoring, email generation, chat, summarization."""
+"""AI endpoints: ICP scoring, email generation, chat, summarization.
+
+All Claude calls in this module route through the centralised
+`services.claude_service.claude_call` wrapper (Batch 3 / Section 8).
+"""
 import json
-import os
 from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from pymongo import DESCENDING
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-
 from deps import (
     leads_collection,
     activities_collection,
     get_current_user,
 )
+from services.claude_service import claude_call, TaskType, ClaudeServiceError
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
-
-CLAUDE_MODEL = ("anthropic", "claude-4-sonnet-20250514")
 
 
 class AIScoreRequest(BaseModel):
@@ -41,7 +41,7 @@ class AISummaryRequest(BaseModel):
 
 def _extract_json(response_text: str):
     """Strip ``` fences and parse JSON from an LLM response."""
-    text = response_text.strip()
+    text = (response_text or "").strip()
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
@@ -100,16 +100,10 @@ async def score_lead(request: AIScoreRequest, current_user: dict = Depends(get_c
             f"Primary market: {bp.get('primary_market', '—')}"
         )
 
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=f"icp_score_{request.lead_id}",
-            system_message=(
-                f"You are an expert B2B/B2C sales qualification assistant scoring leads for {business_name}. "
-                "Score each lead against their ICP and return strict JSON only."
-            ),
+        system = (
+            f"You are an expert B2B/B2C sales qualification assistant scoring leads for {business_name}. "
+            "Score each lead against their ICP and return strict JSON only."
         )
-        chat.with_model(*CLAUDE_MODEL)
-
         prompt = f"""Score this lead from 0-100 based on how well they match {business_name}'s ideal customer profile.
 
 {business_ctx}
@@ -130,10 +124,16 @@ Provide:
 Format: Return ONLY valid JSON with keys: score, tier, reasoning (array), next_action, red_flags (array)
 """
 
-        response = await chat.send_message(UserMessage(text=prompt))
         try:
-            ai_result = _extract_json(response)
-        except Exception:
+            ai_result = await claude_call(
+                task_type=TaskType.ICP_SCORING,
+                system=system,
+                prompt=prompt,
+                tenant_id=current_user.get("tenant_id"),
+                session_id=f"icp_score_{request.lead_id}",
+                response_format="json",
+            )
+        except ClaudeServiceError:
             ai_result = {
                 "score": 50,
                 "tier": "warm",
@@ -186,13 +186,7 @@ async def generate_email(request: AIEmailGenerateRequest, current_user: dict = D
         Industry: {lead.get('industry', 'N/A')}
         """
 
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=f"email_gen_{request.lead_id}",
-            system_message="You are an expert email copywriter for B2B sales and marketing.",
-        )
-        chat.with_model(*CLAUDE_MODEL)
-
+        system = "You are an expert email copywriter for B2B sales and marketing."
         prompt = f"""
         Write a {request.tone} email for this lead:
 
@@ -204,10 +198,16 @@ async def generate_email(request: AIEmailGenerateRequest, current_user: dict = D
         Return JSON with keys: subject, body
         """
 
-        response = await chat.send_message(UserMessage(text=prompt))
         try:
-            email_result = _extract_json(response)
-        except Exception:
+            email_result = await claude_call(
+                task_type=TaskType.INSIGHT_GENERATION,
+                system=system,
+                prompt=prompt,
+                tenant_id=current_user.get("tenant_id"),
+                session_id=f"email_gen_{request.lead_id}",
+                response_format="json",
+            )
+        except ClaudeServiceError:
             email_result = {
                 "subject": "Let's connect",
                 "body": f"Hi {lead.get('first_name')},\n\nI wanted to reach out regarding {request.goal}.\n\nBest regards",
@@ -222,13 +222,14 @@ async def generate_email(request: AIEmailGenerateRequest, current_user: dict = D
 @router.post("/chat")
 async def ai_chat(request: AIChatRequest, current_user: dict = Depends(get_current_user)):
     try:
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
+        response = await claude_call(
+            task_type=TaskType.CONVERSATION,
+            system="You are a helpful AI assistant for a Lead Management System. Help users query and analyze their lead data.",
+            prompt=request.query,
+            tenant_id=current_user.get("tenant_id"),
             session_id=f"chat_{current_user['email']}",
-            system_message="You are a helpful AI assistant for a Lead Management System. Help users query and analyze their lead data.",
+            sanitize_user_input=True,
         )
-        chat.with_model(*CLAUDE_MODEL)
-        response = await chat.send_message(UserMessage(text=request.query))
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
@@ -251,13 +252,6 @@ async def summarize_lead(request: AISummaryRequest, current_user: dict = Depends
             for a in activities
         ])
 
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
-            session_id=f"summary_{request.lead_id}",
-            system_message="You are a senior sales analyst. Provide concise, actionable summaries.",
-        )
-        chat.with_model(*CLAUDE_MODEL)
-
         prompt = f"""Summarize this lead's journey and recommend the next best action:
 
 Lead: {lead.get('first_name')} {lead.get('last_name')}
@@ -270,7 +264,13 @@ Activity History:
 
 Give a 3-4 sentence summary and a clear next step recommendation."""
 
-        response = await chat.send_message(UserMessage(text=prompt))
+        response = await claude_call(
+            task_type=TaskType.SUMMARY,
+            system="You are a senior sales analyst. Provide concise, actionable summaries.",
+            prompt=prompt,
+            tenant_id=current_user.get("tenant_id"),
+            session_id=f"summary_{request.lead_id}",
+        )
         return {"summary": response}
     except HTTPException:
         raise

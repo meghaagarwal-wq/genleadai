@@ -17,7 +17,6 @@ import csv
 import io
 import asyncio
 import resend
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 from aria_agent import (
     run_aria_agent, get_calendly_event_types, get_calendly_availability,
     create_scheduling_link, get_calendly_user, init_storage, put_object, get_object
@@ -1342,18 +1341,18 @@ async def launch_revival_campaign(request: RevivalCampaignRequest, current_user:
                 continue
             lead = serialize_doc(lead)
 
-            # Generate personalized message via AI
-            chat = LlmChat(
-                api_key=os.getenv("EMERGENT_LLM_KEY"),
-                session_id=f"revival_{lead_id}",
-                system_message=f"You are Aria, a warm sales assistant for {os.getenv('COMPANY_NAME', 'GenLeadAI')}. {angle_prompts.get(request.angle, angle_prompts['check_in'])}"
-            )
-            chat.with_model("anthropic", "claude-4-sonnet-20250514")
-
+            # Generate personalized message via Claude wrapper
+            from services.claude_service import claude_call as _claude_call, TaskType as _TaskType
+            system_msg = f"You are Aria, a warm sales assistant for {os.getenv('COMPANY_NAME', 'GenLeadAI')}. {angle_prompts.get(request.angle, angle_prompts['check_in'])}"
             prompt = f"Write a short revival message (3-4 sentences) for: {lead.get('first_name')} {lead.get('last_name')}, {lead.get('company_name', 'their company')}, source: {lead.get('source_channel')}. They haven't been contacted recently."
-            user_msg = UserMessage(text=prompt)
-            response = await chat.send_message(user_msg)
-            message = response.strip()
+            response = await _claude_call(
+                task_type=_TaskType.INSIGHT_GENERATION,
+                system=system_msg,
+                prompt=prompt,
+                tenant_id=current_user.get("tenant_id"),
+                session_id=f"revival_{lead_id}",
+            )
+            message = (response or "").strip()
 
             # Send via selected channel
             if request.channel in ["email", "both"] and lead.get("email"):
@@ -1711,12 +1710,8 @@ async def pre_call_research(request: PreCallResearchRequest, current_user: dict 
         raise HTTPException(status_code=404, detail="Lead not found")
     lead = serialize_doc(lead)
 
-    chat = LlmChat(
-        api_key=os.getenv("EMERGENT_LLM_KEY"),
-        session_id=f"research_{request.lead_id}",
-        system_message="You are a senior B2B sales researcher. Generate comprehensive pre-call research based on the lead's profile data. Be specific, actionable, and focused on what a founder needs to know before a discovery call."
-    )
-    chat.with_model("anthropic", "claude-4-sonnet-20250514")
+    from services.claude_service import claude_call as _claude_call, TaskType as _TaskType, ClaudeServiceError as _ClaudeServiceError
+    system_msg = "You are a senior B2B sales researcher. Generate comprehensive pre-call research based on the lead's profile data. Be specific, actionable, and focused on what a founder needs to know before a discovery call."
 
     prompt = f"""Research this lead for a pre-call briefing:
 
@@ -1745,17 +1740,16 @@ Generate a JSON research object with these keys:
 
 Return ONLY valid JSON."""
 
-    user_msg = UserMessage(text=prompt)
-    response = await chat.send_message(user_msg)
-
     try:
-        txt = response.strip()
-        if "```json" in txt:
-            txt = txt.split("```json")[1].split("```")[0].strip()
-        elif "```" in txt:
-            txt = txt.split("```")[1].split("```")[0].strip()
-        research = json.loads(txt)
-    except:
+        research = await _claude_call(
+            task_type=_TaskType.INSIGHT_GENERATION,
+            system=system_msg,
+            prompt=prompt,
+            tenant_id=current_user.get("tenant_id"),
+            session_id=f"research_{request.lead_id}",
+            response_format="json",
+        )
+    except _ClaudeServiceError:
         research = {
             "company_summary": f"{lead.get('company_name', 'The company')} operates in {lead.get('industry', 'their')} industry.",
             "person_summary": f"{lead.get('first_name')} is {lead.get('job_title', 'a decision maker')} focused on growth.",

@@ -764,26 +764,16 @@ Format: {channel_hint}
 Reference at least one specific timeline signal if any exists (don't invent — only use what's listed above). If the timeline is empty, ground the message in the lead's title, company, or ICP fit — never refuse, never ask the user for more info.
 Return ONLY the message text — no JSON, no explanation, no preamble."""
 
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        fallback = (
-            f"Hi {first_name} — saw your recent activity around {latest_signal or 'our content'}. "
-            f"Worth a 15-min chat this week? Tuesday 4 PM or Wednesday 11 AM works on my side."
-        )
-        return {
-            "lead_id": lead_id, "channel": payload.channel, "tone": payload.tone,
-            "message": fallback, "ai_powered": False, "ai_error": "EMERGENT_LLM_KEY not set",
-        }
-
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=api_key,
+        from services.claude_service import claude_call, TaskType
+        resp = await claude_call(
+            task_type=TaskType.INSIGHT_GENERATION,
+            system=system,
+            prompt=prompt,
+            tenant_id=current_user.get("tenant_id"),
             session_id=f"pt_ask_aria_{lead_id}_{payload.channel}_{payload.tone}",
-            system_message=system,
+            sanitize_user_input=True,
         )
-        chat.with_model("anthropic", "claude-4-sonnet-20250514")
-        resp = await chat.send_message(UserMessage(text=prompt))
         message = (resp or "").strip().strip('"').strip("'")
         return {
             "lead_id": lead_id, "channel": payload.channel, "tone": payload.tone,

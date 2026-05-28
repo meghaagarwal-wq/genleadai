@@ -76,11 +76,8 @@ async def _claude_render(tp: dict, business: dict, persona: dict, sales: dict) -
     real founder-specific copy. Returns None on any failure → caller falls back
     to heuristic substitution.
     """
-    api_key = os.getenv("EMERGENT_LLM_KEY")
-    if not api_key:
-        return None
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from services.claude_service import claude_call, TaskType
         product = (sales.get("product_description") or business.get("description") or "the product").strip()
         biz_name = business.get("business_name") or "the company"
         industry = business.get("industry") or "B2B"
@@ -104,9 +101,12 @@ async def _claude_render(tp: dict, business: dict, persona: dict, sales: dict) -
             "Generate the message in 1-3 sentences max. Reference what {{first_name}} likely cares about given the product. "
             "Keep it conversational, end with one open question. No emojis unless tone is casual or aggressive_sales."
         )
-        chat = LlmChat(api_key=api_key, session_id=f"preview-{tp.get('index', 0)}", system_message=system_prompt)
-        chat = chat.with_model("anthropic", "claude-sonnet-4-5-20250929")
-        resp = await chat.send_message(UserMessage(text=user_msg))
+        resp = await claude_call(
+            task_type=TaskType.TOUCHPOINT_GENERATION,
+            system=system_prompt,
+            prompt=user_msg,
+            session_id=f"preview-{tp.get('index', 0)}",
+        )
         text = (resp or "").strip()
         # Strip leading/trailing quotes that Claude sometimes wraps in
         if text.startswith('"') and text.endswith('"'):

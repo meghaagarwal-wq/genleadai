@@ -9,7 +9,6 @@ from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 import os
 import json
 

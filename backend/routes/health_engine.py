@@ -218,17 +218,14 @@ async def classify_sentiment(text: str) -> str:
     Falls back to 'neutral' on any failure (graceful)."""
     if not text or len(text.strip()) < 2:
         return "neutral"
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        return "neutral"
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=api_key,
+        from services.claude_service import claude_call, TaskType
+        raw = await claude_call(
+            task_type=TaskType.SIGNAL_CLASSIFICATION,
+            system=SENTIMENT_PROMPT,
+            prompt=text[:2000],
             session_id=f"sent-{uuid.uuid4().hex[:8]}",
-            system_message=SENTIMENT_PROMPT,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        raw = await chat.send_message(UserMessage(text=text[:2000]))
+        )
         word = (raw or "").strip().lower()
         # Pull the first matching token
         for valid in ("urgent", "negative", "positive", "neutral"):

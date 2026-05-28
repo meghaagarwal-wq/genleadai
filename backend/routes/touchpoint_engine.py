@@ -256,11 +256,8 @@ def cancel_lead(tenant_id: str, lead_id: str, reason: str = "stage_change") -> i
 
 # ─── Send paths ──────────────────────────────────────────────────────────────
 async def _render_with_claude(tenant: dict, lead: dict, tp_row: dict) -> Optional[str]:
-    api_key = os.getenv("EMERGENT_LLM_KEY")
-    if not api_key:
-        return None
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from services.claude_service import claude_call, TaskType
         biz = (tenant.get("settings") or {}).get("business_profile") or {}
         # White-label: prefer the founder-configured business_name from onboarding.
         # Fall back to the workspace name only if onboarding wasn't completed.
@@ -311,8 +308,14 @@ async def _render_with_claude(tenant: dict, lead: dict, tp_row: dict) -> Optiona
             f"\nBase template (rewrite using lead's name + the product specifics):\n{tp_row.get('message_template')}\n\n"
             "1-3 sentences max, end with one open question."
         )
-        chat = LlmChat(api_key=api_key, session_id=f"send-{tp_row['id']}", system_message=system).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        text = (await chat.send_message(UserMessage(text=user_msg)) or "").strip()
+        chat_text = await claude_call(
+            task_type=TaskType.TOUCHPOINT_GENERATION,
+            system=system,
+            prompt=user_msg,
+            tenant_id=tenant.get("id"),
+            session_id=f"send-{tp_row['id']}",
+        )
+        text = (chat_text or "").strip()
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
         return text or None

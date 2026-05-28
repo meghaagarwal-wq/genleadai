@@ -314,53 +314,34 @@ Final reminders:
 
 
 async def _claude_analyze(text: str) -> Dict[str, Any]:
-    api_key = os.getenv("EMERGENT_LLM_KEY")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Aria's brain is offline (EMERGENT_LLM_KEY missing)")
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract any text from the document")
     # Truncate to keep within token budget (caller already truncates to MAX_TEXT_CHARS;
     # this is a defensive second cap).
     excerpt = text[:MAX_TEXT_CHARS]
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise HTTPException(status_code=503, detail="LLM library not available")
-
-    # Use Haiku 4.5 — ~3-5x faster than Sonnet for structured JSON extraction
-    # and well within the 60s production-ingress budget. Sonnet was timing out
-    # on production for docs near MAX_TEXT_CHARS.
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"automap-{uuid.uuid4().hex[:10]}",
-        system_message=SYSTEM_PROMPT,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
+    from services.claude_service import claude_call, TaskType, ClaudeServiceError
 
     user_msg = f"Here is the document content. Build the workflow JSON:\n\n---DOC START---\n{excerpt}\n---DOC END---"
     try:
-        raw = await chat.send_message(UserMessage(text=user_msg))
-    except Exception as e:
+        # EXTRACTION — Haiku for structured JSON pull (fast, well within 60s budget).
+        return await claude_call(
+            task_type=TaskType.EXTRACTION,
+            system=SYSTEM_PROMPT,
+            prompt=user_msg,
+            session_id=f"automap-{uuid.uuid4().hex[:10]}",
+            response_format="json",
+        )
+    except ClaudeServiceError as e:
+        msg = str(e)
+        if "EMERGENT_LLM_KEY" in msg:
+            raise HTTPException(status_code=503, detail="Aria's brain is offline (EMERGENT_LLM_KEY missing)")
+        if "invalid JSON" in msg:
+            raise HTTPException(status_code=502, detail="Aria couldn't structure the document — try a cleaner doc.")
         print(f"[auto-map] Claude error: {e}")
         raise HTTPException(
             status_code=502,
             detail="Aria's brain took too long to respond. Try uploading a shorter document or retry in a moment.",
         )
-    raw = (raw or "").strip()
-    if raw.startswith("```"):
-        # Strip code fence if Claude wraps anyway
-        raw = raw.split("```", 2)[1] if raw.count("```") >= 2 else raw
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-        raw = raw.rstrip("`").strip()
-    # Find the first { and last } to be extra robust
-    s = raw.find("{")
-    e = raw.rfind("}")
-    if s == -1 or e == -1:
-        raise HTTPException(status_code=502, detail="Aria couldn't structure the document — try a cleaner doc.")
-    try:
-        return json.loads(raw[s:e + 1])
-    except json.JSONDecodeError as ex:
-        raise HTTPException(status_code=502, detail=f"Aria returned malformed JSON: {ex}")
 
 
 def _sanitize_touchpoints(raw_tps: List[dict]) -> List[dict]:
@@ -954,10 +935,7 @@ async def improve(payload: ImprovePayload, tenant: dict = Depends(get_active_ten
     if not api_key:
         raise HTTPException(status_code=503, detail="Aria's brain is offline")
 
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise HTTPException(status_code=503, detail="LLM library not available")
+    from services.claude_service import claude_call, TaskType, ClaudeServiceError
 
     system = (
         "You are Aria, a senior B2B sales architect. Review the workflow JSON and find gaps. "
@@ -973,28 +951,16 @@ async def improve(payload: ImprovePayload, tenant: dict = Depends(get_active_ten
         "handoff": payload.handoff,
     }, indent=2)[:14000]
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"improve-{uuid.uuid4().hex[:10]}",
-        system_message=system,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
-
     try:
-        raw = (await chat.send_message(UserMessage(text=user_msg)) or "").strip()
-    except Exception as e:
+        parsed = await claude_call(
+            task_type=TaskType.INSIGHT_GENERATION,
+            system=system,
+            prompt=user_msg,
+            tenant_id=tenant.get("id"),
+            session_id=f"improve-{uuid.uuid4().hex[:10]}",
+            response_format="json",
+        )
+        return {"suggestions": (parsed or {}).get("suggestions", [])[:10]}
+    except ClaudeServiceError as e:
         print(f"[auto-map/improve] Claude error: {e}")
-        return {"suggestions": []}
-    if raw.startswith("```"):
-        raw = raw.split("```", 2)[1] if raw.count("```") >= 2 else raw
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-        raw = raw.rstrip("`").strip()
-    s = raw.find("{")
-    e = raw.rfind("}")
-    if s == -1 or e == -1:
-        return {"suggestions": []}
-    try:
-        parsed = json.loads(raw[s:e + 1])
-        return {"suggestions": parsed.get("suggestions", [])[:10]}
-    except json.JSONDecodeError:
         return {"suggestions": []}

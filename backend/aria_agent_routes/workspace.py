@@ -12,7 +12,6 @@ from fastapi import Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 import os
 import json
 
@@ -418,13 +417,15 @@ Format: {channel_hint}
 Return ONLY the message text — no JSON, no explanation, no preamble."""
 
     try:
-        chat = LlmChat(
-            api_key=os.getenv("EMERGENT_LLM_KEY"),
+        from services.claude_service import claude_call, TaskType
+        resp = await claude_call(
+            task_type=TaskType.INSIGHT_GENERATION,
+            system=system,
+            prompt=prompt,
+            tenant_id=current_user.get("tenant_id") if isinstance(current_user, dict) else None,
             session_id=f"ask_reply_{lead_id}_{payload.channel}_{payload.tone}",
-            system_message=system,
+            sanitize_user_input=True,
         )
-        chat.with_model("anthropic", "claude-4-sonnet-20250514")
-        resp = await chat.send_message(UserMessage(text=prompt))
         message = (resp or "").strip().strip('"')
         return {"lead_id": lead_id, "channel": payload.channel, "tone": payload.tone, "message": message, "ai_powered": True}
     except Exception as e:
