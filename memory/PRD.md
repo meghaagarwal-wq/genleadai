@@ -1,5 +1,31 @@
 ## Iter 108 — NUCLEAR CONSOLIDATION + P3 backlog (Feb 2026)
 
+### Continued (latest turn — server.py breakdown round 2)
+- **Stripe billing + 4-tier plan catalog extracted** →
+  `/app/backend/routes/billing_plans_legacy.py` (469 lines).
+- Removed 386 lines of inline billing code from server.py + the orphan
+  `POST /api/dev/set-plan` route (also extracted).
+- Added a 7-symbol re-export shim in server.py (`SUBSCRIPTION_PLANS`,
+  `_LEGACY_PLAN_ALIASES`, `_has_feature`, `_workspace_plan_id`,
+  `require_feature`, `workspace_settings_collection`, `payment_transactions`)
+  so `backend/tests/test_phase1_plans.py` continues to import from
+  `server` without modification.
+- Audited the existing billing modules — `routes/billing.py`,
+  `routes/billing_upgrade.py`, `routes/billing_plans.py`,
+  `routes/billing_profile.py` were already handling /checkout,
+  /webhook/stripe, /status — those duplicates in server.py were dead
+  code overridden at router-registration time. Cleanly dropped them.
+- **server.py line count: 5431 → 4230 (this iter total: −1201 lines / −22%)**.
+- Regression — all green: `/api/billing/plans` (4 plans), `/api/billing/current-plan`,
+  `/api/billing/transactions`, plus the standing 10-endpoint smoke
+  (`/api/health`, `/api/leads`, `/api/assets`, `/api/aria/feed`,
+  `/api/aria/eod-wrap/config`, `/api/aria/today`, `/api/pt/setup/health`,
+  `/api/leads/your-five-today`, `/api/reports/icp-channel-matrix`,
+  `/api/integrations/validate-key/status`) + 3 webhooks (calendly,
+  meta-leads, whatsapp) all 200.
+
+
+
 ### What landed (second batch)
 - **Directory rename**: `/app/frontend/src/pietential/` → `/app/frontend/src/workspace/`.
   Every page renamed: `PtOverview.js` → `Overview.js`, `PtLeadFeed.js` → `LeadFeed.js`,
