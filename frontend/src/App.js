@@ -70,6 +70,7 @@ import { Saleshandy, Lemlist } from './workspace/pages/PlatformActivity';
 import AISetupAssistant from './pages/AISetupAssistant';
 import TrainAriaV2 from './pages/TrainAriaV2';
 import Conversations from './pages/Conversations';
+import Approvals from './pages/Approvals';
 import ICPManager from './pages/ICPManager';
 import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
 import NotFound from './pages/NotFound';
@@ -257,6 +258,7 @@ function App() {
                             <Route path="/leads" element={<LeadFeed />} />
                             <Route path="/leads/:id" element={<LeadDetail />} />
                             <Route path="/conversations" element={<Conversations />} />
+                            <Route path="/approvals" element={<Approvals />} />
                             <Route path="/icps" element={<ICPManager />} />
                             <Route path="/train-aria" element={<TrainAriaV2 />} />
                             <Route path="/ai-setup" element={<AISetupAssistant />} />

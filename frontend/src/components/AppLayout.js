@@ -21,7 +21,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
-  CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold,
+  CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold, CheckCircle,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -39,6 +39,7 @@ const NAV_PRIMARY = [
   { to: '/app/instinct',       label: 'Instinct Feed',  icon: Brain,        modes: ['b2b', 'hybrid'] },
   { to: '/app/automation',     label: 'Automation',     icon: Lightning,    modes: ['b2c', 'hybrid'] },
   { to: '/app/conversations',  label: 'Conversations',  icon: ChatCircle },
+  { to: '/app/approvals',      label: 'Approvals',       icon: CheckCircle, badge: 'approvals' },
   { to: '/app/icps',           label: 'ICPs',           icon: Target },
   { to: '/app/train-aria',     label: 'Train ARIA',     icon: GraduationCap },
   { to: '/app/integrations',   label: 'Integrations',   icon: Plug },
@@ -256,6 +257,25 @@ const AppLayout = ({ children }) => {
 
   const visibleNav = NAV_PRIMARY.filter((item) => !item.modes || item.modes.includes(workspaceType));
 
+  // iter119 — pending approval count for the sidebar badge (polled every 60s)
+  const [approvalsCount, setApprovalsCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchCount = async () => {
+      try {
+        const r = await api.get('/api/approvals/count');
+        if (!cancelled) setApprovalsCount(r.data?.count || 0);
+      } catch {
+        if (!cancelled) setApprovalsCount(0);
+      }
+    };
+    fetchCount();
+    const id = setInterval(fetchCount, 60000);
+    const onTenant = () => fetchCount();
+    window.addEventListener('aria:tenant-changed', onTenant);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('aria:tenant-changed', onTenant); };
+  }, []);
+
   const Sidebar = ({ mobile = false }) => (
     <aside
       className={`${mobile ? 'w-72' : 'hidden md:flex w-60'} flex-col shrink-0`}
@@ -307,6 +327,15 @@ const AppLayout = ({ children }) => {
             >
               <item.icon size={18} weight="duotone" />
               <span className="text-sm">{item.label}</span>
+              {item.badge === 'approvals' && approvalsCount > 0 && (
+                <span
+                  data-testid="nav-approvals-badge"
+                  className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-extrabold text-white"
+                  style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
+                >
+                  {approvalsCount > 99 ? '99+' : approvalsCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>

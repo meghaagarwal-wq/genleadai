@@ -166,6 +166,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter118 Batch 6 — Inbound Reply Tracker (Resend + 360dialog + LinkedIn polling)
     from .inbound_reply import router as inbound_reply_router
 
+    # iter119 Batch 7 — Approval Queue (UX for pending_outreach drafts)
+    from .approvals import router as approvals_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -220,5 +223,6 @@ def register_all_routes(app: FastAPI) -> None:
         intel_router,
         morning_brief_router,
         inbound_reply_router,
+        approvals_router,
     ):
         app.include_router(router)
