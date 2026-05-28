@@ -446,14 +446,27 @@ async def configure_api_key(
 
 
 # ─── Catalogue (all known providers — for the frontend registry sync) ───
+# Iter109c — API-key providers are not in PROVIDER_SPECS (those are OAuth-only).
+# Listing them here gives a single source of truth for QA + frontend sync.
+_API_KEY_PROVIDERS = [
+    {"id": "saleshandy",  "label": "Saleshandy",  "auth_type": "api_key"},
+    {"id": "lemlist",     "label": "Lemlist",     "auth_type": "api_key"},
+    {"id": "360dialog",   "label": "360dialog",   "auth_type": "api_key"},
+    {"id": "resend",      "label": "Resend",      "auth_type": "api_key"},
+    {"id": "proxycurl",   "label": "Proxycurl",   "auth_type": "api_key"},
+    {"id": "serper",      "label": "Serper",      "auth_type": "api_key"},
+    {"id": "apollo",      "label": "Apollo",      "auth_type": "api_key"},
+    {"id": "stripe",      "label": "Stripe",      "auth_type": "api_key"},
+]
+
+
 @router.get("/providers/list")
 async def list_providers():
-    """Light catalogue of OAuth providers and the scopes they request. The
-    frontend has its own canonical registry; this endpoint lets QA & tests
-    confirm backend + frontend agree."""
-    return {
-        "providers": [
-            {"id": p, "label": s["label"], "scopes": s["default_scopes"], "auth_type": "oauth"}
-            for p, s in PROVIDER_SPECS.items()
-        ],
-    }
+    """Light catalogue of every supported integration — OAuth + API-key.
+    The frontend has its own canonical registry; this endpoint lets QA &
+    tests confirm backend + frontend agree."""
+    oauth = [
+        {"id": p, "label": s["label"], "scopes": s["default_scopes"], "auth_type": "oauth"}
+        for p, s in PROVIDER_SPECS.items()
+    ]
+    return {"providers": oauth + _API_KEY_PROVIDERS}
