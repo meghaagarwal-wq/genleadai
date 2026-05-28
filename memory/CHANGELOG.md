@@ -1,5 +1,30 @@
 # Changelog
 
+## iter109b — Hero cycling + Claude service wrapper (Section 8) (2026-05-28)
+
+**Hero subtext cycling (Command Center)**
+- Up to 4 dynamic lines pulled from real data (top signal, active conversations, next scan time, setup nudge).
+- 6s interval with 350ms fade between frames.
+- Falls back to a single static line when no data exists (e.g. brand-new workspace, setup incomplete + zero leads).
+- Verified live: 3 distinct frames cycled on ten_demo with leads + scan time data.
+
+**Section 8 — Centralised Claude service wrapper** (`/app/backend/services/claude_service.py`)
+- Single entry point: `claude_call(task_type, system, prompt, …)` + `detect_injection(message)`.
+- Task-type routing: 10 task types mapped to `claude-haiku-4-5-20251001` (fast / high volume) or `claude-sonnet-4-5-20250929` (reasoning).
+- Retry with exponential backoff (1s, 2s, 4s; max 3 attempts) on transient errors.
+- Prompt-injection heuristic + audit logging when user-sourced inputs trip the pattern.
+- JSON `response_format` mode strips markdown fences and parses dicts.
+- Per-call usage logged to `api_usage_log` (tenant_id, task_type, model, tokens, duration_ms, success).
+- Failures logged to `audit_log` with kind=`claude_<task>` and severity.
+- Per-task timeouts: haiku 30s, sonnet 60s.
+- Tests: 10/10 unit tests pass (`/app/backend/tests/test_claude_service.py`).
+- Real haiku roundtrip verified end-to-end (returned valid JSON score+reason in ~2s).
+
+**V10 status (audit of direct LlmChat outside wrapper):** 44 call sites across 15 files remain. Wrapper is the single new entry point; migration of legacy sites is staged for the next batch (Sections 1-7 migration work). Each migrated site removes one entry from this count.
+
+
+# Changelog
+
 ## iter109 Batch 3 — V9 + Final 20-check audit (2026-05-28) ✅ PRODUCTION READY
 **Section 7 — V9 Train ARIA streaming (8/8 ✅)**
 - V9.1 progress card <100ms · V9.2 phase labels · V9.3 ≥4 field chips · V9.4 90s slow-warn · V9.5 backend-tracked across navigation · V9.6 cache flash <200ms · V9.7 completeness re-renders after save · V9.8 nudge targets correct section.

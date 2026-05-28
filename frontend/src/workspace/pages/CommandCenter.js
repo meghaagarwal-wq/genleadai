@@ -186,13 +186,65 @@ const CommandCenter = () => {
   const setupComplete = health ? !!health.live : true;
   const hasAnyLeads = (pipeline.leads || []).length > 0 || (kpi?.items?.[0]?.value || 0) > 0;
 
-  const subtext = useMemo(() => {
-    if (!setupComplete && setupPct !== null) return `Your workspace is ${setupPct}% ready. Let's finish setup.`;
-    if (!hasAnyLeads) return "Aria's ready — let's get her some leads to work.";
-    if (mode === 'b2b') return `${signals.total_pending} signal${signals.total_pending === 1 ? '' : 's'} pending. ARIA is watching ${kpi?.items?.[1]?.value || 0} prospects.`;
-    if (mode === 'b2c') return `ARIA is working on ${kpi?.items?.[1]?.value || 0} active conversations. ${kpi?.items?.[2]?.value || 0} calls booked today.`;
-    return `${signals.total_pending} instinct signal${signals.total_pending === 1 ? '' : 's'} + ${kpi?.items?.[1]?.value || 0} active conversation${(kpi?.items?.[1]?.value || 0) === 1 ? '' : 's'}. ARIA is running both tracks.`;
-  }, [setupComplete, setupPct, hasAnyLeads, signals, kpi, mode]);
+  const subtextLines = useMemo(() => {
+    const lines = [];
+    // Static fallback: literally nothing happening yet
+    if (!hasAnyLeads && (setupComplete || setupPct === null)) {
+      lines.push("Aria's ready — let's get her some leads to work.");
+      return lines;
+    }
+    if (!hasAnyLeads && !setupComplete) {
+      lines.push(`Your workspace is ${setupPct}% ready. Let's finish setup.`);
+      return lines;
+    }
+    // Cycling lines — only when we have real signal/lead/scan data
+    if (mode === 'b2b' || mode === 'hybrid') {
+      if (signals?.total_pending > 0) {
+        const top = signals.signals?.[0];
+        if (top?.prospect_name) {
+          lines.push(`${top.prospect_name}${top.prospect_company ? ' at ' + top.prospect_company : ''} just triggered a ${(top.signal_type || 'signal').replace(/_/g, ' ')} — within outreach window.`);
+        }
+        lines.push(`${signals.total_pending} instinct signal${signals.total_pending === 1 ? '' : 's'} pending action.`);
+      }
+    }
+    if (mode === 'b2c' || mode === 'hybrid') {
+      const activeConv = kpi?.items?.find((i) => i.key === 'active_conversations')?.value ?? kpi?.items?.[1]?.value ?? 0;
+      const calls = kpi?.items?.find((i) => i.key === 'calls_booked_today')?.value ?? kpi?.items?.[2]?.value ?? 0;
+      const totalLeads = kpi?.items?.find((i) => i.key === 'total_leads_plus_prospects')?.value ?? 0;
+      if (activeConv > 0) {
+        lines.push(`ARIA is handling ${activeConv} active conversation${activeConv === 1 ? '' : 's'}${calls > 0 ? ` — ${calls} call${calls === 1 ? '' : 's'} booked today.` : '.'}`);
+      } else if (totalLeads > 0) {
+        lines.push(`${totalLeads} lead${totalLeads === 1 ? '' : 's'} in pipeline. ARIA is qualifying.`);
+      }
+    }
+    if (nextScan?.next_scan_time) {
+      lines.push(`Next prospect scan: ${nextScan.next_scan_time} ${nextScan.timezone || 'IST'}.`);
+    }
+    // If setup isn't complete but data IS flowing, slot the nudge into the cycle
+    if (!setupComplete && setupPct !== null) {
+      lines.push(`Workspace ${setupPct}% configured — a few items left to unlock everything.`);
+    }
+    if (lines.length === 0) {
+      lines.push("ARIA is running both tracks. Quiet day so far.");
+    }
+    return lines.slice(0, 4);
+  }, [setupComplete, setupPct, hasAnyLeads, signals, kpi, mode, nextScan]);
+
+  // iter109b — cycle through subtextLines every 6s with fade.
+  const [subIdx, setSubIdx] = useState(0);
+  const [subVisible, setSubVisible] = useState(true);
+  useEffect(() => {
+    setSubIdx(0);
+    if (subtextLines.length <= 1) return;
+    const id = setInterval(() => {
+      setSubVisible(false);
+      setTimeout(() => {
+        setSubIdx((i) => (i + 1) % subtextLines.length);
+        setSubVisible(true);
+      }, 350);
+    }, 6000);
+    return () => clearInterval(id);
+  }, [subtextLines]);
 
   return (
     <div data-testid="command-center-page" className="space-y-5" style={{ color: 'var(--theme-text)' }}>
@@ -237,8 +289,12 @@ const CommandCenter = () => {
           <h1 className="text-3xl md:text-4xl font-extrabold mb-2" style={{ fontFamily: 'Space Grotesk, Inter', letterSpacing: '-0.02em' }}>
             {greeting()}, {firstNameOf(user)}..
           </h1>
-          <p className="text-sm text-white/80 mb-6" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            {loading ? 'Spinning up…' : subtext}
+          <p
+            className="text-sm text-white/80 mb-6 transition-opacity duration-300 min-h-[24px]"
+            style={{ fontFamily: 'Plus Jakarta Sans', opacity: subVisible ? 1 : 0 }}
+            data-testid="cmd-hero-subtext"
+          >
+            {loading ? 'Spinning up…' : (subtextLines[subIdx] || '')}
           </p>
           <div className="flex flex-wrap gap-2.5">
             {(mode === 'b2b' || mode === 'hybrid') && (
