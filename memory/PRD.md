@@ -1,3 +1,71 @@
+## Iter 117 — Batch 5: Autonomous Loop CLOSED (Feb 2026)
+
+The full ARIA loop is live: **research → signal → draft → send**.
+
+### What shipped
+**A. Morning Brief cron (`routes/aria_morning_brief.py`)**
+- Weekday 8 AM workspace-local cron (per-tenant config, weekdays-only
+  toggle, configurable hour & TZ offset).
+- For each enabled tenant: pulls hot/engaged/session_pilot leads with no
+  fresh intel, runs crawl + Claude synthesis, ranks the top 3 signals
+  (excludes risk), drafts an email opening per signal, sends a Founder
+  Brief via Resend (workspace identity + signature appended).
+- Subject: `Your ARIA Morning Brief — {Date}`.
+- Body: 3 cards with prospect name, ICP fit, signal label + evidence
+  quote, and draft subject + body. Each card has a CTA back to the Lead
+  Feed.
+- Endpoints: GET/POST `/api/aria/morning-brief/config`, POST
+  `/send-now`, GET `/last`.
+- Loop started in `server.py` alongside `eod_wrap_loop` (60s tick).
+
+**B. Final-mile send dispatch (`services/outreach_dispatch.py`)**
+- Single chokepoint `dispatch_outreach(tenant_id, lead_id, channel,
+  composed, actor_user_id)` that:
+  • **email** → `routes.pt_email.send_workspace_email` (Resend, workspace
+    identity + signature).
+  • **whatsapp** → `whatsapp_dispatch.send_whatsapp_text` (360dialog OR
+    Meta, tenant-aware).
+  • **linkedin** → LinkedIn UGC Posts API if OAuth + user_urn are
+    present; falls back to `pending_outreach` collection
+    (`linkedin_drafted_awaiting_manual_send`) — LinkedIn does not expose
+    1:1 DM APIs publicly.
+- Every attempt (sent or not) audits to `outbound_log` with channel,
+  provider, ai_powered flag, error string, message preview.
+- Uniform return shape across all three channels.
+
+**C. `/api/intel/{lead_id}/compose-and-send`**
+- Composes via Claude THEN dispatches in a single round-trip. Optional
+  `auto_send=false` returns just the draft (preview mode).
+
+**D. Frontend — Intel Tab `Send via ARIA` button**
+- Composer now has two buttons: `Draft` (preview) and `Send via ARIA`
+  (compose + dispatch). Result chip shows ✓ sent / ↗ drafted /
+  × failed with provider id when available.
+
+### Verification (test_reports/iteration_117.json)
+- Backend 10/10 PASS · Frontend smoke PASS
+- All three channels return JSON gracefully even on missing creds:
+  • email no Resend domain → `sent:false, error: "verify a domain"`
+  • whatsapp no phone → `sent:false, error: "no phone/whatsapp"`
+  • linkedin no OAuth → `logged_only:true, provider:pending_outreach`
+- `outbound_log` and `pending_outreach` collections populating
+  correctly.
+- V10 guard still clean.
+
+### Carry-overs (cosmetic, P3)
+- `passlib` / `bcrypt 4.x` `__about__` AttributeError noise on every
+  login — cosmetic, login still 200. Pin `bcrypt<4` or upgrade passlib
+  whenever convenient.
+- `<span>` inside `<option>` hydration warning in LeadDetail.js — pre-
+  existing, no functional impact.
+
+### Status
+**Codebase is feature-complete per the original ARIA Final Integration
+Prompt.** All five batches verified.
+
+---
+
+
 ## Iter 115–116 — Pre-Deploy Full-Day Checkup (Feb 2026)
 
 ### What shipped (iter115)
