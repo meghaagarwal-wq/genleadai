@@ -19,6 +19,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlanProvider } from './context/PlanContext';
 import { WorkspaceProvider } from './context/WorkspaceContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
@@ -159,6 +160,7 @@ function App() {
         <AuthProvider>
           <PlanProvider>
             <WorkspaceProvider>
+              <ThemeProvider>
               <Router>
                 <ImpersonationBanner />
                 <Routes>
@@ -292,6 +294,7 @@ function App() {
                 </Routes>
                 <Toaster position="bottom-right" richColors closeButton toastOptions={{ style: { fontFamily: 'Plus Jakarta Sans, sans-serif' } }} />
               </Router>
+              </ThemeProvider>
             </WorkspaceProvider>
           </PlanProvider>
         </AuthProvider>

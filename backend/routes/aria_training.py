@@ -917,11 +917,23 @@ import hashlib as _hashlib  # noqa: E402
 import uuid as _uuid  # noqa: E402
 from datetime import datetime as _dt, timezone as _tz  # noqa: E402
 
+# iter109 Section 4d — bump this string when the extraction prompt / output
+# schema changes. Cache entries are keyed by (tenant_id, file_hash,
+# prompt_version) so stale results are invalidated automatically.
+EXTRACTION_PROMPT_VERSION = "v1"
+
 _extraction_jobs_col = db["training_extraction_jobs"]
-# Composite index: cache hits are looked up by (tenant_id, file_hash, status="done")
+# Composite index: cache hits are looked up by (tenant_id, file_hash,
+# prompt_version, status="done"). TTL on finished_at expires done/error
+# jobs after 30 days so the collection stays bounded (iter109 Section 4c).
 try:
-    _extraction_jobs_col.create_index([("tenant_id", 1), ("file_hash", 1), ("status", 1)])
+    _extraction_jobs_col.create_index([("tenant_id", 1), ("file_hash", 1), ("prompt_version", 1), ("status", 1)])
     _extraction_jobs_col.create_index([("job_id", 1)], unique=True)
+    _extraction_jobs_col.create_index(
+        [("finished_at_dt", 1)],
+        expireAfterSeconds=30 * 24 * 60 * 60,  # 30 days
+        name="ttl_finished_at_30d",
+    )
 except Exception:
     pass
 
@@ -972,6 +984,7 @@ async def _run_extraction_job(job_id: str, tenant_id: str, filename: str, conten
             "icps_merged_total": len(merged.get("icp_profiles") or []),
             "version": assembled["version"],
             "assembled_at": assembled["assembled_at"],
+            "prompt_version": EXTRACTION_PROMPT_VERSION,
             "extracted_preview": {
                 "what_you_sell": (extracted.get("what_you_sell") or "")[:120],
                 "who_you_sell_to": (extracted.get("who_you_sell_to") or "")[:120],
@@ -990,16 +1003,19 @@ async def _run_extraction_job(job_id: str, tenant_id: str, filename: str, conten
             "status": "done",
             "result": result,
             "finished_at": _dt.now(_tz.utc).isoformat(),
+            "finished_at_dt": _dt.now(_tz.utc),
         }})
     except HTTPException as he:
         _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
             "status": "error", "error": str(he.detail)[:280],
             "finished_at": _dt.now(_tz.utc).isoformat(),
+            "finished_at_dt": _dt.now(_tz.utc),
         }})
     except Exception as e:
         _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
             "status": "error", "error": f"Internal: {str(e)[:200]}",
             "finished_at": _dt.now(_tz.utc).isoformat(),
+            "finished_at_dt": _dt.now(_tz.utc),
         }})
 
 
@@ -1024,11 +1040,18 @@ async def extract_from_document(
     if len(content) > _MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB).")
 
+    # iter109 Section 4d — include the extraction-prompt version in the
+    # cache key so a future prompt bump invalidates stale results cleanly.
     file_hash = _hashlib.sha256(content).hexdigest()
 
     # Cache lookup
     cached = _extraction_jobs_col.find_one(
-        {"tenant_id": tenant["id"], "file_hash": file_hash, "status": "done"},
+        {
+            "tenant_id": tenant["id"],
+            "file_hash": file_hash,
+            "prompt_version": EXTRACTION_PROMPT_VERSION,
+            "status": "done",
+        },
         {"_id": 0, "result": 1, "job_id": 1, "finished_at": 1},
         sort=[("finished_at", -1)],
     )
@@ -1053,6 +1076,7 @@ async def extract_from_document(
         "job_id": job_id,
         "tenant_id": tenant["id"],
         "file_hash": file_hash,
+        "prompt_version": EXTRACTION_PROMPT_VERSION,
         "filename": file.filename,
         "size_bytes": len(content),
         "is_ocr": _image_or_ppt(file.filename or ""),
@@ -1060,6 +1084,7 @@ async def extract_from_document(
         "phase": "text_extraction",
         "started_at": _dt.now(_tz.utc).isoformat(),
         "finished_at": None,
+        "finished_at_dt": None,
         "result": None,
         "error": None,
     })
@@ -1117,6 +1142,55 @@ async def extract_job_status(
 
 
 # ─── Phase 2: Auto-train from existing workspace data ────────────────────
+@router.get("/training-profile/completeness")
+async def training_profile_completeness(tenant: dict = Depends(get_active_tenant)):
+    """iter109 Section 4a — Profile completeness %.
+
+    Returns the percentage of "key training fields" populated, plus the
+    next missing field so the UI can nudge the founder toward 100%.
+    """
+    settings = tenant.get("settings") or {}
+    profile = (settings.get("aria_training_profile") or {}).get("data") or _empty_profile()
+
+    # Fields that count toward training completeness (one point each).
+    checks = [
+        ("what_you_sell",          "Business Identity — what you sell",     "identity"),
+        ("who_you_sell_to",        "Business Identity — who you sell to",   "identity"),
+        ("problem_you_solve",      "Business Identity — problem solved",    "identity"),
+        ("differentiator",         "Business Identity — differentiator",    "identity"),
+        ("icp_profiles",           "Ideal Customer Profiles — add at least 1 ICP", "icps"),
+        ("qualification_questions", "Qualification — questions Aria asks",  "qualify"),
+        ("brand_voice_style",      "Brand Voice — voice style",             "voice"),
+        ("pricing_objection_responses", "Objections — pricing pushback",    "objections"),
+        ("calendar_link",          "Booking — calendar link",               "booking"),
+    ]
+    filled = []
+    missing = []
+    for field, label, section in checks:
+        val = profile.get(field)
+        is_filled = bool(val) if not isinstance(val, list) else len(val) > 0
+        (filled if is_filled else missing).append({"field": field, "label": label, "section": section})
+
+    total = len(checks)
+    pct = int(round((len(filled) / total) * 100)) if total else 0
+    nudge = None
+    if missing:
+        m = missing[0]
+        nudge = {
+            "field": m["field"],
+            "label": m["label"],
+            "section": m["section"],
+            "message": f"Next: {m['label']}",
+        }
+    return {
+        "percent": pct,
+        "filled_count": len(filled),
+        "total": total,
+        "missing": missing,
+        "nudge": nudge,
+    }
+
+
 @router.post("/training-profile/auto-train-from-workspace")
 async def auto_train_from_workspace(
     tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),

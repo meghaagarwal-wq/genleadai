@@ -280,6 +280,56 @@ const VersionHistoryButton = ({ onRestored }) => {
   );
 };
 
+// iter109 Section 4a — Profile completeness % bar with nudge → scrolls to
+// the section containing the next missing field.
+const CompletenessBar = ({ data, onJumpToSection }) => {
+  if (!data) return null;
+  const pct = data.percent ?? 0;
+  const nudge = data.nudge;
+  const color = pct >= 90 ? 'emerald' : pct >= 60 ? 'violet' : pct >= 30 ? 'amber' : 'rose';
+  const tone = {
+    emerald: { bar: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    violet:  { bar: 'bg-violet-600',  chip: 'bg-violet-100 text-violet-700 border-violet-200' },
+    amber:   { bar: 'bg-amber-500',   chip: 'bg-amber-100 text-amber-700 border-amber-200' },
+    rose:    { bar: 'bg-rose-500',    chip: 'bg-rose-100 text-rose-700 border-rose-200' },
+  }[color];
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3"
+      data-testid="train-aria-completeness-bar"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <span className="text-sm font-semibold text-slate-900" data-testid="completeness-label">
+            {pct >= 100 ? '🎉 Profile fully trained' : `Profile ${pct}% trained`}
+          </span>
+          <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border ${tone.chip}`}>
+            {data.filled_count}/{data.total} fields
+          </span>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full ${tone.bar} transition-all duration-500`}
+            style={{ width: `${pct}%` }}
+            data-testid="completeness-fill"
+          />
+        </div>
+      </div>
+      {nudge && pct < 100 && (
+        <button
+          type="button"
+          onClick={() => onJumpToSection?.(nudge.section)}
+          data-testid="completeness-nudge"
+          className="text-xs font-semibold text-violet-700 hover:text-violet-900 underline underline-offset-2 whitespace-nowrap text-left"
+        >
+          {nudge.message} →
+        </button>
+      )}
+    </div>
+  );
+};
+
+
 const TrainAriaV2 = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -292,10 +342,21 @@ const TrainAriaV2 = () => {
   const [extracting, setExtracting] = useState(false);
   // iter108 Batch B — extraction job status for the progress UI.
   const [extractStatus, setExtractStatus] = useState(null);
+  // iter109 Section 4b — "Loaded from cache" green flash overlay.
+  const [cacheFlash, setCacheFlash] = useState(false);
+  // iter109 Section 4a — Profile completeness % + next-missing nudge.
+  const [completeness, setCompleteness] = useState(null);
   const [testMessages, setTestMessages] = useState([]);  // [{role, text}]
   const [testInput, setTestInput] = useState('');
   const [testSending, setTestSending] = useState(false);
   const fileRef = useRef(null);
+
+  const loadCompleteness = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/aria/training-profile/completeness');
+      setCompleteness(data);
+    } catch (_) { /* non-fatal */ }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -309,7 +370,8 @@ const TrainAriaV2 = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+    loadCompleteness();
+  }, [loadCompleteness]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -321,6 +383,7 @@ const TrainAriaV2 = () => {
       const { data } = await api.put('/api/aria/training-profile', profile);
       setVersion(data.version);
       toast.success(`Saved — Aria prompt re-assembled (v${data.version}, ${data.prompt_length} chars)`);
+      loadCompleteness();
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Save failed');
     } finally {
@@ -380,13 +443,24 @@ const TrainAriaV2 = () => {
       );
       // Fast path — cache hit OR sync completion
       if (data.cached || data.status === 'done') {
+        // iter109 Section 4b — green "Loaded from cache" flash for 1.5s
+        // before the normal success/result UI takes over.
+        if (data.cached) {
+          setCacheFlash(true);
+          setExtractStatus({ phase: 'cached', ...data });
+          setTimeout(() => {
+            setCacheFlash(false);
+            setExtractStatus({ phase: 'done', ...data, status: 'done' });
+          }, 1500);
+        } else {
+          setExtractStatus({ phase: 'done', ...data });
+        }
         toast.success(
           data.cached
-            ? `Cached result — restored ${data.fields_extracted} fields instantly`
+            ? `⚡ Loaded from cache — restored ${data.fields_extracted} fields instantly`
             : `Extracted ${data.fields_extracted} fields · ${data.icps_extracted} ICP(s) · v${data.version}`,
           { duration: 6000 },
         );
-        setExtractStatus({ phase: 'done', ...data });
         load();
         return;
       }
@@ -466,7 +540,7 @@ const TrainAriaV2 = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6 lg:p-10" data-testid="train-aria-v2-page">
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between mb-8 gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between mb-6 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">Train Aria</h1>
           <p className="text-sm text-slate-600 max-w-2xl">
@@ -485,6 +559,8 @@ const TrainAriaV2 = () => {
           <button data-testid="train-aria-save-btn" onClick={save} disabled={saving} className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">{saving ? 'Saving…' : 'Save & re-assemble'}</button>
         </div>
       </div>
+
+      <CompletenessBar data={completeness} onJumpToSection={setSection} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
         <div className="border border-slate-200 rounded-xl p-5 bg-white" data-testid="train-aria-workspace-type-card">
@@ -523,7 +599,10 @@ const TrainAriaV2 = () => {
             className="block text-sm text-slate-600 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-violet-600 file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-violet-700 disabled:opacity-50"
           />
           {extracting && extractStatus && (
-            <ExtractionProgress status={extractStatus} />
+            <ExtractionProgress status={extractStatus} cacheFlash={cacheFlash} />
+          )}
+          {!extracting && cacheFlash && extractStatus && (
+            <ExtractionProgress status={extractStatus} cacheFlash={cacheFlash} />
           )}
 
           {/* iter105 — FIX 10: URL scrape */}
@@ -761,11 +840,12 @@ export default TrainAriaV2;
  * if extraction crosses 90s. Once done, lists the extracted fields so the
  * founder sees value populated WITHOUT having to refresh.
  */
-const ExtractionProgress = ({ status }) => {
+const ExtractionProgress = ({ status, cacheFlash }) => {
   const elapsed = status.elapsed_seconds ?? status.elapsed ?? 0;
   const eta = status.eta_seconds ?? status.eta ?? 30;
   const pct = Math.min(95, Math.max(5, Math.round((elapsed / eta) * 100)));
   const phaseLabel = (
+    cacheFlash ? '⚡ Loaded from cache' :
     status.status === 'done' ? 'Done' :
     status.phase === 'uploading' ? 'Uploading…' :
     status.phase === 'text_extraction' ? (status.is_ocr ? 'Running OCR on images…' : 'Reading document text…') :
@@ -775,6 +855,24 @@ const ExtractionProgress = ({ status }) => {
   const isSlow = !!status.slow_warn;
   const extractedFields = status.extracted_fields || {};
   const fieldEntries = Object.entries(extractedFields);
+
+  // iter109 Section 4b — bright green flash card for 1.5s on cache hit.
+  if (cacheFlash) {
+    return (
+      <div
+        className="mt-3 border border-emerald-300 rounded-lg p-4 bg-emerald-50 transition-all duration-300"
+        data-testid="extract-cache-flash"
+      >
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">⚡</span>
+          <span className="text-sm font-semibold text-emerald-800">Loaded from cache</span>
+        </div>
+        <div className="text-xs text-emerald-700">
+          We've extracted this exact file before — restoring {status.fields_extracted ?? '—'} fields instantly.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 border border-violet-200 rounded-lg p-4 bg-violet-50/40" data-testid="extract-progress">

@@ -21,9 +21,10 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
-  CaretDown, Buildings, CalendarBlank, Robot,
+  CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import NotificationsBell from './NotificationsBell';
 import AriaAvatar from './AriaAvatar';
 import AriaToastWatcher from './AriaToastWatcher';
@@ -49,6 +50,30 @@ const NAV_ADVANCED = [
   { to: '/app/call-booking',   label: 'Call Booking',       icon: CalendarBlank },
   { to: '/app/ai-setup',       label: 'AI Setup Assistant', icon: Robot },
 ];
+
+
+// ── ThemeToggle ─────────────────────────────────────────────────────────
+// Small sun/moon icon button in the topbar. Persists choice via ThemeContext.
+const ThemeToggle = () => {
+  const { theme, toggle } = useTheme();
+  const isDark = theme === 'dark';
+  return (
+    <button
+      onClick={toggle}
+      data-testid="theme-toggle"
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="w-9 h-9 rounded-lg border flex items-center justify-center transition-colors"
+      style={{
+        borderColor: 'var(--theme-border-strong)',
+        background: 'var(--theme-surface)',
+        color: 'var(--theme-text-muted)',
+      }}
+    >
+      {isDark ? <Sun size={16} weight="duotone" /> : <Moon size={16} weight="duotone" />}
+    </button>
+  );
+};
 
 
 // ── WorkspaceSwitcher ───────────────────────────────────────────────────
@@ -97,41 +122,48 @@ const WorkspaceSwitcher = ({ onSwitch }) => {
     <div className="relative" onClick={(e) => e.stopPropagation()} data-testid="workspace-switcher">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#E8E0F5] hover:bg-[#F4F0FF] transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors"
+        style={{
+          borderColor: 'var(--theme-border-strong)',
+          background: 'var(--theme-surface2)',
+          color: 'var(--theme-text)',
+        }}
         data-testid="workspace-switcher-trigger"
       >
         <Buildings size={16} weight="duotone" className="text-[#7C35DC]" />
-        <span className="text-sm font-semibold text-[#1A0A2E] max-w-[180px] truncate">
+        <span className="text-sm font-semibold max-w-[180px] truncate" style={{ color: 'var(--theme-text)' }}>
           {active?.name || 'Choose workspace'}
         </span>
-        <CaretDown size={12} className="text-[#5A4A7A]" />
+        <CaretDown size={12} style={{ color: 'var(--theme-text-muted)' }} />
       </button>
       {open && (
         <div
-          className="absolute left-0 mt-1.5 w-72 bg-white border border-[#E8E0F5] rounded-xl shadow-xl z-50 overflow-hidden"
+          className="absolute left-0 mt-1.5 w-72 rounded-xl shadow-xl z-50 overflow-hidden border"
+          style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border-strong)' }}
           data-testid="workspace-switcher-menu"
         >
-          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#9B8AB0] border-b border-[#F0ECF9]">
+          <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.16em] border-b" style={{ color: 'var(--theme-text-muted)', borderColor: 'var(--theme-border)' }}>
             Switch workspace
           </div>
           {tenants.length === 0 && (
-            <div className="px-3 py-3 text-xs text-[#9B8AB0]">No workspaces yet.</div>
+            <div className="px-3 py-3 text-xs" style={{ color: 'var(--theme-text-muted)' }}>No workspaces yet.</div>
           )}
           {tenants.map((t) => (
             <button
               key={t.id}
               onClick={() => pick(t)}
               data-testid={`workspace-switcher-option-${t.id}`}
-              className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-[#FAF7FF] text-left ${active?.id === t.id ? 'bg-[#F4F0FF]' : ''}`}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors hover:bg-[var(--theme-surface2)]"
+              style={active?.id === t.id ? { background: 'var(--theme-purple-dim)' } : {}}
             >
               <div className="min-w-0">
-                <div className="font-semibold text-[#1A0A2E] truncate">{t.name}</div>
-                <div className="text-[10px] uppercase tracking-[0.14em] text-[#9B8AB0] mt-0.5">
+                <div className="font-semibold truncate" style={{ color: 'var(--theme-text)' }}>{t.name}</div>
+                <div className="text-[10px] uppercase tracking-[0.14em] mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
                   {t.mode ? `${t.mode}` : 'workspace'}{t.role ? ` · ${t.role}` : ''}
                 </div>
               </div>
               {active?.id === t.id && (
-                <span className="text-[10px] font-bold text-[#7C35DC]">ACTIVE</span>
+                <span className="text-[10px] font-bold" style={{ color: 'var(--theme-purple-light)' }}>ACTIVE</span>
               )}
             </button>
           ))}
@@ -335,7 +367,11 @@ const AppLayout = ({ children }) => {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] flex">
+    <div
+      className="min-h-screen flex"
+      style={{ background: 'var(--theme-bg)' }}
+      data-theme-bg
+    >
       <Sidebar />
 
       {mobileOpen && (
@@ -348,7 +384,11 @@ const AppLayout = ({ children }) => {
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-[#E8E0F5] flex items-center justify-between px-4 md:px-6 shrink-0">
+        <header
+          className="h-16 border-b flex items-center justify-between px-4 md:px-6 shrink-0"
+          style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+          data-theme-surface
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
@@ -359,20 +399,31 @@ const AppLayout = ({ children }) => {
               <List size={22} />
             </button>
             <WorkspaceSwitcher onSwitch={handleWorkspaceSwitch} />
-            <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#F4F0FF] text-[#7C35DC] rounded-full text-[10px] font-bold uppercase tracking-[0.12em]" data-testid="mode-chip">
+            <span
+              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em]"
+              style={{ background: 'var(--theme-purple-dim)', color: 'var(--theme-purple-light)' }}
+              data-testid="mode-chip"
+            >
               {workspaceType}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <div className="relative hidden sm:block">
-              <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B8AB0]" />
+              <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--theme-text-muted)' }} />
               <input
                 type="text"
                 placeholder="Search…"
-                className="w-56 bg-[#FAFAFA] border border-[#E8E0F5] text-[#1A0A2E] pl-8 pr-3 py-1.5 rounded-lg focus:border-[#7C35DC] focus:ring-2 focus:ring-[rgba(124,53,220,0.12)] text-sm"
+                className="w-56 pl-8 pr-3 py-1.5 rounded-lg focus:ring-2 text-sm border outline-none"
+                style={{
+                  background: 'var(--theme-surface2)',
+                  borderColor: 'var(--theme-border-strong)',
+                  color: 'var(--theme-text)',
+                  fontFamily: 'Plus Jakarta Sans',
+                }}
                 data-testid="global-search"
               />
             </div>
+            <ThemeToggle />
             <NotificationsBell />
           </div>
         </header>

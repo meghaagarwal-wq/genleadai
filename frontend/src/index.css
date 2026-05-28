@@ -75,6 +75,50 @@ a[href*="emergent-badge"],
   --sidebar-active-border: #C044E0;
   --sidebar-hover-bg: rgba(255,255,255,0.04);
   --sidebar-divider: rgba(255,255,255,0.06);
+
+  /* ─── THEMED TOKENS (Aria Dashboard spec) ────────────────────────
+   * Use these (--theme-*) for any NEW dashboard component that
+   * needs to flip with dark/light mode. The defaults below mirror
+   * the dark palette so initial paint is correct. The
+   * [data-theme="light"] block redefines them for light mode.
+   */
+  --theme-bg: #0a0a0f;
+  --theme-surface: #12121a;
+  --theme-surface2: #1a1a26;
+  --theme-border: rgba(255,255,255,0.06);
+  --theme-border-strong: rgba(255,255,255,0.10);
+  --theme-text: #f1f0f5;
+  --theme-text-muted: #8b8a99;
+  --theme-text-dim: #4a4958;
+  /* Accent palette — identical in both modes */
+  --theme-purple: #7c3aed;
+  --theme-purple-light: #a78bfa;
+  --theme-purple-dim: rgba(124,58,237,0.14);
+  --theme-amber: #f59e0b;
+  --theme-amber-dim: rgba(245,158,11,0.16);
+  --theme-teal: #0d9488;
+  --theme-teal-dim: rgba(13,148,136,0.16);
+  --theme-green: #22c55e;
+  --theme-red: #ef4444;
+  --theme-blue: #60a5fa;
+}
+
+html[data-theme="light"] {
+  --theme-bg: #f8f7ff;
+  --theme-surface: #ffffff;
+  --theme-surface2: #f1f0f8;
+  --theme-border: #e2e0f0;
+  --theme-border-strong: #cbc5e0;
+  --theme-text: #0f0e17;
+  --theme-text-muted: #6b6880;
+  --theme-text-dim: #9c9aaa;
+}
+
+/* Smooth swap on background + border only (not text — avoids FOUT). */
+html[data-theme] body,
+html[data-theme] [data-theme-surface],
+html[data-theme] [data-theme-bg] {
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 * {
@@ -88,9 +132,10 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--color-background);
+  background-color: var(--theme-bg);
   color: var(--color-text-primary);
   font-feature-settings: "ss01" on, "cv11" on;
+  transition: background-color 0.2s ease;
 }
 
 h1, h2, h3, h4, h5, h6, .heading {
