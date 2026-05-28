@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Upload, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { Plus, Upload, MagnifyingGlass, X, Brain, Sparkle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, EmptyState, StageBadge, SOURCE_LABELS, fmtDate } from '../shared';
 
@@ -10,6 +10,8 @@ const LeadFeed = ({ embedded = false }) => {
   const [filters, setFilters] = useState({ stage: '', source: '', q: '', score_min: '', score_max: '' });
   const [showAdd, setShowAdd] = useState(false);
   const [showCsv, setShowCsv] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchResult, setBatchResult] = useState(null);
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -50,6 +52,32 @@ const LeadFeed = ({ embedded = false }) => {
   }, [liveCursor]);
   const dismissLiveBadge = () => setNewSinceLastSeen(0);
 
+  // iter114 Batch 4 — One-click "Run Intel on all hot leads"
+  const runBatchIntel = async () => {
+    setBatchBusy(true);
+    setBatchResult(null);
+    try {
+      const r = await ptApi.post('/api/intel/batch/hot-leads', {
+        stages: ['hot', 'engaged', 'session_pilot'],
+        min_score: 70,
+        limit: 25,
+        skip_existing: true,
+      });
+      setBatchResult(r.data);
+      if (r.data.aborted) {
+        toast.error('Connect Proxycurl or Serper on /app/integrations first');
+      } else if (r.data.processed === 0) {
+        toast.info('All hot leads already have intel.');
+      } else {
+        toast.success(`Intel synthesised for ${r.data.succeeded}/${r.data.processed} hot leads`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Batch intel failed');
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   return (
     <div data-testid="pt-leadfeed-page">
       {!embedded && <PageHeader title="Lead Feed" subtitle="Real leads who have engaged. No samples."
@@ -65,6 +93,11 @@ const LeadFeed = ({ embedded = false }) => {
                 {newSinceLastSeen} new
               </button>
             )}
+            <button onClick={runBatchIntel} disabled={batchBusy} data-testid="pt-leadfeed-run-intel-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
+              <Brain size={14} weight="duotone" /> {batchBusy ? 'Synthesising…' : 'Run Intel on hot leads'}
+            </button>
             <button onClick={() => setShowCsv(true)} data-testid="pt-leadfeed-upload-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
               <Upload size={14} weight="bold" /> Upload CSV
@@ -102,6 +135,42 @@ const LeadFeed = ({ embedded = false }) => {
         <input type="number" value={filters.score_max} onChange={(e) => setFilters({ ...filters, score_max: e.target.value })} placeholder="Score max"
           className="w-24 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
       </div>
+
+      {/* iter114 Batch 4 — Batch intel result banner */}
+      {batchResult && (
+        <div className="mb-4 bg-white border border-[#7C35DC]/30 rounded-lg p-3" data-testid="pt-leadfeed-batch-result" style={{ background: '#FAF7FF' }}>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Sparkle size={13} weight="fill" className="text-[#7C35DC]" />
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#7C35DC]">Batch intel run</span>
+            </div>
+            <button onClick={() => setBatchResult(null)} className="text-[#94A3B8] hover:text-[#0F172A]" data-testid="pt-leadfeed-batch-dismiss">
+              <X size={12} />
+            </button>
+          </div>
+          {batchResult.aborted ? (
+            <div className="text-sm text-[#DC2626]">Aborted: {batchResult.reason}</div>
+          ) : (
+            <div className="text-sm text-[#0F172A]">
+              <span className="font-bold text-emerald-600">{batchResult.succeeded}</span> succeeded
+              {batchResult.failed > 0 && <> · <span className="font-bold text-[#DC2626]">{batchResult.failed}</span> failed</>}
+              {batchResult.processed === 0 && <> · all hot leads already enriched</>}
+              {(batchResult.results || []).slice(0, 5).length > 0 && (
+                <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-0.5">
+                  {batchResult.results.slice(0, 6).map((r, i) => (
+                    <div key={i} className="text-xs flex items-center gap-1.5" data-testid={`pt-leadfeed-batch-row-${i}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${r.status === 'ok' ? 'bg-emerald-500' : 'bg-[#DC2626]'}`} />
+                      <span className="font-semibold truncate flex-1">{r.name}</span>
+                      {r.status === 'ok' && <span className="text-[#7C35DC] font-bold">{r.fit_score}/100</span>}
+                      {r.status !== 'ok' && <span className="text-[#DC2626] truncate">{r.reason || r.status}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Table or empty */}
       {loading ? (

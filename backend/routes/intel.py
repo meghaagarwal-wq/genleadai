@@ -17,8 +17,9 @@ Endpoints
 """
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -237,3 +238,151 @@ async def compose(
 async def budget(lead_id: str, current_user: dict = Depends(get_current_user)):
     tenant_id = current_user.get("tenant_id")
     return get_budget_snapshot(tenant_id, lead_id)
+
+
+# ─── POST /api/intel/batch/hot-leads ────────────────────────────────────
+class BatchHotLeadsRequest(BaseModel):
+    stages: List[str] = Field(default_factory=lambda: ["hot", "engaged", "session_pilot"])
+    min_score: int = Field(default=70, description="Lower bound on lead score.")
+    limit: int = Field(default=25, ge=1, le=100, description="Cap per run.")
+    skip_existing: bool = Field(default=True, description="Skip leads already synthesised.")
+
+
+@router.post("/batch/hot-leads")
+async def batch_intel_hot_leads(
+    body: BatchHotLeadsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """One-click enrichment for every hot lead in the workspace.
+
+    Iterates pt_leads matching the stage/score filters, runs crawl +
+    Claude synthesis on each (sequentially to respect Claude rate limits),
+    and returns a per-lead status array. Skips leads with an existing
+    profile unless `skip_existing=False`.
+
+    Failure of any single lead does NOT abort the batch — errors are
+    collected and returned so the founder can fix and retry.
+    """
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Active tenant required")
+
+    # Build query for pt_leads (Pietential workspace). Fall back to legacy
+    # `leads` collection only if pt_leads is empty for this tenant.
+    query: Dict[str, Any] = {"tenant_id": tenant_id}
+    if body.stages:
+        query["stage"] = {"$in": body.stages}
+    if body.min_score is not None:
+        query["score"] = {"$gte": int(body.min_score)}
+
+    candidates = list(
+        db["pt_leads"]
+        .find(query, {"_id": 0})
+        .sort("score", -1)
+        .limit(body.limit)
+    )
+
+    # Filter out leads that already have a profile if requested
+    if body.skip_existing and candidates:
+        existing_ids = {
+            d["lead_id"]
+            for d in db["intel_profiles"].find(
+                {
+                    "tenant_id": tenant_id,
+                    "lead_id": {"$in": [c["id"] for c in candidates]},
+                },
+                {"_id": 0, "lead_id": 1},
+            )
+        }
+        candidates = [c for c in candidates if c["id"] not in existing_ids]
+
+    if not candidates:
+        return {
+            "tenant_id": tenant_id,
+            "processed": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "skipped_existing": body.skip_existing,
+            "results": [],
+            "message": "No hot leads needed enrichment.",
+        }
+
+    results: List[Dict[str, Any]] = []
+    succeeded = failed = 0
+
+    for lead_doc in candidates:
+        lead_id = lead_doc.get("id")
+        email = (lead_doc.get("email") or "").strip()
+        domain = email.split("@")[1].lower() if "@" in email else None
+        first = lead_doc.get("first_name") or "there"
+        last = lead_doc.get("last_name") or ""
+        company = lead_doc.get("company_name") or lead_doc.get("company")
+
+        entry: Dict[str, Any] = {
+            "lead_id": lead_id,
+            "name": f"{first} {last}".strip() or email,
+            "company": company,
+            "status": "pending",
+        }
+        try:
+            crawl = await crawl_prospect(
+                tenant_id=tenant_id,
+                lead_id=lead_id,
+                first_name=first,
+                last_name=last,
+                email=email,
+                company_name=company,
+                company_domain=domain,
+                linkedin_url=lead_doc.get("linkedin_url"),
+                industry=lead_doc.get("industry"),
+            )
+            profile = await synthesise_intel(
+                tenant_id=tenant_id,
+                lead_id=lead_id,
+                lead_meta={
+                    "name": entry["name"],
+                    "first_name": first,
+                    "company": company or domain,
+                    "domain": domain,
+                    "icp": lead_doc.get("icp_fit") or lead_doc.get("icp_tier"),
+                },
+                crawl=crawl,
+            )
+            entry.update({
+                "status": "ok",
+                "fit_score": profile.get("fit_score", 0),
+                "signal_count": len(profile.get("signals") or []),
+                "risk_count": len(profile.get("risk_flags") or []),
+            })
+            succeeded += 1
+        except MissingCredential as e:
+            # No keys configured — abort the batch since every lead will fail.
+            return {
+                "tenant_id": tenant_id,
+                "processed": len(results),
+                "succeeded": succeeded,
+                "failed": failed,
+                "aborted": True,
+                "reason": str(e),
+                "results": results,
+            }
+        except CrawlLimitExceeded as e:
+            entry.update({"status": "skipped", "reason": str(e)})
+            failed += 1
+        except Exception as e:  # noqa: BLE001 — per-lead isolation
+            logger.exception("intel_routes: batch failure for lead=%s", lead_id)
+            entry.update({"status": "error", "reason": str(e)[:200]})
+            failed += 1
+        results.append(entry)
+
+        # Tiny cooperative yield so we don't monopolise the event loop
+        await asyncio.sleep(0)
+
+    return {
+        "tenant_id": tenant_id,
+        "processed": len(results),
+        "succeeded": succeeded,
+        "failed": failed,
+        "skipped_existing": body.skip_existing,
+        "results": results,
+    }
