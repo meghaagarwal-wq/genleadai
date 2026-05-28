@@ -1,3 +1,22 @@
+# Changelog
+
+## iter108 Batch B — Train ARIA async document extraction (2026-05-28)
+- Async extraction job model: `POST /api/aria/training-profile/extract-from-document`
+  now returns `{cached, job_id, status, eta_seconds, hint, is_ocr}` instead of
+  blocking. `GET /api/aria/training-profile/extract-job/{job_id}` polls
+  status (queued → extracting → done|error) and includes `elapsed_seconds`,
+  `phase`, `slow_warn` (>90s).
+- SHA256 content cache: identical re-uploads return `cached:true` in <500ms.
+- Frontend `TrainAriaV2.js`: shows `ExtractionProgress` card immediately
+  on upload, polls every 2s, displays phase label + progress bar +
+  extracted-field chips on done, surfaces slow-warn toast after 90s.
+- New collection: `training_extraction_jobs` (indexed on tenant_id+file_hash
+  and job_id).
+- Tests: `/app/backend/tests/test_iter108_async_extraction.py` — 11/11 pass
+  (queued shape, lifecycle, cache hit, 413/400/403/404 guards, regression
+  against PUT training-profile + scrape-url + history + auto-train).
+
+
 # ARIA / GenLeadAI — Changelog
 
 ## 2026-02-27 — Iter 107 (Route consolidation + Saleshandy import attempt)
