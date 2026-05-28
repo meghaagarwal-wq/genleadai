@@ -1,3 +1,44 @@
+## Iter 122 — Batch 9 FULL VERIFICATION (Feb 28, 2026)
+
+Full automated pass/fail run on Batch 9 demo-unlocks. **100% PASS** on
+both backend (13/13 pytest) AND frontend (all previously-blocked visual
+flows now exercised live).
+
+### What was verified live this iteration
+- **Tenant switcher fix CONFIRMED** — admin@demo.com is now a member of
+  BOTH `ten_demo` and `ten_pietential`; `/api/tenants/me` returns both;
+  workspace-switcher dropdown lists both options. iter121's blocker
+  closed.
+- **Conversation Thread tab on Lead Detail** — visual render passed in
+  Pietential workspace on `ptl_replytest01`: 55 thread events, filter
+  input, refresh button.
+- **Keyboard shortcuts** — `j` next, `k` prev, `Shift+G` jump-to-last,
+  `/` focus-filter, `Esc` clear+blur. All PASS live.
+- **Auto-approve rule** — 5 decision gates + inbound auto-dispatch path
+  re-verified (rule_disabled, fit_score, intent, channel, daily_cap).
+- **Notifications page** — three cards render, chips toggle, Save
+  persists.
+- **Claude `response.usage` token extraction** — positive int prompt +
+  completion tokens written to `api_usage_log`.
+- **V10 architectural guard** — `scripts/check_v10.sh` exits 0.
+
+### Fixed this iteration
+- **Notifications Save button now gates on dirty-state**
+  (`Notifications.js`): snapshot of pristine settings compared on every
+  render; `disabled={saving || !isDirty}`. Re-baselines after a
+  successful save so the button disables again until the next change.
+  Verified live: initial `disabled=""`, after Email chip toggle
+  `disabled=null`.
+
+### Open follow-ups (no blockers)
+- P1: Connect real Proxycurl + Serper API keys via `/app/integrations`
+  to run a live multi-platform crawl on a Pietential prospect (user
+  action — this is the demo-unlock).
+- P2: Add `aria-selected='true'` on the active thread row for a11y
+  (currently only Tailwind bg class indicates selection).
+- P2: 167 legacy flake8 errors in `aria_agent_routes/brain.py` etc.
+
+
 ## Iter 121 — Batch 9: ALL Backlog Items SHIPPED (Feb 2026)
 
 Closes every item from iter120's "Next Action Items + Future / Backlog"

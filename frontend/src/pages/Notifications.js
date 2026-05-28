@@ -40,6 +40,8 @@ const Notifications = () => {
   const [mb, setMb] = useState(null);
   const [ad, setAd] = useState(null);
   const [aa, setAa] = useState(null);
+  // Pristine snapshot used to compute dirty-state for the Save button.
+  const [pristine, setPristine] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -48,11 +50,20 @@ const Notifications = () => {
         setMb(r.data.morning_brief);
         setAd(r.data.approval_digest);
         setAa(r.data.auto_approve);
+        setPristine(JSON.stringify({
+          morning_brief: r.data.morning_brief,
+          approval_digest: r.data.approval_digest,
+          auto_approve: r.data.auto_approve,
+        }));
       } catch {
         toast.error('Could not load notification settings');
       } finally { setLoading(false); }
     })();
   }, []);
+
+  const isDirty = pristine !== null && JSON.stringify({
+    morning_brief: mb, approval_digest: ad, auto_approve: aa,
+  }) !== pristine;
 
   const save = async () => {
     setSaving(true);
@@ -63,6 +74,10 @@ const Notifications = () => {
         auto_approve: aa,
       });
       toast.success('Notification settings saved');
+      // Re-baseline so Save disables again until the next change.
+      setPristine(JSON.stringify({
+        morning_brief: mb, approval_digest: ad, auto_approve: aa,
+      }));
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Save failed');
     } finally { setSaving(false); }
@@ -193,7 +208,7 @@ const Notifications = () => {
       </Card>
 
       <div className="mt-6 flex items-center justify-end gap-2">
-        <button onClick={save} disabled={saving} data-testid="notifications-save"
+        <button onClick={save} disabled={saving || !isDirty} data-testid="notifications-save"
           className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-md text-sm font-bold text-white disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
           <FloppyDisk size={13} weight="fill" /> {saving ? 'Saving…' : 'Save changes'}
