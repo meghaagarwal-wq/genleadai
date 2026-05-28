@@ -160,6 +160,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter113 Batch 4 — Multi-Platform Crawl + Intelligence + Outreach Playbook
     from .intel import router as intel_router
 
+    # iter117 Batch 5 — ARIA Morning Brief (weekday 8 AM cron + Founder Brief email)
+    from .aria_morning_brief import router as morning_brief_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -212,5 +215,6 @@ def register_all_routes(app: FastAPI) -> None:
         command_center_router,
         call_booking_router,
         intel_router,
+        morning_brief_router,
     ):
         app.include_router(router)

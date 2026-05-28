@@ -46,9 +46,11 @@ const IntelTab = ({ leadId, lead }) => {
   const [researching, setResearching] = useState(false);
   const [playbookBusy, setPlaybookBusy] = useState(false);
   const [composeBusy, setComposeBusy] = useState(false);
+  const [sendBusy, setSendBusy] = useState(false);
   const [composeChannel, setComposeChannel] = useState('email');
   const [composeSteer, setComposeSteer] = useState('');
   const [composedMessage, setComposedMessage] = useState(null);
+  const [dispatchResult, setDispatchResult] = useState(null);
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -108,6 +110,7 @@ const IntelTab = ({ leadId, lead }) => {
   const runCompose = async () => {
     setComposeBusy(true);
     setComposedMessage(null);
+    setDispatchResult(null);
     try {
       const r = await ptApi.post(`/api/intel/${leadId}/compose`, {
         channel: composeChannel,
@@ -119,6 +122,33 @@ const IntelTab = ({ leadId, lead }) => {
       toast.error(err.response?.data?.detail || 'Compose failed');
     } finally {
       setComposeBusy(false);
+    }
+  };
+
+  // iter117 — final-mile: compose AND dispatch via Resend / 360dialog / LinkedIn.
+  const runComposeAndSend = async () => {
+    setSendBusy(true);
+    setDispatchResult(null);
+    try {
+      const r = await ptApi.post(`/api/intel/${leadId}/compose-and-send`, {
+        channel: composeChannel,
+        user_steer: composeSteer.trim() || undefined,
+        auto_send: true,
+      });
+      setComposedMessage(r.data.composed);
+      setDispatchResult(r.data.dispatch);
+      const d = r.data.dispatch || {};
+      if (d.sent) {
+        toast.success(`Sent via ${d.provider || composeChannel}`);
+      } else if (d.logged_only) {
+        toast.info(d.note || 'Drafted — awaiting manual send');
+      } else {
+        toast.error(d.error || 'Send failed');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Send failed');
+    } finally {
+      setSendBusy(false);
     }
   };
 
@@ -257,17 +287,28 @@ const IntelTab = ({ leadId, lead }) => {
               rows={2}
               className="w-full text-sm border border-[#E2E8F0] rounded-md px-2.5 py-1.5 outline-none resize-none mb-2"
             />
-            <div className="flex items-center justify-between">
-              <button
-                onClick={runCompose}
-                disabled={composeBusy}
-                data-testid="intel-compose-go"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
-              >
-                <Lightning size={13} weight="fill" />
-                {composeBusy ? 'Composing…' : `Compose ${composeChannel}`}
-              </button>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={runCompose}
+                  disabled={composeBusy || sendBusy}
+                  data-testid="intel-compose-go"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/40 hover:bg-[#FAF7FF] disabled:opacity-50"
+                >
+                  <Lightning size={13} weight="bold" />
+                  {composeBusy ? 'Composing…' : 'Draft'}
+                </button>
+                <button
+                  onClick={runComposeAndSend}
+                  disabled={composeBusy || sendBusy}
+                  data-testid="intel-send-via-aria"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
+                >
+                  <Sparkle size={13} weight="fill" />
+                  {sendBusy ? 'Sending…' : 'Send via ARIA'}
+                </button>
+              </div>
               {composedMessage && (
                 <button onClick={copyMessage} data-testid="intel-compose-copy"
                   className="inline-flex items-center gap-1 text-xs font-semibold text-[#7C35DC] hover:text-[#4C1D95]">
@@ -289,6 +330,24 @@ const IntelTab = ({ leadId, lead }) => {
                 )}
                 {!composedMessage.ai_powered && (
                   <div className="mt-2 text-[10px] text-[#DC2626]">Fallback message — Claude unavailable.</div>
+                )}
+                {dispatchResult && (
+                  <div
+                    data-testid="intel-dispatch-result"
+                    className={`mt-3 px-2.5 py-1.5 rounded-md text-[11px] font-semibold border ${
+                      dispatchResult.sent
+                        ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
+                        : dispatchResult.logged_only
+                        ? 'text-amber-700 border-amber-200 bg-amber-50'
+                        : 'text-[#7F1D1D] border-red-200 bg-red-50'
+                    }`}
+                  >
+                    {dispatchResult.sent
+                      ? `✓ Sent via ${dispatchResult.provider || composeChannel}${dispatchResult.provider_id ? ` · ${dispatchResult.provider_id}` : ''}`
+                      : dispatchResult.logged_only
+                      ? `↗ Drafted — ${dispatchResult.note || 'queued for manual send'}`
+                      : `× ${dispatchResult.error || 'Send failed'}`}
+                  </div>
                 )}
               </div>
             )}

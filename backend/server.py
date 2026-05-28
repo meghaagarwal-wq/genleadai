@@ -2878,6 +2878,14 @@ async def _start_eod_wrap_loop():
     print("[EODWrap] Background loop started (60s tick)")
 
 
+@app.on_event("startup")
+async def _start_morning_brief_loop():
+    """iter117 Batch 5 — ARIA Morning Brief (weekday 8 AM workspace-local cron)."""
+    from routes.aria_morning_brief import morning_brief_loop
+    asyncio.create_task(morning_brief_loop())
+    print("[MorningBrief] Background loop started (60s tick)")
+
+
 
 # EOD-wrap module moved to routes/aria_eod_wrap.py (iter108 ACTION 3)
 

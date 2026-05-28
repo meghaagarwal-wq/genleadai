@@ -36,6 +36,7 @@ from services.intel_service import (
     generate_playbook,
     compose_message,
 )
+from services.outreach_dispatch import dispatch_outreach
 
 logger = logging.getLogger("intel_routes")
 router = APIRouter(prefix="/api/intel", tags=["intel"])
@@ -100,6 +101,10 @@ class PlaybookRequest(BaseModel):
 class ComposeRequest(BaseModel):
     channel: str = Field(default="email", description="whatsapp | email | linkedin")
     user_steer: Optional[str] = Field(default=None, description="Founder note to bias the message.")
+
+
+class ComposeAndSendRequest(ComposeRequest):
+    auto_send: bool = Field(default=True, description="If false, returns the composed message without sending.")
 
 
 # ─── POST /api/intel/{lead_id}/research ─────────────────────────────────
@@ -238,6 +243,54 @@ async def compose(
 async def budget(lead_id: str, current_user: dict = Depends(get_current_user)):
     tenant_id = current_user.get("tenant_id")
     return get_budget_snapshot(tenant_id, lead_id)
+
+
+# ─── POST /api/intel/{lead_id}/compose-and-send ─────────────────────────
+@router.post("/{lead_id}/compose-and-send")
+async def compose_and_send(
+    lead_id: str,
+    body: ComposeAndSendRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Closes the loop: compose via Claude, then dispatch through the
+    right provider (Resend / WhatsApp / LinkedIn). Returns both the
+    composed message and the send result so the UI can show what went
+    out."""
+    tenant_id = current_user.get("tenant_id")
+    profile = intel_profiles_col.find_one(
+        {"tenant_id": tenant_id, "lead_id": lead_id}, {"_id": 0}
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="No intel profile yet — call POST /api/intel/{lead_id}/research first.",
+        )
+
+    lead = _load_lead(tenant_id, lead_id)
+    composed = await compose_message(
+        tenant_id=tenant_id,
+        lead_id=lead_id,
+        channel=body.channel,
+        lead_meta={
+            "name": lead["name"],
+            "first_name": lead["first_name"],
+            "company": lead["company"] or lead["domain"],
+        },
+        profile=profile,
+        user_steer=body.user_steer,
+    )
+
+    if not body.auto_send:
+        return {"composed": composed, "dispatch": None}
+
+    dispatch = await dispatch_outreach(
+        tenant_id=tenant_id,
+        lead_id=lead_id,
+        channel=body.channel,
+        composed=composed,
+        actor_user_id=current_user.get("email"),
+    )
+    return {"composed": composed, "dispatch": dispatch}
 
 
 # ─── POST /api/intel/batch/hot-leads ────────────────────────────────────
