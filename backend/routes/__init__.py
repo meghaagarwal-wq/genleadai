@@ -151,6 +151,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter109 Batch 2 — Command Center KPIs (mode-aware aggregates)
     from .command_center import router as command_center_router
 
+    # Iter109c Batch 1 — Universal OAuth providers (per-tenant credentials)
+    from .oauth_providers import router as oauth_providers_router, public_router as oauth_providers_public_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -196,5 +199,7 @@ def register_all_routes(app: FastAPI) -> None:
         aria_call_priority_router,
         demo_seeder_router,
         command_center_router,
+        oauth_providers_router,
+        oauth_providers_public_router,
     ):
         app.include_router(router)

@@ -1,355 +1,435 @@
-import { useEffect, useState } from 'react';
-import { Plugs, ArrowClockwise, Copy } from '@phosphor-icons/react';
+/**
+ * Integrations page — iter109c Batch 1 rebuild.
+ *
+ * Universal OAuth + API-key UX:
+ *   • Provider registry comes from /app/frontend/src/config/integrations.js
+ *   • Status comes from GET /api/integrations/{id}/status
+ *   • OAuth flow: POST /configure → GET /auth-url → open popup → GET /callback
+ *   • API-key flow: POST /configure-api-key (auto-marks as connected)
+ *
+ * Zero CLIENT_ID/CLIENT_SECRET ever sits in the .env — all per-workspace.
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ptApi, PageHeader, fmtDateTime } from '../shared';
-import IntegrationsExtras from './IntegrationsExtras';
-import ApiKeyInput from '../../components/ApiKeyInput';
+import {
+  MagnifyingGlass, CheckCircle, Circle, Warning,
+  Plug, ArrowSquareOut, X as XIcon, CircleNotch,
+  Trash, Lightning, Eye, EyeSlash,
+} from '@phosphor-icons/react';
+import api from '../../config/api';
+import { INTEGRATIONS, CATEGORIES, getIntegration } from '../../config/integrations';
 
-// iter108 — providers that have a real-time `/api/integrations/validate-key`
-// implementation. For any other integration card the legacy plain input is
-// used (no functional change). Keep this in sync with VALIDATORS in
-// /app/backend/routes/api_key_validator.py.
-const VALIDATED_PROVIDERS = ['saleshandy', 'proxycurl', 'serper', 'apollo', '360dialog', 'resend'];
-
-const PRETTY = {
-  saleshandy: 'Saleshandy',
-  lemlist: 'Lemlist',
-  apollo: 'Apollo',
-  apify: 'Apify',
-  the_boomernag: 'The Boomernag',
-  make_com: 'Make.com',
-  n8n: 'n8n',
-  calendly: 'Calendly',
-  ga4: 'Google Analytics 4',
-  linkedin_pixel: 'LinkedIn Pixel',
-  newsletter_platform: 'Newsletter platform',
-  lead_magnet_form: 'Lead magnet form',
-  pietential_website_forms: 'Pietential website forms',
+const STATUS_TONE = {
+  connected:     { color: '#22c55e', label: 'Connected',     dot: '●' },
+  configured:    { color: '#f59e0b', label: 'Configured',    dot: '●' },
+  not_connected: { color: '#94a3b8', label: 'Not connected', dot: '○' },
+  error:         { color: '#ef4444', label: 'Error',         dot: '⚠' },
 };
 
-const STATUS_META = {
-  not_connected: { label: 'Not connected', color: '#94A3B8' },
-  needs_setup:   { label: 'Needs setup',    color: '#F59E0B' },
-  connected:     { label: 'Connected',      color: '#7C35DC' },
-};
 
-// Source-specific webhook routes that Make.com / n8n should hit
-const WEBHOOK_HINTS = {
-  saleshandy: ['/api/pt/webhooks/saleshandy/open', '/api/pt/webhooks/saleshandy/click', '/api/pt/webhooks/saleshandy/reply'],
-  lemlist: ['/api/pt/webhooks/lemlist/connection-accepted', '/api/pt/webhooks/lemlist/dm-reply'],
-  newsletter_platform: ['/api/pt/webhooks/newsletter/subscribe', '/api/pt/webhooks/newsletter/open', '/api/pt/webhooks/newsletter/click'],
-  lead_magnet_form: ['/api/pt/webhooks/lead-magnet/claim', '/api/pt/webhooks/job-satisfaction-analysis/claim', '/api/pt/webhooks/job-satisfaction-analysis/complete'],
-  calendly: ['/api/pt/webhooks/calendly/booked'],
-  ga4: ['/api/pt/webhooks/ga4/high-intent-page-visit'],
-};
-
-// iter106 — OAuth integrations panel
-const OAUTH_PROVIDERS = [
-  { id: 'calendly',  label: 'Calendly',     desc: 'Auto-register no-show + booked + cancelled webhooks.' },
-  { id: 'gmail',     label: 'Gmail',        desc: 'Track replies on outbound email threads.' },
-  { id: 'outlook',   label: 'Outlook',      desc: 'Track replies on outbound email threads.' },
-  { id: 'meta',      label: 'Meta Ads',     desc: 'Pull Lead Gen Form submissions every 15 min.' },
-  { id: 'linkedin',  label: 'LinkedIn',     desc: 'Organic posting + profile data.' },
-  { id: 'googleads', label: 'Google Ads',   desc: 'Pull lead form conversions every 15 min.' },
-];
-
-const OAuthIntegrations = () => {
+const IntegrationsPage = () => {
   const [statuses, setStatuses] = useState({});
-  const [busyId, setBusyId] = useState(null);
-  const refresh = async () => {
-    try {
-      const { data } = await ptApi.get('/api/integrations/list');
-      const map = {};
-      for (const item of (data?.integrations || [])) {
-        if (OAUTH_PROVIDERS.find(p => p.id === item.platform)) {
-          map[item.platform] = item;
-        }
-      }
-      setStatuses(map);
-    } catch (e) { /* silent — list endpoint optional */ }
-  };
-  useEffect(() => { refresh(); }, []);
-
-  const connect = async (id) => {
-    setBusyId(id);
-    try {
-      const { data } = await ptApi.get(`/api/integrations/${id}/connect`);
-      const w = window.open(data.auth_url, '_blank', 'width=520,height=720');
-      const onMsg = (e) => {
-        if (e?.data?.type === 'oauth_done' && e.data.provider === id) {
-          window.removeEventListener('message', onMsg);
-          refresh();
-          toast.success(`${id} connected`);
-          try { w && w.close(); } catch (_) {}
-        }
-      };
-      window.addEventListener('message', onMsg);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || `Could not start ${id} OAuth — check provider credentials in backend env`);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const disconnect = async (id) => {
-    if (!window.confirm(`Disconnect ${id}? You'll need to reconnect to use this integration.`)) return;
-    setBusyId(id);
-    try {
-      await ptApi.delete(`/api/integrations/${id}`);
-      toast.success(`${id} disconnected`);
-      refresh();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Disconnect failed');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <div className="mb-6" data-testid="pt-integ-oauth-section">
-      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2">OAuth integrations</div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {OAUTH_PROVIDERS.map(p => {
-          const cur = statuses[p.id];
-          const connected = cur?.status === 'connected';
-          return (
-            <div key={p.id} className="border border-[#E2E8F0] rounded-xl p-4 bg-white" data-testid={`pt-integ-oauth-card-${p.id}`}>
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="font-semibold text-sm text-[#0F172A]">{p.label}</div>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: connected ? '#DCFCE7' : '#F1F5F9', color: connected ? '#15803D' : '#64748B' }}>
-                  {connected ? 'Connected' : 'Not connected'}
-                </span>
-              </div>
-              <p className="text-xs text-[#64748B] mb-3">{p.desc}</p>
-              {connected && cur?.last_sync && (
-                <div className="text-[10px] text-[#64748B] mb-2">Last sync: {fmtDateTime(cur.last_sync)}</div>
-              )}
-              <div className="flex gap-2">
-                {!connected && (
-                  <button
-                    onClick={() => connect(p.id)}
-                    disabled={busyId === p.id}
-                    data-testid={`pt-integ-oauth-connect-${p.id}`}
-                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg">
-                    {busyId === p.id ? 'Opening…' : 'Connect'}
-                  </button>
-                )}
-                {connected && (
-                  <button
-                    onClick={() => disconnect(p.id)}
-                    disabled={busyId === p.id}
-                    data-testid={`pt-integ-oauth-disconnect-${p.id}`}
-                    className="px-3 py-1.5 border border-[#E2E8F0] hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-semibold rounded-lg">
-                    Disconnect
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-
-const PtIntegrations = () => {
-  const [primary, setPrimary] = useState([]);
-  const [future, setFuture] = useState([]);
   const [loading, setLoading] = useState(true);
-  // iter108 P3 — last-validation status per provider so cards can render
-  // "✓ Last validated 3 min ago" without re-hitting the third-party.
-  const [keyStatus, setKeyStatus] = useState({});
-  const base = process.env.REACT_APP_BACKEND_URL;
+  const [category, setCategory] = useState('all');
+  const [query, setQuery] = useState('');
+  const [activeProvider, setActiveProvider] = useState(null);  // open modal
+  const [refreshCount, setRefreshCount] = useState(0);
 
-  const load = async () => {
+  const refresh = async () => {
     setLoading(true);
     try {
-      const [integ, st] = await Promise.all([
-        ptApi.get('/api/pt/integrations'),
-        ptApi.get('/api/integrations/validate-key/status').catch(() => ({ data: { items: [] } })),
-      ]);
-      setPrimary(integ.data.primary || []);
-      setFuture(integ.data.future || []);
-      const map = {};
-      (st.data.items || []).forEach(it => { map[it.provider] = it; });
-      setKeyStatus(map);
-    }
-    finally { setLoading(false); }
+      const results = await Promise.all(
+        INTEGRATIONS.map((p) =>
+          api.get(`/api/integrations/${p.id}/status`).then((r) => [p.id, r.data]).catch(() => [p.id, null])
+        )
+      );
+      setStatuses(Object.fromEntries(results));
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { refresh(); }, [refreshCount]);
 
-  const save = async (name, body) => {
-    try { await ptApi.post('/api/pt/integrations', { name, ...body }); load(); toast.success('Saved'); }
-    catch (err) { toast.error(err.response?.data?.detail || 'Could not save'); }
-  };
-
-  const test = async (name) => {
-    try {
-      const r = await ptApi.post(`/api/pt/integrations/${name}/test`);
-      load();
-      toast.success(r.data?.message || 'Connection verified');
+  // Detect ?connected=<provider> on return from OAuth callback
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search);
+    const connected = u.get('connected');
+    const errProvider = u.get('error');
+    const reason = u.get('reason');
+    if (connected) {
+      const meta = getIntegration(connected);
+      toast.success(`${meta?.name || connected} connected ✓`);
+      // Clean URL
+      window.history.replaceState({}, '', '/app/integrations');
+      setRefreshCount((c) => c + 1);
     }
-    catch (err) {
-      const detail = err.response?.data?.detail || 'Test failed';
-      toast.error(detail, { duration: 8000 });
+    if (errProvider) {
+      const meta = getIntegration(errProvider);
+      toast.error(`${meta?.name || errProvider} failed: ${reason || 'unknown'}`);
+      window.history.replaceState({}, '', '/app/integrations');
     }
-  };
+  }, []);
 
-  const copy = (txt) => { navigator.clipboard.writeText(txt); toast.success('Copied'); };
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return INTEGRATIONS.filter((p) => {
+      if (category !== 'all' && p.category !== category) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !(p.services || []).some((s) => s.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [category, query]);
 
   return (
-    <div data-testid="pt-integrations-page">
-      <PageHeader title="Integrations" subtitle="Saleshandy and Lemlist are the two primary platforms for the Pietential demo. Everything else is future / optional." />
+    <div className="p-6 md:p-8 max-w-7xl mx-auto" data-testid="integrations-page" style={{ color: 'var(--theme-text)' }}>
+      <header className="mb-6">
+        <h1 className="text-3xl font-extrabold mb-1" style={{ color: 'var(--theme-text)', fontFamily: 'Space Grotesk, Inter', letterSpacing: '-0.02em' }}>
+          Integrations
+        </h1>
+        <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>
+          Connect your tools. Everything flows into ARIA automatically.
+        </p>
+      </header>
 
-      {loading ? (
-        <div className="text-sm text-[#64748B]">Loading…</div>
-      ) : (
-        <>
-          {/* iter106 — OAuth integrations (Calendly / Gmail / Outlook / Meta / LinkedIn / Google Ads) */}
-          <OAuthIntegrations />
+      {/* Category filter + search */}
+      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-5">
+        <div className="flex flex-wrap gap-1.5" data-testid="integrations-category-tabs">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCategory(c.id)}
+              data-testid={`integrations-cat-${c.id}`}
+              className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors"
+              style={{
+                background: category === c.id ? 'var(--theme-purple-dim)' : 'var(--theme-surface)',
+                borderColor: category === c.id ? 'var(--theme-purple)' : 'var(--theme-border-strong)',
+                color: category === c.id ? 'var(--theme-purple-light)' : 'var(--theme-text-muted)',
+              }}
+            >{c.label}</button>
+          ))}
+        </div>
+        <div className="relative ml-auto w-full md:w-64">
+          <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--theme-text-muted)' }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search integrations…"
+            data-testid="integrations-search"
+            className="w-full pl-8 pr-3 py-1.5 rounded-md text-sm outline-none border"
+            style={{
+              background: 'var(--theme-surface)',
+              borderColor: 'var(--theme-border-strong)',
+              color: 'var(--theme-text)',
+            }}
+          />
+        </div>
+      </div>
 
-          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC] mb-2" data-testid="pt-integ-primary-heading">Primary platforms</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-            {primary.map(r => (
-              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} keyStatus={keyStatus[r.name]} />
-            ))}
+      {/* Cards grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="integrations-grid">
+        {filtered.map((p) => (
+          <IntegrationCard
+            key={p.id}
+            provider={p}
+            status={statuses[p.id]}
+            loading={loading}
+            onConnect={() => setActiveProvider(p)}
+            onDisconnect={async () => {
+              if (!window.confirm(`Disconnect ${p.name}?`)) return;
+              try {
+                await api.delete(`/api/integrations/${p.id}`);
+                toast.success(`${p.name} disconnected`);
+                setRefreshCount((c) => c + 1);
+              } catch (e) {
+                toast.error(`Disconnect failed: ${e?.response?.data?.detail || e.message}`);
+              }
+            }}
+            onTest={async () => {
+              try {
+                const { data } = await api.post(`/api/integrations/${p.id}/test`);
+                toast[data.valid ? 'success' : 'error'](data.message || (data.valid ? 'OK' : 'Test failed'));
+              } catch (e) {
+                toast.error(`Test failed: ${e?.response?.data?.detail || e.message}`);
+              }
+            }}
+          />
+        ))}
+        {filtered.length === 0 && (
+          <div className="col-span-full text-center py-12 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
+            No integrations match.
           </div>
+        )}
+      </div>
 
-          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#94A3B8] mb-2" data-testid="pt-integ-future-heading">Future / optional integrations</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {future.map(r => (
-              <IntegrationCard key={r.name} integ={r} base={base} hints={WEBHOOK_HINTS[r.name] || []} onSave={save} onTest={test} onCopy={copy} keyStatus={keyStatus[r.name]} compact />
-            ))}
-          </div>
-
-          <IntegrationsExtras />
-        </>
+      {activeProvider && (
+        <ConnectModal
+          provider={activeProvider}
+          status={statuses[activeProvider.id]}
+          onClose={() => setActiveProvider(null)}
+          onComplete={() => { setActiveProvider(null); setRefreshCount((c) => c + 1); }}
+        />
       )}
     </div>
   );
 };
 
-const IntegrationCard = ({ integ, base, hints, onSave, onTest, onCopy, compact, keyStatus }) => {
-  const sm = STATUS_META[integ.status] || STATUS_META.not_connected;
-  const [apiKey, setApiKey] = useState('');
-  const [keyValid, setKeyValid] = useState(false);  // iter108 — gates Save for validated providers
-  const [webhookSecret, setWebhookSecret] = useState('');
-  const [webhookUrl, setWebhookUrl] = useState(integ.webhook_url || '');
 
+// ── IntegrationCard ─────────────────────────────────────────────────────
+const IntegrationCard = ({ provider, status, loading, onConnect, onDisconnect, onTest }) => {
+  const s = status || { status: 'not_connected' };
+  const tone = STATUS_TONE[s.status] || STATUS_TONE.not_connected;
+  const isConnected = s.status === 'connected';
+  const isConfigured = s.status === 'configured';
   return (
-    <div className="bg-white border border-[#E2E8F0] rounded-lg p-4" data-testid={`pt-integ-${integ.name}`}>
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: `${sm.color}14`, color: sm.color }}>
-            <Plugs size={14} weight="duotone" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-[#0F172A]">{PRETTY[integ.name] || integ.name}</div>
-            <div className="text-[10px] uppercase tracking-[0.14em] font-bold" style={{ color: sm.color }}>{sm.label}</div>
-          </div>
+    <div
+      className="rounded-lg border p-4 flex flex-col"
+      style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+      data-testid={`integration-card-${provider.id}`}
+    >
+      <div className="flex items-start gap-3 mb-2">
+        <div className="w-10 h-10 rounded-md flex items-center justify-center text-base font-bold flex-shrink-0"
+             style={{ background: 'var(--theme-surface2)', color: 'var(--theme-purple-light)' }}>
+          {provider.name[0]}
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => onTest(integ.name)} data-testid={`pt-integ-test-${integ.name}`}
-            className="text-xs font-semibold text-[#7C35DC] hover:underline inline-flex items-center gap-1"><ArrowClockwise size={11} /> Test</button>
-          {!compact && integ.api_key_masked && (
-            <button onClick={async () => {
-              try { const r = await ptApi.post(`/api/pt/integrations/${integ.name}/sync`); toast.success(r.data.message || 'Sync queued'); }
-              catch (err) { toast.error(err.response?.data?.detail || 'Sync failed'); }
-            }} data-testid={`pt-integ-sync-${integ.name}`}
-              className="text-xs font-semibold text-white px-2 py-0.5 rounded-md inline-flex items-center gap-1" style={{ background: '#7C35DC' }}>
-              Sync now
-            </button>
-          )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <div className="text-sm font-bold truncate" style={{ color: 'var(--theme-text)' }}>{provider.name}</div>
+            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
+                  style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text-muted)' }}>
+              {provider.category}
+            </span>
+          </div>
+          <div className="text-[11px] flex items-center gap-1.5" style={{ color: tone.color }}>
+            <span>{tone.dot}</span>
+            <span data-testid={`integration-status-${provider.id}`}>{tone.label}</span>
+            {s.last_sync_at && <span style={{ color: 'var(--theme-text-muted)' }}>· last sync {formatRel(s.last_sync_at)}</span>}
+          </div>
         </div>
       </div>
-
-      <div className="space-y-2.5">
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">API key {integ.api_key_masked && <span className="text-[#94A3B8] normal-case ml-1">· current: {integ.api_key_masked}</span>}</label>
-          {VALIDATED_PROVIDERS.includes(integ.name) ? (
-            <>
-              <ApiKeyInput
-                provider={integ.name}
-                value={apiKey}
-                onChange={setApiKey}
-                onValidityChange={setKeyValid}
-                placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
-                testIdBase={`pt-integ-key-${integ.name}`}
-                lastValidatedAt={keyStatus?.last_validated_at}
-                lastValid={keyStatus?.last_valid}
-              />
-              <div className="flex justify-end mt-2">
-                <button
-                  onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })}
-                  disabled={!apiKey || !keyValid}
-                  data-testid={`pt-integ-save-${integ.name}`}
-                  className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50"
-                  style={{ background: '#7C35DC' }}
-                >
-                  Save
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={integ.api_key_masked ? 'Replace key…' : 'Paste API key'}
-                data-testid={`pt-integ-key-${integ.name}`}
-                className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
-              <button onClick={() => apiKey && onSave(integ.name, { api_key: apiKey, status: 'connected' })} disabled={!apiKey}
-                data-testid={`pt-integ-save-${integ.name}`}
-                className="text-xs font-semibold text-white px-3 py-1.5 rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>Save</button>
-            </div>
-          )}
-        </div>
-
-        {!compact && (
-          <>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">
-                Webhook secret {integ.webhook_secret_set && <span className="text-[#16A34A] normal-case ml-1">· set</span>}
-              </label>
-              <div className="flex items-center gap-1.5">
-                <input type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)}
-                  placeholder={integ.webhook_secret_set ? 'Replace secret…' : 'Optional — verify X-Pt-Webhook-Secret header'}
-                  data-testid={`pt-integ-secret-${integ.name}`}
-                  className="flex-1 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
-                <button onClick={() => webhookSecret && onSave(integ.name, { webhook_secret: webhookSecret })} disabled={!webhookSecret}
-                  className="text-xs font-semibold text-[#7C35DC] border border-[#7C35DC]/30 px-3 py-1.5 rounded-md disabled:opacity-50">Save</button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Outgoing webhook URL (optional)</label>
-              <input value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://hooks.zapier.com/…"
-                onBlur={() => webhookUrl !== integ.webhook_url && onSave(integ.name, { webhook_url: webhookUrl })}
-                className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
-            </div>
-
-            {hints.length > 0 && (
-              <div className="pt-2 border-t border-[#F1F5F9]">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">Inbound webhook endpoints</div>
-                <div className="space-y-1">
-                  {hints.map(h => (
-                    <div key={h} className="flex items-center justify-between gap-2 bg-[#F8FAFC] rounded px-2 py-1 text-xs text-[#475569] font-mono">
-                      <span className="truncate">{base}{h}</span>
-                      <button onClick={() => onCopy(`${base}${h}`)} className="text-[#7C35DC]"><Copy size={11} weight="bold" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+      <div className="text-[11px] mb-3 line-clamp-2 min-h-[28px]" style={{ color: 'var(--theme-text-muted)' }}>
+        {(provider.services || []).join(' · ')}
+      </div>
+      <div className="flex gap-1.5 mt-auto">
+        {!isConnected && !isConfigured && (
+          <button onClick={onConnect} data-testid={`integration-connect-${provider.id}`}
+                  className="flex-1 px-3 py-1.5 rounded-md text-xs font-bold text-white"
+                  style={{ background: 'var(--theme-purple)' }}>
+            <Plug size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Connect
+          </button>
         )}
-
-        {integ.last_sync_at && (
-          <div className="text-[10px] text-[#64748B]">Last sync: {fmtDateTime(integ.last_sync_at)}</div>
+        {isConfigured && !isConnected && (
+          <button onClick={onConnect} data-testid={`integration-resume-${provider.id}`}
+                  className="flex-1 px-3 py-1.5 rounded-md text-xs font-bold text-white"
+                  style={{ background: 'var(--theme-amber)' }}>
+            Continue setup
+          </button>
+        )}
+        {isConnected && (
+          <>
+            <button onClick={onTest} data-testid={`integration-test-${provider.id}`}
+                    className="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold border"
+                    style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}>
+              <Lightning size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Test
+            </button>
+            <button onClick={onConnect} data-testid={`integration-settings-${provider.id}`}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold border"
+                    style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text-muted)' }}>
+              Settings
+            </button>
+            <button onClick={onDisconnect} data-testid={`integration-disconnect-${provider.id}`}
+                    className="px-2 py-1.5 rounded-md text-xs font-semibold border"
+                    style={{ borderColor: 'var(--theme-border-strong)', color: '#ef4444' }}
+                    aria-label="Disconnect">
+              <Trash size={12} weight="bold" />
+            </button>
+          </>
         )}
       </div>
     </div>
   );
 };
 
-export default PtIntegrations;
+
+// ── ConnectModal — OAuth or API-key ─────────────────────────────────────
+const ConnectModal = ({ provider, status, onClose, onComplete }) => {
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [extra, setExtra] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
+  const isOAuth = !!provider.oauth;
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      if (isOAuth) {
+        if (!clientId || !clientSecret) {
+          toast.error('Both CLIENT_ID and CLIENT_SECRET are required');
+          setBusy(false); return;
+        }
+        await api.post(`/api/integrations/${provider.id}/configure`, {
+          client_id: clientId,
+          client_secret: clientSecret,
+        });
+        const { data } = await api.get(`/api/integrations/${provider.id}/auth-url`);
+        // Open OAuth window — the callback redirects back to /app/integrations?connected=…
+        const w = window.open(data.auth_url, '_blank', 'width=560,height=720');
+        if (!w) {
+          toast.warning('Popup blocked — opening in this tab');
+          window.location.href = data.auth_url;
+          return;
+        }
+        // Poll for window close + then re-check status
+        const poll = setInterval(async () => {
+          if (w.closed) {
+            clearInterval(poll);
+            onComplete();
+          }
+        }, 1000);
+      } else {
+        if (!apiKey) { toast.error('API key required'); setBusy(false); return; }
+        await api.post(`/api/integrations/${provider.id}/configure-api-key`, {
+          api_key: apiKey,
+          extra_config: extra,
+        });
+        toast.success(`${provider.name} connected ✓`);
+        onComplete();
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Connect failed');
+    } finally { setBusy(false); }
+  };
+
+  const extraFields = (provider.requires || []).filter((f) => !['api_key', 'client_id', 'client_secret'].includes(f));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+         data-testid={`connect-modal-${provider.id}`}
+         style={{ background: 'rgba(0,0,0,0.6)' }}>
+      <div className="rounded-xl border w-full max-w-md p-5 relative"
+           style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}>
+        <button onClick={onClose} className="absolute top-3 right-3 p-1 rounded-md hover:bg-[var(--theme-surface2)]"
+                aria-label="Close" data-testid="connect-modal-close">
+          <XIcon size={16} style={{ color: 'var(--theme-text-muted)' }} />
+        </button>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-12 h-12 rounded-md flex items-center justify-center text-xl font-bold"
+               style={{ background: 'var(--theme-surface2)', color: 'var(--theme-purple-light)' }}>
+            {provider.name[0]}
+          </div>
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--theme-text)' }}>{provider.name}</h2>
+            <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{(provider.services || []).join(' · ')}</div>
+          </div>
+        </div>
+
+        {/* What this unlocks */}
+        {provider.what_this_unlocks && (
+          <ul className="mb-4 space-y-1 text-xs" style={{ color: 'var(--theme-text-muted)' }}>
+            {provider.what_this_unlocks.map((b, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span style={{ color: 'var(--theme-purple-light)' }}>•</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Setup instructions + console link */}
+        <div className="rounded-md p-2.5 mb-4 text-xs border"
+             style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}>
+          <div style={{ color: 'var(--theme-text-muted)' }}>{provider.setup_instructions}</div>
+          {provider.console_url && (
+            <a href={provider.console_url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 text-xs font-semibold mt-1.5"
+               style={{ color: 'var(--theme-purple-light)' }}
+               data-testid="connect-modal-console-link">
+              Get my credentials <ArrowSquareOut size={11} weight="bold" />
+            </a>
+          )}
+        </div>
+
+        {/* Inputs */}
+        {isOAuth ? (
+          <>
+            <Field label="CLIENT_ID" value={clientId} onChange={setClientId} testId="connect-input-client-id" />
+            <Field label="CLIENT_SECRET" value={clientSecret} onChange={setClientSecret}
+                   type={showSecret ? 'text' : 'password'} testId="connect-input-client-secret"
+                   rightSlot={
+                     <button type="button" onClick={() => setShowSecret((v) => !v)}
+                             className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}
+                             aria-label={showSecret ? 'Hide secret' : 'Show secret'}>
+                       {showSecret ? <EyeSlash size={14} /> : <Eye size={14} />}
+                     </button>
+                   } />
+            <button onClick={() => setShowWhy((v) => !v)} className="text-[11px] mb-3" style={{ color: 'var(--theme-purple-light)' }}>
+              Why do I need these? {showWhy ? '▴' : '▾'}
+            </button>
+            {showWhy && (
+              <div className="text-xs mb-3 p-2.5 rounded-md" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text-muted)' }}>
+                Your OAuth app's CLIENT_ID and CLIENT_SECRET let ARIA make authorized calls to {provider.name} on your behalf. They're encrypted at rest with Fernet and never leave your workspace.
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <Field label="API key" value={apiKey} onChange={setApiKey}
+                   type={showSecret ? 'text' : 'password'} testId="connect-input-api-key"
+                   rightSlot={
+                     <button type="button" onClick={() => setShowSecret((v) => !v)}
+                             className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>
+                       {showSecret ? <EyeSlash size={14} /> : <Eye size={14} />}
+                     </button>
+                   } />
+            {extraFields.map((f) => (
+              <Field key={f} label={f.replace(/_/g, ' ')} value={extra[f] || ''} onChange={(v) => setExtra({ ...extra, [f]: v })}
+                     testId={`connect-input-${f}`} />
+            ))}
+          </>
+        )}
+
+        <button onClick={handleSubmit} disabled={busy} data-testid="connect-modal-submit"
+                className="w-full mt-3 px-4 py-2 rounded-md font-bold text-sm text-white disabled:opacity-50"
+                style={{ background: 'var(--theme-purple)' }}>
+          {busy ? <CircleNotch size={14} className="animate-spin inline -mt-0.5 mr-1" /> : null}
+          {isOAuth ? (busy ? 'Opening OAuth…' : 'Save & Connect') : (busy ? 'Saving…' : 'Save credentials')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const Field = ({ label, value, onChange, type = 'text', testId, rightSlot }) => (
+  <label className="block mb-2.5">
+    <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--theme-text-muted)' }}>{label}</span>
+    <div className="relative mt-1">
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        data-testid={testId}
+        className="w-full px-3 py-2 rounded-md text-sm outline-none border"
+        style={{
+          background: 'var(--theme-surface2)',
+          borderColor: 'var(--theme-border-strong)',
+          color: 'var(--theme-text)',
+          paddingRight: rightSlot ? '34px' : undefined,
+          fontFamily: 'monospace',
+        }}
+      />
+      {rightSlot && <span className="absolute right-2 top-1/2 -translate-y-1/2">{rightSlot}</span>}
+    </div>
+  </label>
+);
+
+const formatRel = (iso) => {
+  try {
+    const diff = (Date.now() - new Date(iso).getTime()) / 60000;
+    if (diff < 1) return 'just now';
+    if (diff < 60) return `${Math.floor(diff)} min ago`;
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+    return `${Math.floor(diff / 1440)}d ago`;
+  } catch { return iso; }
+};
+
+export default IntegrationsPage;
