@@ -145,7 +145,17 @@ const IntegrationsPage = () => {
             onTest={async () => {
               try {
                 const { data } = await api.post(`/api/integrations/${p.id}/test`);
-                toast[data.valid ? 'success' : 'error'](data.message || (data.valid ? 'OK' : 'Test failed'));
+                // iter125 — backend returns { ok, message, warning? }.
+                // ok:true + warning:true → amber/info (could not verify, but key saved).
+                // ok:true            → green (provider responded 200).
+                // ok:false           → red (provider rejected key with 401/403).
+                if (data.ok && data.warning) {
+                  toast(data.message || 'Could not run a live test');
+                } else if (data.ok) {
+                  toast.success(data.message || `${p.name} OK`);
+                } else {
+                  toast.error(data.message || 'Test failed');
+                }
               } catch (e) {
                 toast.error(`Test failed: ${e?.response?.data?.detail || e.message}`);
               }

@@ -210,6 +210,45 @@ async def test_connection(integration_type: str, tenant: dict = Depends(get_acti
     cfg = configs_col.find_one({"tenant_id": tenant["id"], "integration_type": integration_type}, {"_id": 0})
     if not cfg:
         raise HTTPException(status_code=404, detail="Not configured")
+    config_dict = cfg.get("config", {}) or {}
+
+    # iter125 — For API-key providers (saleshandy, lemlist, resend, 360dialog,
+    # proxycurl, serper, apollo) the "test" action is a live whoami ping, not
+    # a fake lead.created event. Decrypt the stored key and route to the
+    # shared validator. This eliminates the generic "No outbound handler for
+    # {kind}" error every user hits on Test.
+    encrypted_api_key = config_dict.get("api_key")
+    if encrypted_api_key:
+        try:
+            from routes.oauth_providers import _validate_api_key_live
+            from security.encryption import decrypt
+            api_key_plain = decrypt(encrypted_api_key) if str(encrypted_api_key).startswith("enc::") else str(encrypted_api_key)
+            extra_cfg = {k: v for k, v in config_dict.items() if k != "api_key"}
+            result = await _validate_api_key_live(integration_type, api_key_plain, extra_cfg)
+            # Persist last_test timestamp + outcome so the card can show "last sync".
+            from datetime import datetime, timezone
+            configs_col.update_one(
+                {"tenant_id": tenant["id"], "integration_type": integration_type},
+                {"$set": {
+                    "last_tested_at": datetime.now(timezone.utc).isoformat(),
+                    "last_test_ok": bool(result.get("valid")),
+                    "last_test_message": result.get("message", ""),
+                }},
+            )
+            if result.get("valid") is True:
+                return {"ok": True, "message": result.get("message") or "Key valid · provider responded"}
+            if result.get("valid") is False:
+                return {"ok": False, "message": result.get("message") or f"{integration_type} rejected key"}
+            # valid=None → could not verify (wrong endpoint on our side, network
+            # blip, 4xx-other-than-401/403). Treat as a "warning" not a hard
+            # failure — surface the message but report ok=True so the integration
+            # card does not flip back to "Not connected".
+            return {"ok": True, "message": result.get("message") or "Key saved · could not run a live test", "warning": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "message": f"Test failed: {str(e)[:160]}"}
+
+    # OAuth / analytics / webhook integrations — fall through to the legacy
+    # event dispatcher with a synthetic test lead.
     test_lead = {
         "id": "test-lead-id",
         "first_name": "Test",
@@ -219,7 +258,7 @@ async def test_connection(integration_type: str, tenant: dict = Depends(get_acti
         "tenant_id": tenant["id"],
         "source_channel": "test",
     }
-    ok, msg = await _dispatch(tenant["id"], integration_type, cfg.get("config", {}), "lead.created", test_lead, {"test": True})
+    ok, msg = await _dispatch(tenant["id"], integration_type, config_dict, "lead.created", test_lead, {"test": True})
     return {"ok": ok, "message": msg}
 
 

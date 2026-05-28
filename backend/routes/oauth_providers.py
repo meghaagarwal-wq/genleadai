@@ -449,8 +449,26 @@ async def configure_api_key(
 # Hits a cheap, well-known endpoint on the provider with the supplied key.
 # Does NOT persist anything. Returns {valid, message}.
 async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, Any]) -> Dict[str, Any]:
+    """Live, no-persist whoami ping. Returns {valid, message}.
+
+    Convention:
+      * 200/204 → valid:True
+      * 401/403 → valid:False ("provider rejected key")
+      * Anything else (incl. network failures, 400, 404, 5xx) → valid:None
+        ("could not verify — provider answered HTTP X"). The caller treats
+        a None as a soft warning, NOT a hard failure, so a wrong endpoint
+        on OUR side does not block the user.
+    """
     import httpx
     timeout = httpx.Timeout(8.0, connect=4.0)
+
+    def _result(status: int, label: str) -> Dict[str, Any]:
+        if status in (200, 204):
+            return {"valid": True, "message": "Key valid · provider responded"}
+        if status in (401, 403):
+            return {"valid": False, "message": f"{label} rejected key ({status})"}
+        return {"valid": None, "message": f"{label} answered HTTP {status} — could not verify"}
+
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if provider == "serper":
@@ -459,45 +477,51 @@ async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, A
                     headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
                     json={"q": "test", "num": 1, "gl": "us"},
                 )
-                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Serper rejected key ({r.status_code})"}
+                return _result(r.status_code, "Serper")
             if provider == "proxycurl":
                 r = await client.get(
                     "https://nubela.co/proxycurl/api/credit-balance",
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
-                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Proxycurl rejected key ({r.status_code})"}
+                return _result(r.status_code, "Proxycurl")
             if provider == "resend":
                 r = await client.get(
                     "https://api.resend.com/domains",
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
-                return {"valid": r.status_code in (200, 401) and r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Resend rejected key ({r.status_code})"}
+                return _result(r.status_code, "Resend")
             if provider == "apollo":
                 r = await client.post(
                     "https://api.apollo.io/v1/auth/health",
                     json={"api_key": api_key},
                 )
-                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Apollo rejected key ({r.status_code})"}
+                return _result(r.status_code, "Apollo")
             if provider == "saleshandy":
-                r = await client.get(
-                    "https://open-api.saleshandy.com/v1/sequences",
-                    headers={"Authorization": api_key},
-                    params={"limit": 1},
-                )
-                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Saleshandy rejected key ({r.status_code})"}
+                # Saleshandy Open API — try a couple of well-known endpoints
+                # in order; return the first definitive answer (200/401/403).
+                for url, headers in (
+                    ("https://open-api.saleshandy.com/v1/sequences",   {"Authorization": api_key}),
+                    ("https://open-api.saleshandy.com/v1/team-members", {"Authorization": api_key}),
+                    ("https://open-api.saleshandy.com/v1/sequences",   {"Authorization": f"Bearer {api_key}"}),
+                ):
+                    try:
+                        r = await client.get(url, headers=headers, params={"limit": 1})
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if r.status_code in (200, 204, 401, 403):
+                        return _result(r.status_code, "Saleshandy")
+                return {"valid": None, "message": "Saleshandy reachable but no endpoint accepted the key format — please verify on saleshandy.com → API Settings"}
             if provider == "lemlist":
-                r = await client.get(
-                    "https://api.lemlist.com/api/team",
-                    auth=("", api_key),
-                )
-                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Lemlist rejected key ({r.status_code})"}
+                # Lemlist uses HTTP Basic with empty username + API key as password.
+                r = await client.get("https://api.lemlist.com/api/team", auth=("", api_key))
+                return _result(r.status_code, "Lemlist")
             if provider == "360dialog":
                 r = await client.get(
                     "https://waba-v2.360dialog.io/v1/configs/templates",
                     headers={"D360-API-KEY": api_key},
                     params={"limit": 1},
                 )
-                return {"valid": r.status_code in (200, 204), "message": "Key valid" if r.status_code in (200, 204) else f"360dialog rejected key ({r.status_code})"}
+                return _result(r.status_code, "360dialog")
     except Exception as e:  # noqa: BLE001
         return {"valid": None, "message": f"Validator unreachable ({str(e)[:80]}). Will retry on Save."}
     return {"valid": None, "message": "No live validator for this provider; will verify on Save."}
