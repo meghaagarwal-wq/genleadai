@@ -1,5 +1,25 @@
 # Changelog
 
+## iter109 Batch 2 — Sections 2, 3, 5, 6 (2026-05-28)
+**Section 2 — Command Center rebuild**
+- New backend `routes/command_center.py` exposing `/api/aria/command-center/{kpis,signals,pipeline,next-scan}` with mode-aware aggregates (no hardcoded numbers).
+- Rebuilt `CommandCenter.js` to match Aria_Dashboard_Layouts.html: dynamic Pull bar, mode bar (purple/amber/teal), purple gradient hero, 4-col KPI grid, B2B insight cards + Top Prospect strip, B2C Lead Pipeline table, Hybrid split panel.
+
+**Section 3 — Sidebar update**
+- Added `32-Touchpoint Journey` to NAV_ADVANCED → /app/touchpoints.
+
+**Section 5 — Instinct Feed enhancements**
+- Filter bar with status pills + signal-type dropdown + sort dropdown (Recency / ICP match / Confidence).
+- Card grid switched to 2 columns.
+
+**Section 6 — Automation Touchpoints tab**
+- Added `[Open Full Journey Builder →]` link to `/app/touchpoints` plus condensed inline TouchpointMap view.
+
+**Tests:** iter109 Batch 2 backend 6/6 ✅, frontend 100% ✅ (`/app/test_reports/iteration_109.json`). Both ten_demo (hybrid) and ten_pietential (b2b) render correctly with mode-gated nav.
+
+
+# Changelog
+
 ## iter109 Batch 1 — Theme toggle + Train ARIA polish (2026-05-28)
 **Section 1 — Theme toggle**
 - New `ThemeContext` (`/app/frontend/src/context/ThemeContext.js`) — defaults to dark, persists to `localStorage.aria_theme`, sets `<html data-theme="dark|light">`.
