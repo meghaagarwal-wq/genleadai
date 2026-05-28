@@ -68,11 +68,9 @@ def _check_triggers(tenant_id: str, body: str) -> Optional[dict]:
 
 # ─── Layer 3: Claude classification ─────────────────────────────────────────
 async def _classify_with_claude(tenant: dict, body: str) -> dict:
-    api_key = os.getenv("EMERGENT_LLM_KEY")
-    if not api_key:
-        return {"category": "UNCLEAR", "confidence": 0.0, "reason": "llm_key_missing"}
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        # iter109c Batch 3 — migrated to centralised Claude wrapper.
+        from services.claude_service import claude_call, TaskType
         biz = (tenant.get("settings") or {}).get("business_profile") or {}
         biz_name = tenant.get("name") or "the company"
         industry = biz.get("industry") or "B2B"
@@ -82,14 +80,14 @@ async def _classify_with_claude(tenant: dict, body: str) -> dict:
             "category MUST be one of: LEAD, EXISTING_CLIENT, VENDOR, OPERATIONAL, JOB_APPLICANT, UNCLEAR, SPAM, WRONG_NUMBER.\n"
             "Heuristics: LEAD = expresses buying interest, asks pricing, wants demo. EXISTING_CLIENT = mentions an order, account, contract, ticket. VENDOR = pitches services to us, sells us tools, offers partnership. OPERATIONAL = courier, delivery, scheduling, internal logistics. JOB_APPLICANT = resume, application, looking for work. UNCLEAR = ambiguous or just 'hi'. SPAM = bulk promo, crypto, phishing. WRONG_NUMBER = mentions another person/business by name."
         )
-        chat = LlmChat(api_key=api_key, session_id="classify", system_message=system).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        resp = await chat.send_message(UserMessage(text=f"Message: {body!r}\n\nReturn JSON only."))
-        import json
-        import re
-        text = (resp or "").strip()
-        # Strip ```json fences if present
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
-        data = json.loads(text)
+        data = await claude_call(
+            task_type=TaskType.SIGNAL_CLASSIFICATION,
+            session_id=f"classify-{tenant.get('id', 'unknown')}",
+            system=system,
+            prompt=f"Message: {body!r}\n\nReturn JSON only.",
+            tenant_id=tenant.get("id"),
+            response_format="json",
+        )
         cat = (data.get("category") or "UNCLEAR").upper()
         if cat not in CATEGORIES:
             cat = "UNCLEAR"

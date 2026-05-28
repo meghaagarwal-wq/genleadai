@@ -611,38 +611,38 @@ async def test_chat(
             persona["aria_name"], get_workspace_type(tenant), _empty_profile(),
         )
 
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise HTTPException(500, "Claude SDK not installed.")
-
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"aria-test-{tenant['id']}-{_now_iso()}",
-        system_message=system_prompt,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
-
-    # Replay history so the test feels like a real conversation
+    # iter109c Batch 3 — migrated to centralised Claude wrapper.
+    # Assemble prior turns inline (the wrapper is stateless; emergentintegrations
+    # session continuity isn't needed for this single-shot test endpoint).
+    history_lines = []
     for turn in (payload.history or []):
         role = (turn.get("role") or "user").lower()
         text = (turn.get("text") or "").strip()
         if not text:
             continue
-        # We only feed user turns into the LlmChat (assistant turns are
-        # surfaced as Aria's own prior responses; emergentintegrations
-        # handles them via session_id continuity within this single call).
-        if role == "user":
-            try:
-                await chat.send_message(UserMessage(text=text))
-            except Exception:
-                pass
+        history_lines.append(f"{'USER' if role == 'user' else 'ARIA'}: {text}")
+    history_block = "\n".join(history_lines)
+    user_block = f"USER: {payload.message}"
+    full_prompt = (history_block + "\n" + user_block).strip() if history_block else user_block
+
+    from services.claude_service import claude_call, TaskType, ClaudeServiceError, detect_injection
+    # Section 3E — prompt-injection sanitiser on the user's last turn.
+    safety = await detect_injection(payload.message, tenant_id=tenant["id"])
+    if safety.get("injection_detected"):
+        cleaned = safety.get("cleaned_message") or payload.message
+        full_prompt = (history_block + "\n" + f"USER: {cleaned}").strip() if history_block else f"USER: {cleaned}"
 
     try:
-        resp = await chat.send_message(UserMessage(text=payload.message))
-    except Exception as e:
+        raw = await claude_call(
+            task_type=TaskType.CONVERSATION,
+            session_id=f"aria-test-{tenant['id']}",
+            system=system_prompt,
+            prompt=full_prompt,
+            tenant_id=tenant["id"],
+        )
+    except ClaudeServiceError as e:
         raise HTTPException(502, f"Aria didn't respond: {str(e)[:160]}")
-
-    raw = (resp or "").strip()
+    raw = (raw or "").strip()
     # Aria's output contract returns JSON. Try parsing; if it fails, surface raw.
     parsed_msg = raw
     action = "NONE"
@@ -859,39 +859,18 @@ async def _extract_with_claude(text: str) -> Dict[str, Any]:
     if len(text) > max_chars:
         excerpt += "\n\n[...truncated for length...]"
 
+    # iter109c Batch 3 — migrated to centralised Claude wrapper.
+    from services.claude_service import claude_call, TaskType, ClaudeServiceError
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        raise HTTPException(500, "Claude SDK not installed.")
-
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"aria-train-extract-{_now_iso()}",
-        system_message=_EXTRACTION_SYSTEM_PROMPT,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
-
-    try:
-        resp = await chat.send_message(UserMessage(text=excerpt))
-    except Exception as e:
+        parsed = await claude_call(
+            task_type=TaskType.EXTRACTION,
+            session_id=f"aria-train-extract-{_now_iso()}",
+            system=_EXTRACTION_SYSTEM_PROMPT,
+            prompt=excerpt,
+            response_format="json",
+        )
+    except ClaudeServiceError as e:
         raise HTTPException(502, f"Aria's brain didn't respond: {str(e)[:160]}")
-
-    raw = (resp or "").strip()
-    # Strip code fences if present
-    raw = _re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = _re.sub(r"\s*```$", "", raw).strip()
-    try:
-        parsed = _json.loads(raw)
-    except _json.JSONDecodeError as e:
-        # Try to salvage the first {...} block from the response
-        m = _re.search(r"\{[\s\S]+\}", raw)
-        if m:
-            try:
-                parsed = _json.loads(m.group(0))
-            except Exception:
-                raise HTTPException(502, f"Aria returned malformed JSON: {str(e)[:120]}")
-        else:
-            raise HTTPException(502, f"Aria returned malformed JSON: {str(e)[:120]}")
-
     if not isinstance(parsed, dict):
         raise HTTPException(502, "Aria returned non-object JSON.")
     return _strip_not_found(parsed)

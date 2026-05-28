@@ -123,20 +123,16 @@ Return ONLY valid JSON with EXACTLY these keys (no markdown, no commentary):
 
 Make every word earn its place."""
 
-    chat = LlmChat(
-        api_key=os.getenv("EMERGENT_LLM_KEY"),
+    # iter109c Batch 3 — migrated to centralised Claude wrapper.
+    from services.claude_service import claude_call, TaskType
+    return await claude_call(
+        task_type=TaskType.SUMMARY,
         session_id=f"founder_brief_{lead.get('id') or 'unknown'}",
-        system_message=system,
+        system=system,
+        prompt=prompt,
+        tenant_id=lead.get("tenant_id"),
+        response_format="json",
     )
-    chat.with_model("anthropic", "claude-4-sonnet-20250514")
-    resp = await chat.send_message(UserMessage(text=prompt))
-    text = (resp or "").strip()
-    # Robust JSON extraction
-    if "```json" in text:
-        text = text.split("```json", 1)[1].split("```", 1)[0].strip()
-    elif "```" in text:
-        text = text.split("```", 1)[1].split("```", 1)[0].strip()
-    return json.loads(text)
 
 @router.post("/founder-brief/{lead_id}")
 @_limiter.limit("10/minute")  # iter80 — S9.5: cap LLM-heavy founder brief generation

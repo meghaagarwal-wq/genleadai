@@ -394,30 +394,17 @@ async def import_document(
         raise HTTPException(status_code=500, detail="Emergent LLM key not configured")
 
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=api_key,
+        # iter109c Batch 3 — migrated to centralised Claude wrapper.
+        from services.claude_service import claude_call, TaskType
+        parsed = await claude_call(
+            task_type=TaskType.TOUCHPOINT_GENERATION,
             session_id=f"tp-import-{uuid.uuid4().hex[:8]}",
-            system_message=_IMPORT_PROMPT,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        raw = await chat.send_message(UserMessage(text=text[:30000]))
+            system=_IMPORT_PROMPT,
+            prompt=text[:30000],
+            response_format="json",
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Claude unavailable: {e}")
-
-    import json as _json
-    import re as _re
-    body = (raw or "").strip()
-    body = _re.sub(r"^```(?:json)?\s*|\s*```$", "", body, flags=_re.MULTILINE).strip()
-    try:
-        parsed = _json.loads(body)
-    except Exception:
-        m = _re.search(r"[\[\{].*[\]\}]", body, _re.DOTALL)
-        if not m:
-            raise HTTPException(status_code=502, detail="Could not parse Claude response")
-        try:
-            parsed = _json.loads(m.group(0))
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Invalid JSON from Claude: {e}")
 
     truncated = False
     if isinstance(parsed, dict):
@@ -640,12 +627,6 @@ async def ai_quality(tenant: dict = Depends(get_active_tenant)):
         }
 
     import hashlib
-    import json as _json
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except Exception:
-        return {"items": [], "error": "ai_unavailable"}
-
     # Build cache key per message
     items = []
     to_score: List[dict] = []
@@ -671,17 +652,18 @@ async def ai_quality(tenant: dict = Depends(get_active_tenant)):
             prompt_lines.append(f"[{s['index']}] channel={s['channel']} type={s['type']} :: {s['msg'][:500]}")
 
         try:
-            chat = LlmChat(
-                api_key=api_key,
+            # iter109c Batch 3 — migrated to centralised Claude wrapper.
+            from services.claude_service import claude_call, TaskType
+            scores = await claude_call(
+                task_type=TaskType.TOUCHPOINT_GENERATION,
                 session_id=f"ai-quality-{tenant_id}-{uuid.uuid4().hex[:8]}",
-                system_message="You are a precise JSON-only sales copy evaluator.",
-            ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-            raw = await chat.send_message(UserMessage(text="\n".join(prompt_lines)))
-            # Best-effort JSON parse
-            text = raw if isinstance(raw, str) else str(raw)
-            start = text.find("[")
-            end = text.rfind("]")
-            scores = _json.loads(text[start:end + 1]) if start >= 0 and end > start else []
+                system="You are a precise JSON-only sales copy evaluator.",
+                prompt="\n".join(prompt_lines),
+                tenant_id=tenant_id,
+                response_format="json",
+            )
+            if not isinstance(scores, list):
+                scores = []
             for s, parsed in zip(to_score, scores):
                 clarity = float(parsed.get("clarity", 6))
                 personalisation = float(parsed.get("personalisation", 6))

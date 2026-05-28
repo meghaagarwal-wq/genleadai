@@ -94,45 +94,37 @@ def heuristic_score(lead: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def score_lead_with_aria(lead: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """LLM-based scoring via the Emergent LLM key (Claude Haiku).
+    """LLM-based scoring via the centralised Claude wrapper (Haiku).
 
-    Returns None if no LLM key, the lead lacks fields to reason about, or
-    the API call fails. The caller falls back to `heuristic_score`.
+    Returns None if the wrapper is unavailable or the lead lacks enough
+    fields to reason about. The caller falls back to `heuristic_score`.
     """
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
-    if not api_key:
-        return None
     email = lead.get("email") or ""
     title = lead.get("title") or ""
     company = lead.get("company_name") or ""
     if not email or not (title or company):
         return None
     try:
-        # Lazy import — emergentintegrations is optional at module load time.
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=api_key,
+        # iter109c Batch 3 — migrated to /app/backend/services/claude_service.py
+        from services.claude_service import claude_call, TaskType
+        data = await claude_call(
+            task_type=TaskType.ICP_SCORING,
             session_id=f"score-{lead.get('id') or email}",
-            system_message=(
+            system=(
                 "You are Aria, Pietential's lead-scoring engine. Pietential sells AI-powered "
                 "growth + employee-experience automation to mid-market HR leaders. The ICP is "
                 "CHROs, VPs of HR/People, Directors of HR or Talent at 50–2000-employee companies. "
                 "Return ONLY a JSON object: {score: int 0-100, tier: 'hot'|'warm'|'cold', why: short reason}."
             ),
-        ).with_model("anthropic", "claude-haiku-4-5")
-        msg = UserMessage(text=(
-            f"Lead:\n  email: {email}\n  title: {title}\n  company: {company}\n"
-            f"  industry: {lead.get('industry') or '—'}\n  country: {lead.get('geography') or '—'}\n"
-            f"  engagement: {(lead.get('_lemlist_raw') or {}).get('lead_state') or '—'}\n"
-            "Score 0-100 (hot ≥ 70, warm 45-69, cold < 45). Return JSON only."
-        ))
-        resp = await chat.send_message(msg)
-        text = (resp or "").strip()
-        # Strip code fences
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text).strip()
-        import json as _json
-        data = _json.loads(text)
+            prompt=(
+                f"Lead:\n  email: {email}\n  title: {title}\n  company: {company}\n"
+                f"  industry: {lead.get('industry') or '—'}\n  country: {lead.get('geography') or '—'}\n"
+                f"  engagement: {(lead.get('_lemlist_raw') or {}).get('lead_state') or '—'}\n"
+                "Score 0-100 (hot ≥ 70, warm 45-69, cold < 45). Return JSON only."
+            ),
+            tenant_id=lead.get("tenant_id"),
+            response_format="json",
+        )
         score = int(data.get("score") or 0)
         score = max(0, min(100, score))
         tier_raw = (data.get("tier") or "").lower().strip()

@@ -178,38 +178,20 @@ async def _classify_signals_via_claude(
         "recent_news": news_articles[:5],
     }
 
+    # iter109c Batch 3 — migrated to centralised Claude wrapper.
+    from services.claude_service import claude_call, TaskType
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        return []
-
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"pt-insights-classify-{prospect.get('id', uuid.uuid4().hex[:8])}",
-        system_message=_CLASSIFY_SYSTEM_PROMPT,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
-
-    try:
-        resp = await chat.send_message(UserMessage(
-            text=f"Classify any new signals for this prospect.\n\nDATA:\n{json.dumps(payload, default=str)}"
-        ))
+        parsed = await claude_call(
+            task_type=TaskType.SIGNAL_CLASSIFICATION,
+            session_id=f"pt-insights-classify-{prospect.get('id', uuid.uuid4().hex[:8])}",
+            system=_CLASSIFY_SYSTEM_PROMPT,
+            prompt=f"Classify any new signals for this prospect.\n\nDATA:\n{json.dumps(payload, default=str)}",
+            tenant_id=prospect.get("tenant_id"),
+            response_format="json",
+        )
     except Exception as e:
         logger.warning(f"[pt-insights] classify call failed: {e}")
         return []
-
-    raw = (resp or "").strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw).strip()
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        m = re.search(r"\{[\s\S]+\}", raw)
-        if not m:
-            return []
-        try:
-            parsed = json.loads(m.group(0))
-        except Exception:
-            return []
 
     signals = parsed.get("signals") if isinstance(parsed, dict) else None
     if not isinstance(signals, list):
@@ -318,10 +300,6 @@ async def _draft_suggested_message(
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         return ""
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except ImportError:
-        return ""
 
     ctx = (
         f"Workspace: {workspace_name}\n"
@@ -333,13 +311,17 @@ async def _draft_suggested_message(
         "Draft the outreach message."
     )
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"pt-insights-draft-{uuid.uuid4().hex[:8]}",
-        system_message=_MSG_SYSTEM_PROMPT,
-    ).with_model("anthropic", "claude-haiku-4-5-20251001")
+    # iter109c Batch 3 — migrated to centralised Claude wrapper (sonnet for
+    # message generation per Section 3D).
+    from services.claude_service import claude_call, TaskType
     try:
-        resp = await chat.send_message(UserMessage(text=ctx))
+        resp = await claude_call(
+            task_type=TaskType.INSIGHT_GENERATION,
+            session_id=f"pt-insights-draft-{uuid.uuid4().hex[:8]}",
+            system=_MSG_SYSTEM_PROMPT,
+            prompt=ctx,
+            tenant_id=prospect.get("tenant_id"),
+        )
         return (resp or "").strip()[:1200]
     except Exception as e:
         logger.warning(f"[pt-insights] draft failed: {e}")

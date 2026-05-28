@@ -274,13 +274,15 @@ async def run_aria_agent(lead: dict, conversation_history: list, incoming_messag
             except Exception as _e:
                 logger.warning(f"[aria] tenant lookup failed: {_e}")
 
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"aria_{lead.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}",
-            system_message=get_aria_system_prompt(tenant_doc)
-        )
-        chat.with_model("anthropic", "claude-4-sonnet-20250514")
-        
+        # iter109c Batch 3 — migrated to centralised Claude wrapper.
+        # Section 3E: prompt-injection sanitiser on incoming user messages.
+        from services.claude_service import claude_call, TaskType, detect_injection
+        message_for_prompt = incoming_message or ""
+        if message_for_prompt:
+            safety = await detect_injection(message_for_prompt, tenant_id=lead.get("tenant_id"))
+            if safety.get("injection_detected"):
+                message_for_prompt = safety.get("cleaned_message") or message_for_prompt
+
         # Build context
         lead_context = f"""
 LEAD PROFILE:
@@ -296,14 +298,14 @@ LEAD PROFILE:
 - Status: {lead.get('status', 'new')}
 - ARIA State: {lead.get('aria_state', 'PENDING_FIRST_TOUCH')}
 """
-        
+
         # Build conversation context
         convo_text = ""
         for msg in conversation_history[-10:]:  # Last 10 messages
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             convo_text += f"\n[{role.upper()}]: {content}"
-        
+
         # Build prompt based on touch type
         if touch_type == "first_touch":
             prompt = f"""{lead_context}
@@ -317,7 +319,7 @@ TASK: Generate a warm, personalized first touch message for this lead.
 - If brand deck/portfolio assets are available, mention you'll share them
 
 Respond with JSON: {{"message": "...", "action": "SEND_EMAIL", "action_data": {{}}}}"""
-            
+
         elif touch_type == "followup":
             prompt = f"""{lead_context}
 
@@ -329,14 +331,14 @@ TASK: Generate a follow-up message (touch 2). The lead hasn't replied to the fir
 - Keep it brief and non-pushy
 
 Respond with JSON: {{"message": "...", "action": "SEND_EMAIL", "action_data": {{}}}}"""
-            
+
         else:
             # Processing a reply
             prompt = f"""{lead_context}
 
 CONVERSATION HISTORY: {convo_text}
 
-NEW MESSAGE FROM LEAD: {incoming_message}
+NEW MESSAGE FROM LEAD: {message_for_prompt}
 
 TASK: Respond to this lead's message intelligently.
 - Qualify them using conversational questions about budget, timeline, pain point, decision-making authority
@@ -346,9 +348,14 @@ TASK: Respond to this lead's message intelligently.
 - If they ask for a human, recommend escalation
 
 Respond with JSON: {{"message": "...", "action": "NONE|UPDATE_STATUS|BOOK_MEETING|MARK_DNC|ESCALATE|LOG_QUALIFICATION", "action_data": {{}}}}"""
-        
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+
+        response = await claude_call(
+            task_type=TaskType.CONVERSATION,
+            session_id=f"aria_{lead.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}",
+            system=get_aria_system_prompt(tenant_doc),
+            prompt=prompt,
+            tenant_id=lead.get("tenant_id"),
+        )
         
         # Parse response
         try:

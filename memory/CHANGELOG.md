@@ -1,5 +1,39 @@
 # Changelog
 
+## iter109c Batch 2 — Google OAuth + Call Booking + Audit trail (2026-05-28) ✅
+**Audit trail footer**
+- New columns on `integration_configs`: `configured_by_user_id`, `configured_by_name`, `configured_at`, `connected_by_user_id`, `connected_by_name`.
+- `get_active_tenant` now embeds `_member_user_id`, `_member_email`, `_member_full_name` on the tenant dict for the request lifecycle.
+- `/api/integrations/{provider}/status` exposes `connected_by_name` + `connected_at`.
+- Integrations card footer shows `Connected by {name} · {relative time}` on connected cards (`[data-testid=integration-audit-{provider}]`); legacy/null falls back to "workspace owner".
+
+**Google OAuth — one app, four services**
+- `PROVIDER_SPECS.google` already requests Gmail + Calendar + Meet + Ads scopes in one connect.
+- Connect modal now shows `[data-testid=google-scope-picker]` with 3 checkboxes (Gmail / Calendar+Meet / Google Ads) so the workspace owner can narrow scopes before authorizing. POST `/configure` persists only the selected scopes; `/auth-url` requests only those.
+
+**Call Booking (replaces stub) — `/app/call-booking`**
+- New router `/app/backend/routes/call_booking.py` with 6 endpoints:
+  - GET `/settings` (auto-creates default on first call)
+  - PUT `/settings` — availability windows, durations, buffer, max/day, confirmation msg template, pre-call questions, timezone
+  - POST `/book` — creates Google Calendar event with Meet link via `services/google_calendar.py`, returns event_id + meet_link + html_link. 412 if Google + calendar.events scope not connected.
+  - GET `/bookings` — upcoming list
+  - POST `/bookings/{id}/cancel` — revokes Calendar event + marks cancelled
+  - POST `/no-show-check` — flags `scheduled_for < now-5min && status=='booked'` as `no_show`, queues recovery message
+- New helper `services/google_calendar.py` — token refresh + Calendar v3 event create (with conferenceData/Meet) + cancel.
+- Frontend `pages/CallBooking.js` complete rebuild: connect-prompt → settings tabs (Availability / Format / Confirmation+pre-call) → Bookings tab.
+- Settings persist with `[data-testid=call-booking-save]` button + sticky bottom positioning.
+- Bookings list shows VideoCamera icon, Open Meet link, Cancel button per row.
+
+**Tests:** 7/7 Batch 2 backend pytest + 9/9 Batch 1 regression = 16/16 ✅. Frontend smoke confirmed: Call Booking page renders, Google scope picker renders 3 toggles, audit footer renders on connected cards. Real OAuth E2E (V11/V14/V15) deferred — requires customer's Google CLIENT_ID/SECRET.
+
+**Action items deferred:**
+- V11/V14/V15 real Google OAuth E2E test (gated on customer providing CLIENT_ID/SECRET via /app/integrations UI in preview or prod).
+- Optional: legacy `connected_by_name` backfill migration (only affects pre-Batch-2 docs).
+- Optional: register `/api/call-booking/no-show-check` in the eod_wrap cron job for automatic invocation every 5 min.
+
+
+# Changelog
+
 ## iter109c Batch 1 — Universal OAuth Architecture (2026-05-28) ✅
 **Backend** (`/app/backend/routes/oauth_providers.py`, 394 LOC)
 - 5 generic endpoints replace all provider-specific OAuth handlers:

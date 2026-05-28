@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from deps import db
 from routes.tenants import get_active_tenant
@@ -214,3 +214,88 @@ async def next_scan(tenant: dict = Depends(get_active_tenant)):
     time_str = tp.get("digest_time") or "07:00"
     tz = tp.get("digest_timezone") or "Asia/Kolkata"
     return {"next_scan_time": time_str, "timezone": tz}
+
+
+# iter109c Batch 3 — Section 3G: AI Summary (claude-sonnet, ~180 words)
+# Cached for 1 hour per tenant.
+_ai_summary_cache = db["ai_summary_cache"]
+_ai_summary_cache.create_index([("tenant_id", 1)], unique=True)
+
+
+@router.get("/ai-summary")
+async def ai_summary(tenant: dict = Depends(get_active_tenant), force_refresh: bool = False):
+    """Natural-language briefing of the last 7 days for the workspace owner.
+
+    Aggregates lead/conversation/signal/booking counts → claude-sonnet for a
+    150-200 word "smart analyst" summary in 3 paragraphs:
+        1. what happened   2. what's working   3. what needs attention
+    """
+    from services.claude_service import claude_call, TaskType, ClaudeServiceError
+
+    now = _now()
+    if not force_refresh:
+        cached = _ai_summary_cache.find_one({"tenant_id": tenant["id"]}, {"_id": 0})
+        if cached and cached.get("generated_at"):
+            try:
+                cached_dt = datetime.fromisoformat(cached["generated_at"].replace("Z", "+00:00"))
+                if (now - cached_dt) < timedelta(hours=1):
+                    return {**cached, "cached": True}
+            except Exception:
+                pass
+
+    # Gather 7-day aggregates (real data, not hardcoded).
+    week_ago = (now - timedelta(days=7)).isoformat()
+    tid = tenant["id"]
+    leads_new = _leads_col.count_documents({"tenant_id": tid, "created_at": {"$gte": week_ago}})
+    leads_qualified = _leads_col.count_documents({"tenant_id": tid, "status": {"$in": ["qualified", "engaged"]}})
+    convs_active = _conversations_col.count_documents({"tenant_id": tid, "status": {"$in": ["active", "open", "engaged"]}})
+    signals_new = _insights_col.count_documents({"tenant_id": tid, "created_at": {"$gte": week_ago}})
+    bookings_week = _bookings_col.count_documents({"tenant_id": tid, "created_at": {"$gte": week_ago}})
+    # Top source
+    src_pipeline = list(_leads_col.aggregate([
+        {"$match": {"tenant_id": tid, "created_at": {"$gte": week_ago}}},
+        {"$group": {"_id": "$source", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 1},
+    ]))
+    top_source = (src_pipeline[0]["_id"] if src_pipeline else None) or "—"
+
+    facts = (
+        f"Past 7 days:\n"
+        f"- New leads: {leads_new}\n"
+        f"- Qualified / engaged: {leads_qualified}\n"
+        f"- Active conversations: {convs_active}\n"
+        f"- Instinct signals surfaced: {signals_new}\n"
+        f"- Calls booked: {bookings_week}\n"
+        f"- Top source: {top_source}\n"
+    )
+
+    try:
+        text = await claude_call(
+            task_type=TaskType.SUMMARY,
+            session_id=f"ai-summary-{tid}",
+            system=(
+                "You are ARIA, a senior B2B revenue analyst. Write a 150-200 word executive "
+                "briefing for the founder in 3 short paragraphs labelled 'What happened.', "
+                "'What's working.', 'What needs attention.'. Be specific, no platitudes, "
+                "no markdown headings, no bullet points. Plain prose only."
+            ),
+            prompt=facts,
+            tenant_id=tid,
+        )
+    except ClaudeServiceError as e:
+        raise HTTPException(502, f"Aria couldn't generate the brief: {str(e)[:160]}")
+
+    payload = {
+        "tenant_id": tid,
+        "summary": (text or "").strip(),
+        "generated_at": now.isoformat(),
+        "facts": facts,
+        "cached": False,
+    }
+    _ai_summary_cache.update_one(
+        {"tenant_id": tid},
+        {"$set": payload},
+        upsert=True,
+    )
+    return payload
