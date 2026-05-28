@@ -55,8 +55,9 @@ def _get_eod_wrap_config() -> dict:
 
 def _compute_eod_wrap(tz_off_hours: float = 0.0) -> dict:
     """Compute today's wrap data. 'Today' = the founder's local calendar day."""
-    # Late imports — these helpers live in server.py.
-    from server import _compute_call_priority, _fmt_inr  # noqa: WPS433
+    # Late imports — these helpers live in server.py / new modules.
+    from server import _fmt_inr  # noqa: WPS433
+    from routes.aria_call_priority import _compute_call_priority  # noqa: WPS433
 
     now_utc = datetime.now(timezone.utc)
     local_now = now_utc + timedelta(hours=tz_off_hours)

@@ -144,6 +144,9 @@ def register_all_routes(app: FastAPI) -> None:
     from .aria_eod_wrap import router as aria_eod_wrap_router
     from .webhooks_whatsapp import router as webhooks_whatsapp_router
     from .billing_plans_legacy import router as billing_plans_legacy_router
+    from .lead_magnets import router as lead_magnets_router
+    from .aria_call_priority import router as aria_call_priority_router
+    from .demo_seeder import router as demo_seeder_router
 
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
@@ -186,5 +189,8 @@ def register_all_routes(app: FastAPI) -> None:
         aria_eod_wrap_router,
         webhooks_whatsapp_router,
         billing_plans_legacy_router,
+        lead_magnets_router,
+        aria_call_priority_router,
+        demo_seeder_router,
     ):
         app.include_router(router)

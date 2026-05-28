@@ -118,6 +118,30 @@ const AdminWorkspaces = () => {
     }
   };
 
+  // iter108 — Force-promote plan (CSAT lifesaver for stuck workspaces)
+  const [forcePlan, setForcePlan] = useState(null); // { workspace_id, name }
+  const [forcePlanId, setForcePlanId] = useState('pro');
+  const [forcePlanReason, setForcePlanReason] = useState('');
+  const [forcePlanBusy, setForcePlanBusy] = useState(false);
+
+  const submitForcePlan = async () => {
+    if (!forcePlan) return;
+    setForcePlanBusy(true);
+    try {
+      const r = await api.post(`/api/admin/v3/workspaces/${forcePlan.workspace_id}/force-plan`, {
+        plan_id: forcePlanId, reason: forcePlanReason,
+      });
+      toast.success(`${r.data.workspace_name} promoted to ${r.data.plan_name}`);
+      setForcePlan(null);
+      setForcePlanReason('');
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Force-plan failed');
+    } finally {
+      setForcePlanBusy(false);
+    }
+  };
+
   return (
     <div data-testid="admin-workspaces">
       <h1 className="text-2xl font-bold text-slate-900 mb-1">Workspaces</h1>
@@ -161,6 +185,12 @@ const AdminWorkspaces = () => {
                       onClick={() => impersonate(w.id)}
                       className="px-2 py-1 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded"
                     >Impersonate</button>
+                    <button
+                      data-testid={`force-plan-${w.id}`}
+                      onClick={() => { setForcePlan({ workspace_id: w.id, name: w.name }); setForcePlanReason(''); }}
+                      className="px-2 py-1 border border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold rounded"
+                      title="Force-promote this workspace's plan"
+                    >Force plan</button>
                     {w.is_active ? (
                       <button onClick={() => doAction(w.id, 'suspend')} className="px-2 py-1 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded">Suspend</button>
                     ) : (
@@ -171,6 +201,64 @@ const AdminWorkspaces = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* iter108 — Force-promote plan modal */}
+      {forcePlan && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+          data-testid="force-plan-modal"
+          onClick={() => !forcePlanBusy && setForcePlan(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Force-promote plan</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Stamp a new plan on <span className="font-semibold text-slate-900">{forcePlan.name}</span> directly. Bypasses Stripe — use only when a paid customer's workspace is stuck.
+            </p>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Plan</label>
+            <select
+              value={forcePlanId}
+              onChange={(e) => setForcePlanId(e.target.value)}
+              disabled={forcePlanBusy}
+              data-testid="force-plan-select"
+              className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm bg-white mb-3"
+            >
+              <option value="starter">Starter ($49)</option>
+              <option value="growth">Growth ($149)</option>
+              <option value="pro">Pro ($399)</option>
+              <option value="custom">Custom (contact-sales)</option>
+            </select>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Reason (audited)</label>
+            <textarea
+              value={forcePlanReason}
+              onChange={(e) => setForcePlanReason(e.target.value)}
+              disabled={forcePlanBusy}
+              data-testid="force-plan-reason"
+              placeholder="e.g. Stripe webhook race — customer paid but workspace stuck on Starter"
+              rows={3}
+              className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-4 resize-none"
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setForcePlan(null)}
+                disabled={forcePlanBusy}
+                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded"
+              >Cancel</button>
+              <button
+                onClick={submitForcePlan}
+                disabled={forcePlanBusy || !forcePlanReason.trim()}
+                data-testid="force-plan-submit"
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-bold rounded"
+              >{forcePlanBusy ? 'Promoting…' : `Force to ${forcePlanId}`}</button>
+            </div>
+            <div className="mt-3 text-[11px] text-slate-500">
+              This is recorded in the audit log with your email + the reason above.
+            </div>
+          </div>
         </div>
       )}
     </div>

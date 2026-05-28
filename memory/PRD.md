@@ -1,5 +1,52 @@
 ## Iter 108 — NUCLEAR CONSOLIDATION + P3 backlog (Feb 2026)
 
+### Continued (latest turn — Force-promote + 3 more extractions)
+- **Force-promote plan UI** — new master-admin action in
+  `/admin/workspaces`: "Force plan" button → modal (plan dropdown +
+  required reason) → calls new endpoint
+  `POST /api/admin/v3/workspaces/{id}/force-plan`. Backend stamps
+  `tenant.settings.plan_id` + the legacy `workspace_settings.plan_id`
+  + writes an audit-log row with the actor's email and reason. Verified
+  end-to-end: forced `ten_demo` to Growth, `/api/billing/current-plan`
+  flipped immediately, then restored.
+- **Lead-magnet extraction** → `routes/lead_magnets.py` (425 lines).
+  8 endpoints (`/config`, `/upload`, `/send-lead-magnet`,
+  `/track/{id}`, `/engagement/{lead}`, `/campaign/{id}` GET/PUT,
+  `/engagement-map`, `/recent-opens`) + `auto_send_lead_magnet`
+  re-exported back to server.py for the Calendly inbound handler.
+  Lazy import of `whatsapp_dispatch.send_whatsapp_text` avoids the
+  circular with the remaining server.py WhatsApp helpers.
+- **Call-priority + Daily-Call-Plan extraction** →
+  `routes/aria_call_priority.py` (485 lines). 6 endpoints
+  (`/best-time-to-call/{lead}`, `/call-priority`, `/daily-call-plan/*`
+  config/send-now/preview) + `daily_call_plan_loop` background task
+  (DST-safe via UTC math). EOD-wrap module updated to import
+  `_compute_call_priority` from the new location.
+- **Demo seeder extraction** → `routes/demo_seeder.py` (89 lines).
+  The 25-row `DEMO_LEADS_FIXTURE` + `/api/admin/load-demo-data`.
+
+### Final tally for iter108
+- server.py: **5431 → 3221 lines (−2210 / −41%)**.
+- 9 new modules under `routes/`: `api_key_validator.py`,
+  `assets_routes.py`, `webhooks_inbound.py`, `aria_eod_wrap.py`,
+  `webhooks_whatsapp.py`, `billing_plans_legacy.py`,
+  `lead_magnets.py`, `aria_call_priority.py`, `demo_seeder.py`.
+- 17-endpoint smoke + 3 webhooks + force-promote + best-time-to-call:
+  ALL 200.
+
+### Carried-forward backlog
+- 🔴 **P0 (user-blocked)**: deploy + production health check; paste
+  OAuth credentials for any of Calendly/Gmail/Outlook/Meta/LinkedIn/GoogleAds
+  to wire real flows.
+- 🟡 **P1**: continue server.py thinning — what's left in server.py
+  (3221 lines) is mostly real workflow code (ARIA agent endpoints,
+  leads CRUD, activities, founder command center, touchpoints). Most
+  of it is reasonable to keep where it is until/unless we find a
+  specific cohesion-break.
+- All P2 and P3 items from iter108: ✅ shipped.
+
+
+
 ### Continued (latest turn — server.py breakdown round 2)
 - **Stripe billing + 4-tier plan catalog extracted** →
   `/app/backend/routes/billing_plans_legacy.py` (469 lines).

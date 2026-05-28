@@ -154,6 +154,70 @@ async def workspace_action(
     return {"ok": True, "workspace_id": workspace_id, "action": payload.action}
 
 
+# ── iter108: Force-promote plan (CSAT lifesaver for stuck workspaces) ────
+class ForcePlanPayload(BaseModel):
+    plan_id: str
+    reason: Optional[str] = None
+
+
+@router.post("/workspaces/{workspace_id}/force-plan")
+async def force_plan(
+    workspace_id: str,
+    payload: ForcePlanPayload,
+    user: dict = Depends(_require_master_admin),
+):
+    """Master-admin only: stamp a workspace's plan_id directly. Used when a
+    Stripe payment goes through but the workspace is still on the old plan
+    (webhook race, manual intervention needed, etc.). Bypasses Stripe entirely.
+    """
+    from routes.billing_plans_legacy import SUBSCRIPTION_PLANS, _LEGACY_PLAN_ALIASES
+    target = _LEGACY_PLAN_ALIASES.get(payload.plan_id, payload.plan_id)
+    if target not in SUBSCRIPTION_PLANS:
+        raise HTTPException(400, f"unknown plan_id: {payload.plan_id}")
+    t = tenants_col.find_one({"id": workspace_id}, {"_id": 0, "id": 1, "name": 1})
+    if not t:
+        raise HTTPException(404, "workspace_not_found")
+    # Stamp tenant.settings.plan + the global workspace_settings doc (the
+    # legacy single-workspace plan store used by /api/billing/current-plan).
+    tenants_col.update_one(
+        {"id": workspace_id},
+        {"$set": {
+            "settings.plan": target,
+            "settings.plan_id": target,
+            "settings.plan_activated_at": _now().isoformat(),
+            "settings.plan_force_promoted_by": user.get("email"),
+            "settings.plan_force_promoted_reason": (payload.reason or "")[:280],
+        }},
+    )
+    from deps import db
+    db["workspace_settings"].update_one(
+        {"scope": "workspace"},
+        {"$set": {
+            "plan_id": target,
+            "plan_activated_at": _now().isoformat(),
+            "set_by": "admin_force_promote",
+            "set_by_user": user.get("email"),
+            "set_by_reason": (payload.reason or "")[:280],
+            "set_by_workspace_id": workspace_id,
+        }},
+        upsert=True,
+    )
+    audit_col.insert_one({
+        "tenant_id": workspace_id,
+        "actor_id": user.get("id") or user.get("email"),
+        "action": "admin_force_promote_plan",
+        "timestamp": _now().isoformat(),
+        "detail": {"plan_id": target, "reason": payload.reason or ""},
+    })
+    return {
+        "ok": True,
+        "workspace_id": workspace_id,
+        "workspace_name": t.get("name"),
+        "plan_id": target,
+        "plan_name": SUBSCRIPTION_PLANS[target]["name"],
+    }
+
+
 @router.post("/workspaces/{workspace_id}/impersonate")
 async def impersonate(
     workspace_id: str,
