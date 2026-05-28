@@ -57,25 +57,63 @@ const NAV_ADVANCED = [
 
 
 // ── ThemeToggle ─────────────────────────────────────────────────────────
-// Small sun/moon icon button in the topbar. Persists choice via ThemeContext.
+// Segmented Light/Dark pill in the topbar — both options always visible.
+// Persists choice via ThemeContext.
 const ThemeToggle = () => {
-  const { theme, toggle } = useTheme();
+  const { theme, setTheme, toggle } = useTheme();
   const isDark = theme === 'dark';
+  // Some ThemeContext exports `setTheme` directly; if not, fall back to toggle.
+  const goTo = (next) => {
+    if (typeof setTheme === 'function') {
+      setTheme(next);
+    } else if (next !== theme) {
+      toggle();
+    }
+  };
+  const base = "inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider transition-colors";
   return (
-    <button
-      onClick={toggle}
+    <div
+      role="group"
+      aria-label="Theme switcher"
       data-testid="theme-toggle"
-      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="w-9 h-9 rounded-lg border flex items-center justify-center transition-colors"
+      className="inline-flex items-center p-0.5 rounded-full border"
       style={{
         borderColor: 'var(--theme-border-strong)',
         background: 'var(--theme-surface)',
-        color: 'var(--theme-text-muted)',
+        fontFamily: 'Plus Jakarta Sans',
       }}
     >
-      {isDark ? <Sun size={16} weight="duotone" /> : <Moon size={16} weight="duotone" />}
-    </button>
+      <button
+        type="button"
+        onClick={() => goTo('light')}
+        data-testid="theme-toggle-light"
+        aria-pressed={!isDark}
+        title="Switch to light mode"
+        className={base}
+        style={{
+          background: !isDark ? 'var(--theme-purple, #7C35DC)' : 'transparent',
+          color: !isDark ? '#fff' : 'var(--theme-text-muted)',
+        }}
+      >
+        <Sun size={12} weight={!isDark ? 'fill' : 'duotone'} />
+        Light
+      </button>
+      <button
+        type="button"
+        onClick={() => goTo('dark')}
+        data-testid="theme-toggle-dark"
+        aria-pressed={isDark}
+        title="Switch to dark mode"
+        className={base}
+        style={{
+          background: isDark ? 'var(--theme-purple, #7C35DC)' : 'transparent',
+          color: isDark ? '#fff' : 'var(--theme-text-muted)',
+        }}
+      >
+        <Moon size={12} weight={isDark ? 'fill' : 'duotone'} />
+        Dark
+      </button>
+    </div>
   );
 };
 
