@@ -182,6 +182,11 @@ def register_all_routes(app: FastAPI) -> None:
         aria_training_router,
         pt_insights_router,
         admin_v3_router,
+        # iter109c — register universal OAuth providers FIRST so its handlers
+        # win over the legacy provider-specific oauth_integrations_router for
+        # the shared paths (/configure, /callback, /, /status).
+        oauth_providers_router,
+        oauth_providers_public_router,
         aria_resources_router,
         automation_rules_router,
         leads_csv_router,
@@ -199,7 +204,5 @@ def register_all_routes(app: FastAPI) -> None:
         aria_call_priority_router,
         demo_seeder_router,
         command_center_router,
-        oauth_providers_router,
-        oauth_providers_public_router,
     ):
         app.include_router(router)

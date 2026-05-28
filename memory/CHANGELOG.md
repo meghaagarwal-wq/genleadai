@@ -1,5 +1,38 @@
 # Changelog
 
+## iter109c Batch 1 — Universal OAuth Architecture (2026-05-28) ✅
+**Backend** (`/app/backend/routes/oauth_providers.py`, 394 LOC)
+- 5 generic endpoints replace all provider-specific OAuth handlers:
+  POST `/configure` · GET `/auth-url` · GET `/callback` · DELETE `/` · GET `/status` · POST `/test`.
+- 5 OAuth providers wired: google, microsoft, meta, linkedin, calendly (with real authorize/token/revoke/userinfo URLs).
+- 1 API-key endpoint: `/configure-api-key` covers saleshandy, lemlist, 360dialog, resend, proxycurl, serper, apollo, stripe.
+- Per-tenant `integration_configs.config` stores `client_id`, `client_secret`, `access_token`, `refresh_token`, `granted_scopes` — all encrypted with Fernet (`enc::` prefix).
+- OAuth `state` CSRF tokens stored in `oauth_states` collection with 10-min TTL index.
+- Callback URL built from `FRONTEND_URL` env — works identically on preview + production.
+- Pietential saleshandy auto-migrates from legacy `pt_integrations` on first `/status` call (api_key encrypted, `migrated_from_legacy:true`).
+
+**Frontend** (`/app/frontend/src/config/integrations.js`, registry of 13 providers · `/app/frontend/src/workspace/pages/Integrations.js`, complete rebuild)
+- Provider registry drives all UI — adding a new integration = one entry, zero backend changes.
+- Category tabs (10 categories) + search bar + 13 cards in 3-col grid.
+- Connect modal with: logo + "What this unlocks" bullets + setup instructions + console_url link + CLIENT_ID/SECRET fields + eye toggle + "Why do I need these?" disclosure.
+- API-key flow: single Save button, marks connected on save.
+- OAuth flow: opens popup, polls for window.closed, refreshes status on return.
+
+**Env cleanup**
+- ✅ Removed: `CALENDLY_CLIENT_ID/SECRET`, `GMAIL_CLIENT_ID/SECRET`, `MICROSOFT_CLIENT_ID/SECRET`, `META_APP_ID/SECRET`, `LINKEDIN_CLIENT_ID/SECRET`, `GOOGLE_ADS_CLIENT_ID/SECRET`.
+- ✅ Added: `FRONTEND_URL=https://pipeline-pro-96.preview.emergentagent.com`.
+
+**Route ordering fix** (post-test) — `oauth_providers_router` registered BEFORE legacy `oauth_integrations_router` so new universal handlers win the path-match for `/api/integrations/{provider}*`.
+
+**Tests:** 9/9 backend pytest pass (`/app/backend/tests/test_iter109c_batch1_universal_oauth.py`). Frontend smoke: 13 cards render, Connect modal opens with all fields + console link. V1-V10 all green.
+
+**Action items deferred to Batch 2:**
+- Real Google OAuth E2E (requires customer's CLIENT_ID/SECRET pasted on /app/integrations).
+- Real Calendly OAuth E2E (same).
+
+
+# Changelog
+
 ## iter109b — Hero cycling + Claude service wrapper (Section 8) (2026-05-28)
 
 **Hero subtext cycling (Command Center)**
