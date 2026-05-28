@@ -1,3 +1,89 @@
+## Iter 119 — Batch 7: Approval Queue · LOOP USABLE WITHOUT DB (Feb 2026)
+
+### What shipped
+**Backend — `/app/backend/routes/approvals.py` (NEW)**
+- 7 endpoints under `/api/approvals`:
+  - `GET ` — list awaiting drafts (newest first), each enriched with
+    `lead_snapshot` (name, company, stage, score, first_name, email).
+    No BSON `_id` leak — `_serialise()` strips it cleanly.
+  - `GET /count` — nav-badge polling endpoint.
+  - `POST /{id}/approve` — dispatches via `services.outreach_dispatch`
+    and flips status to `sent` / `send_failed` / `drafted_pending_provider`.
+  - `POST /{id}/edit-send` — persists `subject` + `body` + `edited_at`
+    + `edited_by` BEFORE dispatch; tested that dispatched content is the
+    edited version, not the original.
+  - `POST /{id}/reject` — `status=rejected` with optional reason.
+  - `POST /bulk-approve` / `POST /bulk-reject` — empty body = all
+    awaiting; or pass `{ids:[...]}` for a subset.
+- Tenant isolation enforced (cross-tenant id → 404, not 401).
+- Per-row try/except in bulk-approve so one bad dispatch never 500s
+  the request.
+
+**Frontend — `/app/frontend/src/pages/Approvals.js` (NEW, 407 LOC)**
+- Single-page UX matching the user spec verbatim:
+  - Empty state copy: `"No drafts waiting — ARIA is listening for replies."`
+  - Per-item row: name + company + channel chip + stage chip + intent
+    pill + relative time + collapsed body preview that expands inline.
+  - Signal context bubble ("Why this draft") inside the expanded view
+    pulled from `qualification.next_action_hint`.
+  - Inline editor (subject + body for email; body for whatsapp/linkedin).
+  - Inline reject row with optional one-line reason.
+  - Bulk action header buttons (Approve all / Reject all) with
+    `window.confirm` guard.
+  - Optimistic list updates: item disappears immediately on approve /
+    edit-send / reject.
+- Nav badge in `AppLayout.js` — purple gradient pill polling
+  `/api/approvals/count` every 60s + on tenant change. 99+ overflow.
+
+### Verification (test_reports/iteration_119.json)
+- **Backend 15/15 PASS · Frontend smoke 100% PASS**
+- All data-testids present (`approvals-page`, `approvals-empty`,
+  `approvals-item-{id}`, `approvals-expand-{id}`, `approvals-edit-{id}`,
+  `approvals-edit-subject-{id}`, `approvals-edit-body-{id}`,
+  `approvals-edit-send-{id}`, `approvals-reject-{id}`,
+  `approvals-reject-row-{id}`, `approvals-reject-reason-{id}`,
+  `approvals-reject-confirm-{id}`, `approvals-approve-{id}`,
+  `approvals-bulk-approve`, `approvals-bulk-reject`,
+  `nav-approvals-badge`).
+- Tenant isolation: cross-tenant id → 404. Already-actioned doc → 409.
+- Edit persistence verified via post-call Mongo read.
+- End-to-end regression: Resend inbound webhook → pending_outreach
+  insert → /api/approvals lists it → approve dispatches it → status
+  flips. Full loop holds.
+- V10 guard exits 0.
+
+### Cosmetic note from QA
+- Approve toast on Resend-sandbox accounts shows `0/1 sent · 1 failed`
+  (correct, since sandbox rejects unverified domains). Once a tenant
+  verifies their Resend sending domain via Settings → Integrations →
+  Resend, the toast will read `1/1 sent`.
+
+### Status
+**ARIA is genuinely end-to-end usable without touching MongoDB.**
+The full autonomous loop:
+
+```
+Crawl (Proxycurl + Serper)
+  → Claude synthesis (8-signal taxonomy)
+    → Outreach Playbook
+      → Channel-adaptive composer
+        → Outreach Dispatch (Resend / 360dialog / LinkedIn)
+          → Inbound Webhooks (replies)
+            → Silent Claude qualification
+              → Drafted next move → pending_outreach
+                → /app/approvals
+                  → Founder approves / edits / rejects
+                    → Outreach Dispatch (closes the loop)
+```
+
+All seven batches verified PASS:
+1. Universal OAuth ✅  2. Call Booking ✅  3. Claude Deep Integration (V10) ✅
+4. Multi-Platform Crawl + Outreach Playbook ✅  5. Morning Brief + Send Dispatch ✅
+6. Inbound Reply Tracker ✅  7. Approval Queue ✅
+
+---
+
+
 ## Iter 118 — Batch 6: Inbound Reply Tracker · LOOP FULLY CLOSED (Feb 2026)
 
 ARIA now **listens** in addition to speaking. The second half of the
