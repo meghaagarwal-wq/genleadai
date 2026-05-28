@@ -172,6 +172,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter120 Batch 8 — 8 PM Approval Queue Digest
     from .aria_approval_digest import router as approval_digest_router
 
+    # iter121 Batch 9 — Auto-approve rule + Notification settings aggregator
+    from .aria_settings import router as aria_settings_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -228,5 +231,6 @@ def register_all_routes(app: FastAPI) -> None:
         inbound_reply_router,
         approvals_router,
         approval_digest_router,
+        aria_settings_router,
     ):
         app.include_router(router)

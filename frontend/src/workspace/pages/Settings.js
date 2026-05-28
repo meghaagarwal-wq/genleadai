@@ -111,6 +111,17 @@ const PtSettings = () => {
     <div data-testid="pt-settings-page">
       <PageHeader title="Settings" subtitle="Email sender, scoring rules, stage boundaries, and decay logic." />
 
+      {/* iter121 — Quick link to Notifications */}
+      <div className="bg-white border border-[#E2E8F0] rounded-lg p-4 mb-4 flex items-center justify-between" data-testid="pt-settings-notifications-link">
+        <div>
+          <div className="text-sm font-semibold text-[#0F172A]" style={{ fontFamily: 'Space Grotesk, Inter' }}>Notifications</div>
+          <div className="text-xs text-[#64748B]">Morning Brief · Approval Digest · Auto-approve rule</div>
+        </div>
+        <a href="/app/settings/notifications" className="inline-flex items-center gap-1 text-xs font-bold text-[#7C35DC] hover:text-[#4C1D95]" data-testid="pt-settings-notifications-cta">
+          Configure →
+        </a>
+      </div>
+
       {/* Email sender */}
       <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-hidden mb-6" data-testid="pt-email-sender-card">
         <div className="px-4 py-2.5 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center gap-2">

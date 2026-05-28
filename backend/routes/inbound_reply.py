@@ -287,6 +287,8 @@ async def _process_inbound(
     # 5) Draft ARIA's next move — but DO NOT auto-send.
     drafted = await _draft_aria_reply(tenant_id, lead_id, channel, reply_text)
     queued_draft = False
+    auto_dispatched = False
+    auto_reason = None
     if drafted and qualification["intent"] not in ("unsubscribe", "not_interested"):
         msg = drafted.get("message")
         if isinstance(msg, dict):
@@ -295,20 +297,64 @@ async def _process_inbound(
         else:
             body_preview = str(msg or "")[:600]
             subject = None
-        pending_outreach_col.insert_one({
-            "tenant_id": tenant_id,
-            "lead_id": lead_id,
-            "channel": channel,
-            "status": "awaiting_owner_approval",
-            "reason": "Auto-drafted reply to inbound — owner review required before send.",
-            "subject": subject,
-            "body": body_preview,
-            "qualification": qualification,
-            "in_reply_to_external_id": external_id,
-            "ai_powered": bool(drafted.get("ai_powered")),
-            "created_at": _now_iso(),
-        })
-        queued_draft = True
+
+        # iter121 — Auto-approve rule: high-fit + positive intent → dispatch
+        # immediately, bypass the approval queue. Bounded by per-day cap.
+        from routes.aria_settings import auto_approve_eligible, record_auto_approve_used
+        fit = int((intel_profiles_col.find_one(
+            {"tenant_id": tenant_id, "lead_id": lead_id},
+            {"_id": 0, "fit_score": 1},
+        ) or {}).get("fit_score", 0))
+        decision = auto_approve_eligible(
+            tenant_id=tenant_id, channel=channel,
+            fit_score=fit, intent=qualification["intent"],
+        )
+        auto_reason = decision["reason"]
+        if decision["eligible"]:
+            from services.outreach_dispatch import dispatch_outreach
+            dispatch = await dispatch_outreach(
+                tenant_id=tenant_id, lead_id=lead_id, channel=channel,
+                composed={
+                    "channel": channel,
+                    "message": ({"subject": subject or "Re:", "body": body_preview} if channel == "email" else body_preview),
+                    "ai_powered": bool(drafted.get("ai_powered")),
+                },
+                actor_user_id="aria-auto-approve",
+            )
+            pending_outreach_col.insert_one({
+                "tenant_id": tenant_id,
+                "lead_id": lead_id,
+                "channel": channel,
+                "status": "auto_approved_sent" if dispatch.get("sent") else "auto_approved_send_failed",
+                "reason": f"Auto-approved (fit={fit}, intent={qualification['intent']}). Bypassed approval queue.",
+                "subject": subject,
+                "body": body_preview,
+                "qualification": qualification,
+                "in_reply_to_external_id": external_id,
+                "ai_powered": bool(drafted.get("ai_powered")),
+                "auto_approved": True,
+                "dispatch_result": dispatch,
+                "created_at": _now_iso(),
+            })
+            if dispatch.get("sent"):
+                record_auto_approve_used(tenant_id)
+            auto_dispatched = True
+        else:
+            pending_outreach_col.insert_one({
+                "tenant_id": tenant_id,
+                "lead_id": lead_id,
+                "channel": channel,
+                "status": "awaiting_owner_approval",
+                "reason": "Auto-drafted reply to inbound — owner review required before send.",
+                "subject": subject,
+                "body": body_preview,
+                "qualification": qualification,
+                "in_reply_to_external_id": external_id,
+                "ai_powered": bool(drafted.get("ai_powered")),
+                "auto_approve_skipped_reason": decision["reason"],
+                "created_at": _now_iso(),
+            })
+            queued_draft = True
 
     return {
         "ok": True,
@@ -317,6 +363,8 @@ async def _process_inbound(
         "stage_changed_to": "replied" if prior_stage != "replied" else None,
         "qualification": qualification,
         "drafted": queued_draft,
+        "auto_dispatched": auto_dispatched,
+        "auto_approve_reason": auto_reason,
     }
 
 

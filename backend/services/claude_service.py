@@ -207,12 +207,20 @@ async def _one_attempt(
         raise ClaudeServiceError(f"Claude timed out after {timeout_s}s on model {model}")
 
     elapsed_ms = int((time.time() - started) * 1000)
-    # LlmChat returns the text content directly; rough token estimation
-    # (1 token ≈ 4 chars) is good enough for usage logging until the SDK
-    # surfaces real numbers.
+    # iter121 — Prefer real usage from the SDK if it surfaces; otherwise fall
+    # back to the 1-token≈4-chars heuristic. This keeps api_usage_log honest
+    # without requiring an SDK upgrade.
     text = result if isinstance(result, str) else getattr(result, "content", "") or str(result)
-    prompt_tokens = max(1, len(prompt) // 4)
-    completion_tokens = max(1, len(text) // 4)
+    usage = getattr(result, "usage", None)
+    if usage and isinstance(getattr(usage, "input_tokens", None), int) and isinstance(getattr(usage, "output_tokens", None), int):
+        prompt_tokens = usage.input_tokens
+        completion_tokens = usage.output_tokens
+    elif isinstance(usage, dict) and isinstance(usage.get("input_tokens"), int) and isinstance(usage.get("output_tokens"), int):
+        prompt_tokens = usage["input_tokens"]
+        completion_tokens = usage["output_tokens"]
+    else:
+        prompt_tokens = max(1, len(prompt) // 4)
+        completion_tokens = max(1, len(text) // 4)
     logger.info("claude_service: ok model=%s task elapsed_ms=%d", model, elapsed_ms)
     return text, prompt_tokens, completion_tokens
 

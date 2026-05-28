@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ptApi, PageHeader, StageBadge, SOURCE_LABELS, fmtDateTime } from '../shared';
 import AskAriaModal from '../components/AskAriaModal';
 import IntelTab from './IntelTab';
+import ConversationThread from './ConversationThread';
 
 const PtLeadDetail = () => {
   const { id } = useParams();
@@ -87,11 +88,12 @@ const PtLeadDetail = () => {
         }
       />
 
-      {/* iter113 Batch 4 — Overview / Intel tab strip */}
+      {/* iter113 Batch 4 — Overview / Intel / Thread tab strip */}
       <div className="flex items-center gap-1 mb-4 border-b border-[#E2E8F0]" data-testid="pt-detail-tabs">
         {[
           { id: 'overview', label: 'Overview' },
           { id: 'intel', label: 'Intel' },
+          { id: 'thread', label: 'Thread' },
         ].map((t) => {
           const active = activeTab === t.id;
           return (
@@ -102,6 +104,7 @@ const PtLeadDetail = () => {
               className={`relative px-4 py-2 text-sm font-semibold transition-colors ${active ? 'text-[#7C35DC]' : 'text-[#64748B] hover:text-[#0F172A]'}`}
             >
               {t.id === 'intel' && <Brain size={12} weight="duotone" className="inline mr-1 -mt-0.5" />}
+              {t.id === 'thread' && <Note size={12} weight="duotone" className="inline mr-1 -mt-0.5" />}
               {t.label}
               {active && (
                 <span
@@ -116,6 +119,8 @@ const PtLeadDetail = () => {
 
       {activeTab === 'intel' ? (
         <IntelTab leadId={id} lead={lead} />
+      ) : activeTab === 'thread' ? (
+        <ConversationThread leadId={id} />
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left col — Identity + Status */}

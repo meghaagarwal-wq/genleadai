@@ -87,3 +87,110 @@ async def threads(
         return 2
     out.sort(key=_priority)
     return {"threads": out, "count": len(out)}
+
+
+# ─── iter121 — Conversation thread per lead (rolls up outbound + inbound + activities) ───
+outbound_log_col = db["outbound_log"]
+inbound_messages_col = db["inbound_messages"]
+activities_col = db["activities"]
+pt_leads_col = db["pt_leads"]
+
+
+def _ob_entry(d):
+    return {
+        "id": f"ob_{d.get('provider_id') or d.get('created_at','')}",
+        "ts": d.get("created_at"),
+        "direction": "outbound",
+        "channel": d.get("channel"),
+        "actor": d.get("actor_user_id") or "aria",
+        "title": d.get("subject") or f"Sent via {d.get('provider') or d.get('channel')}",
+        "body": d.get("message_preview") or "",
+        "meta": {
+            "provider": d.get("provider"),
+            "provider_id": d.get("provider_id"),
+            "ai_powered": d.get("ai_powered"),
+            "sent": d.get("sent"),
+            "error": d.get("error"),
+            "logged_only": d.get("logged_only"),
+        },
+    }
+
+
+def _in_entry(d):
+    return {
+        "id": f"in_{d.get('external_id') or d.get('received_at','')}",
+        "ts": d.get("received_at"),
+        "direction": "inbound",
+        "channel": d.get("channel"),
+        "actor": d.get("from") or "prospect",
+        "title": f"Reply via {d.get('channel')}",
+        "body": d.get("text") or "",
+        "meta": {"external_id": d.get("external_id")},
+    }
+
+
+def _act_entry(d):
+    return {
+        "id": f"act_{d.get('_id') or d.get('created_at','')}",
+        "ts": d.get("created_at"),
+        "direction": "system",
+        "channel": d.get("channel"),
+        "actor": d.get("actor_user_id") or "system",
+        "title": (d.get("subject") or d.get("activity_type") or "event").replace("_", " ").title(),
+        "body": d.get("body") or "",
+        "meta": {"activity_type": d.get("activity_type")},
+    }
+
+
+@router.get("/lead/{lead_id}")
+async def thread_by_lead(
+    lead_id: str,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Return a single chronological chat-style thread for a lead.
+    Combines outbound_log + inbound_messages + activities (oldest at top)."""
+    tenant_id = tenant["id"]
+
+    outbound = [
+        _ob_entry(d) for d in outbound_log_col.find(
+            {"tenant_id": tenant_id, "lead_id": lead_id}, {"_id": 0},
+        ).sort("created_at", -1).limit(200)
+    ]
+    inbound = [
+        _in_entry(d) for d in inbound_messages_col.find(
+            {"tenant_id": tenant_id, "lead_id": lead_id, "unmatched": {"$ne": True}}, {"_id": 0},
+        ).sort("received_at", -1).limit(200)
+    ]
+    sysact = [
+        _act_entry({**d, "_id": str(d["_id"])}) for d in activities_col.find(
+            {"tenant_id": tenant_id, "lead_id": lead_id},
+        ).sort("created_at", -1).limit(200)
+    ]
+
+    items = [t for t in (outbound + inbound + sysact) if t.get("ts")]
+    items.sort(key=lambda t: t["ts"])
+
+    lead = pt_leads_col.find_one(
+        {"id": lead_id, "tenant_id": tenant_id},
+        {"_id": 0, "first_name": 1, "last_name": 1, "email": 1, "company_name": 1, "stage": 1, "score": 1},
+    ) or {}
+    name = f"{lead.get('first_name','')} {lead.get('last_name','')}".strip() or lead.get("email") or "Prospect"
+
+    return {
+        "thread": items,
+        "lead_snapshot": {
+            "name": name,
+            "first_name": lead.get("first_name"),
+            "email": lead.get("email"),
+            "company": lead.get("company_name"),
+            "stage": lead.get("stage"),
+            "score": lead.get("score"),
+        },
+        "counts": {
+            "outbound": len(outbound),
+            "inbound": len(inbound),
+            "activity": len(sysact),
+            "total": len(items),
+        },
+    }
+

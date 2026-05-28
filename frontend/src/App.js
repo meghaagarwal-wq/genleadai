@@ -71,6 +71,7 @@ import AISetupAssistant from './pages/AISetupAssistant';
 import TrainAriaV2 from './pages/TrainAriaV2';
 import Conversations from './pages/Conversations';
 import Approvals from './pages/Approvals';
+import Notifications from './pages/Notifications';
 import ICPManager from './pages/ICPManager';
 import { BillingSuccess, BillingCancel } from './pages/BillingReturn';
 import NotFound from './pages/NotFound';
@@ -259,6 +260,7 @@ function App() {
                             <Route path="/leads/:id" element={<LeadDetail />} />
                             <Route path="/conversations" element={<Conversations />} />
                             <Route path="/approvals" element={<Approvals />} />
+                            <Route path="/settings/notifications" element={<Notifications />} />
                             <Route path="/icps" element={<ICPManager />} />
                             <Route path="/train-aria" element={<TrainAriaV2 />} />
                             <Route path="/ai-setup" element={<AISetupAssistant />} />
