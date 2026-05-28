@@ -29,6 +29,7 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import api from '../../config/api';
+import JourneyFlowchart from './JourneyFlowchart';
 
 const CHANNELS = ['whatsapp', 'email', 'linkedin', 'sms', 'call'];
 
@@ -242,7 +243,13 @@ const TouchpointMap = () => {
 
       {/* Views */}
       {!loading && tps.length > 0 && view === 'flowchart' && (
-        <FlowchartView tps={tps} onPatch={patchTouchpoint} onRemove={remove} onRegenerate={regenerate} onMove={move} />
+        <JourneyFlowchart
+          tps={tps}
+          journeyStrength={null}
+          onScoreWithAI={() => toast('AI scoring is on the roadmap — pending live send data.')}
+          onPatch={patchTouchpoint}
+          onRegenerate={regenerate}
+        />
       )}
       {!loading && tps.length > 0 && view === 'timeline' && (
         <TimelineView tps={tps} onPatch={patchTouchpoint} onRemove={remove} onRegenerate={regenerate} />
