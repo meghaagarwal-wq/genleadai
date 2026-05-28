@@ -207,6 +207,13 @@ const IntegrationCard = ({ provider, status, loading, onConnect, onDisconnect, o
       <div className="text-[11px] mb-3 line-clamp-2 min-h-[28px]" style={{ color: 'var(--theme-text-muted)' }}>
         {(provider.services || []).join(' · ')}
       </div>
+      {/* iter109c Batch 2 — audit footer on connected cards */}
+      {s.connected && (
+        <div className="text-[10px] mb-2 italic" style={{ color: 'var(--theme-text-dim)' }} data-testid={`integration-audit-${provider.id}`}>
+          Connected by <strong style={{ color: 'var(--theme-text-muted)' }}>{s.connected_by_name || 'workspace owner'}</strong>
+          {s.connected_at && <> · {formatRel(s.connected_at)}</>}
+        </div>
+      )}
       <div className="flex gap-1.5 mt-auto">
         {!isConnected && !isConfigured && (
           <button onClick={onConnect} data-testid={`integration-connect-${provider.id}`}
@@ -248,6 +255,15 @@ const IntegrationCard = ({ provider, status, loading, onConnect, onDisconnect, o
 };
 
 
+// Google-only scope picker — workspace owner can narrow which services they
+// grant before authorizing.
+const GOOGLE_SCOPE_GROUPS = [
+  { id: 'gmail',    label: 'Gmail (read + send)',         scopes: ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'] },
+  { id: 'calendar', label: 'Calendar + Meet (book calls)', scopes: ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.readonly'] },
+  { id: 'ads',      label: 'Google Ads (lead forms)',     scopes: ['https://www.googleapis.com/auth/adwords'] },
+];
+
+
 // ── ConnectModal — OAuth or API-key ─────────────────────────────────────
 const ConnectModal = ({ provider, status, onClose, onComplete }) => {
   const [clientId, setClientId] = useState('');
@@ -257,7 +273,9 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
   const [busy, setBusy] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
+  const [googleScopeOn, setGoogleScopeOn] = useState({ gmail: true, calendar: true, ads: true });
   const isOAuth = !!provider.oauth;
+  const isGoogle = provider.id === 'google';
 
   const handleSubmit = async () => {
     setBusy(true);
@@ -267,19 +285,30 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
           toast.error('Both CLIENT_ID and CLIENT_SECRET are required');
           setBusy(false); return;
         }
+        // For Google: build the narrowed scope list from the toggles.
+        let scopes;
+        if (isGoogle) {
+          scopes = GOOGLE_SCOPE_GROUPS
+            .filter((g) => googleScopeOn[g.id])
+            .flatMap((g) => g.scopes)
+            .concat(['openid', 'email', 'profile']);
+          if (scopes.length <= 3) {
+            toast.error('Pick at least one Google service to connect.');
+            setBusy(false); return;
+          }
+        }
         await api.post(`/api/integrations/${provider.id}/configure`, {
           client_id: clientId,
           client_secret: clientSecret,
+          scopes,
         });
         const { data } = await api.get(`/api/integrations/${provider.id}/auth-url`);
-        // Open OAuth window — the callback redirects back to /app/integrations?connected=…
         const w = window.open(data.auth_url, '_blank', 'width=560,height=720');
         if (!w) {
           toast.warning('Popup blocked — opening in this tab');
           window.location.href = data.auth_url;
           return;
         }
-        // Poll for window close + then re-check status
         const poll = setInterval(async () => {
           if (w.closed) {
             clearInterval(poll);
@@ -352,6 +381,25 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
         {/* Inputs */}
         {isOAuth ? (
           <>
+            {isGoogle && (
+              <div className="mb-4 p-3 rounded-md border" style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }} data-testid="google-scope-picker">
+                <div className="text-[10px] uppercase tracking-wider font-bold mb-2" style={{ color: 'var(--theme-text-muted)' }}>
+                  Which Google services should ARIA connect?
+                </div>
+                {GOOGLE_SCOPE_GROUPS.map((g) => (
+                  <label key={g.id} className="flex items-start gap-2 mb-1.5 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!googleScopeOn[g.id]}
+                      onChange={() => setGoogleScopeOn((s) => ({ ...s, [g.id]: !s[g.id] }))}
+                      data-testid={`google-scope-${g.id}`}
+                      className="mt-0.5 accent-violet-500"
+                    />
+                    <span style={{ color: 'var(--theme-text)' }}>{g.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
             <Field label="CLIENT_ID" value={clientId} onChange={setClientId} testId="connect-input-client-id" />
             <Field label="CLIENT_SECRET" value={clientSecret} onChange={setClientSecret}
                    type={showSecret ? 'text' : 'password'} testId="connect-input-client-secret"

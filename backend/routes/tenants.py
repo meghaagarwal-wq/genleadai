@@ -106,6 +106,15 @@ def get_active_tenant(
 
     # Embed the user's role inside this tenant for the request lifecycle
     tenant["_member_role"] = chosen_membership.get("role", "member")
+    # iter109c Batch 2 — also embed actor identity for audit trail.
+    tenant["_member_user_id"] = chosen_membership.get("user_id")
+    tenant["_member_email"] = email
+    # Best-effort fetch of full_name from users collection (cached one-shot).
+    try:
+        u = db["users"].find_one({"id": chosen_membership.get("user_id")} if chosen_membership.get("user_id") else {"email": email}, {"_id": 0, "full_name": 1, "email": 1})
+        tenant["_member_full_name"] = (u or {}).get("full_name") or email
+    except Exception:
+        tenant["_member_full_name"] = email
     return tenant
 
 

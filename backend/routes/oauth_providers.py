@@ -222,6 +222,12 @@ async def configure(
         "scopes": body.scopes or spec["default_scopes"],
         **(body.extra_config or {}),
     }
+    # iter109c Batch 2 — capture who configured + when (audit trail).
+    audit = {
+        "configured_by_user_id": tenant.get("_member_user_id"),
+        "configured_by_name": tenant.get("_member_full_name") or tenant.get("_member_email") or "unknown",
+        "configured_at": _now_iso(),
+    }
     configs_col.update_one(
         {"tenant_id": tenant["id"], "integration_type": provider},
         {"$set": {
@@ -230,6 +236,7 @@ async def configure(
             "status": existing.get("status") or "configured",
             "config": merged,
             "updated_at": _now_iso(),
+            **audit,
             **({"created_at": _now_iso()} if not existing else {}),
         }},
         upsert=True,
@@ -306,14 +313,21 @@ async def callback(provider: str, request: Request, code: Optional[str] = None, 
         "token_type": tokens.get("token_type"),
         "granted_scopes": (tokens.get("scope") or " ".join(cfg.get("scopes") or spec["default_scopes"])).split(),
     }
+    # Audit trail — copy from configure step if present, else stamp on this callback.
+    prev = _load_config(tenant_id, provider) or {}
+    audit = {
+        "connected_by_user_id": prev.get("configured_by_user_id") or prev.get("connected_by_user_id"),
+        "connected_by_name": prev.get("configured_by_name") or prev.get("connected_by_name") or "unknown",
+    }
     configs_col.update_one(
         {"tenant_id": tenant_id, "integration_type": provider},
         {"$set": {
             "status": "connected",
-            "config": {**((_load_config(tenant_id, provider)).get("config") or {}), **{k: v for k, v in update.items() if v is not None}},
+            "config": {**(prev.get("config") or {}), **{k: v for k, v in update.items() if v is not None}},
             "connected_at": _now_iso(),
             "last_sync_at": _now_iso(),
             "updated_at": _now_iso(),
+            **audit,
         }},
         upsert=True,
     )
@@ -360,6 +374,7 @@ async def status(provider: str, tenant: dict = Depends(get_active_tenant)):
         "scopes": cfg.get("granted_scopes") or cfg.get("scopes") or [],
         "last_sync_at": doc.get("last_sync_at"),
         "connected_at": doc.get("connected_at"),
+        "connected_by_name": doc.get("connected_by_name") or doc.get("configured_by_name"),
         "error_message": doc.get("error_message"),
     }
 
@@ -408,6 +423,11 @@ async def configure_api_key(
         "api_key": encrypt(body.api_key),
         **(body.extra_config or {}),
     }
+    actor = tenant.get("_member") or {}
+    audit = {
+        "connected_by_user_id": tenant.get("_member_user_id") or actor.get("user_id"),
+        "connected_by_name": tenant.get("_member_full_name") or actor.get("full_name") or tenant.get("_member_email") or "unknown",
+    }
     configs_col.update_one(
         {"tenant_id": tenant["id"], "integration_type": provider},
         {"$set": {
@@ -417,6 +437,7 @@ async def configure_api_key(
             "config": merged,
             "connected_at": _now_iso(),
             "updated_at": _now_iso(),
+            **audit,
             **({"created_at": _now_iso()} if not existing else {}),
         }},
         upsert=True,
