@@ -290,6 +290,8 @@ const TrainAriaV2 = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewText, setPreviewText] = useState('');
   const [extracting, setExtracting] = useState(false);
+  // iter108 Batch B — extraction job status for the progress UI.
+  const [extractStatus, setExtractStatus] = useState(null);
   const [testMessages, setTestMessages] = useState([]);  // [{role, text}]
   const [testInput, setTestInput] = useState('');
   const [testSending, setTestSending] = useState(false);
@@ -368,22 +370,74 @@ const TrainAriaV2 = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setExtracting(true);
+    setExtractStatus({ phase: 'uploading', elapsed: 0, eta: file.type.startsWith('image/') ? 50 : 25, hint: 'Uploading…', isOcr: file.type.startsWith('image/') });
     const form = new FormData();
     form.append('file', file);
     try {
       const { data } = await api.post(
         '/api/aria/training-profile/extract-from-document', form,
-        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 },
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 },
       );
-      toast.success(`Extracted ${data.fields_extracted} fields · ${data.icps_extracted} ICP(s) · v${data.version}`);
-      load();
+      // Fast path — cache hit OR sync completion
+      if (data.cached || data.status === 'done') {
+        toast.success(
+          data.cached
+            ? `Cached result — restored ${data.fields_extracted} fields instantly`
+            : `Extracted ${data.fields_extracted} fields · ${data.icps_extracted} ICP(s) · v${data.version}`,
+          { duration: 6000 },
+        );
+        setExtractStatus({ phase: 'done', ...data });
+        load();
+        return;
+      }
+      // Async path — poll the job
+      setExtractStatus({ phase: 'extracting', elapsed: 0, eta: data.eta_seconds, hint: data.hint, isOcr: data.is_ocr, jobId: data.job_id });
+      await pollExtractionJob(data.job_id);
     } catch (err) {
       const det = err?.response?.data?.detail;
       toast.error(typeof det === 'string' ? det : 'Extraction failed');
+      setExtractStatus(null);
     } finally {
-      setExtracting(false);
       if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  /** iter108 Batch B — Poll the extraction job until done/error. */
+  const pollExtractionJob = async (jobId) => {
+    const startedAt = Date.now();
+    let slowToastShown = false;
+    // Poll every 2s; bail out after 5 minutes of polling (frontend cap).
+    while (Date.now() - startedAt < 5 * 60 * 1000) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const { data } = await api.get(`/api/aria/training-profile/extract-job/${jobId}`);
+        setExtractStatus((cur) => ({ ...(cur || {}), ...data, jobId }));
+        if (data.status === 'done') {
+          toast.success(`Extracted ${data.fields_extracted} fields · ${data.icps_extracted} ICP(s) · v${data.version}`, { duration: 6000 });
+          setExtracting(false);
+          load();
+          return;
+        }
+        if (data.status === 'error') {
+          toast.error(data.error || 'Extraction failed');
+          setExtracting(false);
+          return;
+        }
+        if (data.slow_warn && !slowToastShown) {
+          slowToastShown = true;
+          toast.info(
+            "Taking longer than usual — feel free to navigate away. We'll show a notification when it's ready.",
+            { duration: 9000 },
+          );
+        }
+      } catch (e) {
+        toast.error('Lost connection to extraction job');
+        setExtracting(false);
+        return;
+      }
+    }
+    toast.error('Extraction timed out after 5 minutes');
+    setExtracting(false);
   };
 
   const sendTest = async () => {
@@ -468,8 +522,8 @@ const TrainAriaV2 = () => {
             disabled={extracting}
             className="block text-sm text-slate-600 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-violet-600 file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-violet-700 disabled:opacity-50"
           />
-          {extracting && (
-            <div className="mt-2 text-xs text-violet-600 font-medium">Aria is reading your document…</div>
+          {extracting && extractStatus && (
+            <ExtractionProgress status={extractStatus} />
           )}
 
           {/* iter105 — FIX 10: URL scrape */}
@@ -700,3 +754,62 @@ const TestAriaPanel = ({ messages, input, onInput, onSend, sending, onClear }) =
 };
 
 export default TrainAriaV2;
+
+/**
+ * iter108 Batch B — Upload progress card.
+ * Shows the eta, current phase, elapsed seconds, and a slow-warn message
+ * if extraction crosses 90s. Once done, lists the extracted fields so the
+ * founder sees value populated WITHOUT having to refresh.
+ */
+const ExtractionProgress = ({ status }) => {
+  const elapsed = status.elapsed_seconds ?? status.elapsed ?? 0;
+  const eta = status.eta_seconds ?? status.eta ?? 30;
+  const pct = Math.min(95, Math.max(5, Math.round((elapsed / eta) * 100)));
+  const phaseLabel = (
+    status.status === 'done' ? 'Done' :
+    status.phase === 'uploading' ? 'Uploading…' :
+    status.phase === 'text_extraction' ? (status.is_ocr ? 'Running OCR on images…' : 'Reading document text…') :
+    status.phase === 'claude' ? 'Aria is structuring the content…' :
+    'Working…'
+  );
+  const isSlow = !!status.slow_warn;
+  const extractedFields = status.extracted_fields || {};
+  const fieldEntries = Object.entries(extractedFields);
+
+  return (
+    <div className="mt-3 border border-violet-200 rounded-lg p-4 bg-violet-50/40" data-testid="extract-progress">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-violet-900">{phaseLabel}</div>
+        <div className="text-xs text-violet-700 font-medium">{elapsed}s · target ~{eta}s</div>
+      </div>
+      <div className="h-1.5 bg-violet-200/60 rounded-full overflow-hidden mb-2">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${status.status === 'done' ? 'bg-emerald-500 w-full' : isSlow ? 'bg-amber-500' : 'bg-violet-600'}`}
+          style={{ width: status.status === 'done' ? '100%' : `${pct}%` }}
+        />
+      </div>
+      <div className="text-xs text-violet-700">{status.hint || 'Most documents land in under a minute.'}</div>
+      {isSlow && (
+        <div className="mt-2 text-xs text-amber-800 bg-amber-100 border border-amber-200 rounded px-2 py-1.5" data-testid="extract-slow-warn">
+          Taking longer than usual — feel free to navigate away. We'll notify you when it's ready.
+        </div>
+      )}
+      {status.status === 'done' && fieldEntries.length > 0 && (
+        <div className="mt-3 border-t border-violet-200 pt-3" data-testid="extract-fields-list">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-violet-700 mb-1.5">Extracted fields ({fieldEntries.length})</div>
+          <div className="flex flex-wrap gap-1.5">
+            {fieldEntries.slice(0, 16).map(([k]) => (
+              <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-semibold border border-emerald-200">
+                ✓ {k}
+              </span>
+            ))}
+            {fieldEntries.length > 16 && (
+              <span className="text-[10px] text-violet-700 italic">+{fieldEntries.length - 16} more</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+

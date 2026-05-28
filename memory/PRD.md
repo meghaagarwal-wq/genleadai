@@ -1,4 +1,71 @@
-## Iter 108 — NUCLEAR CONSOLIDATION + P3 backlog (Feb 2026)
+## Iter 108 — UI standardisation (Feb 2026, Batch A + B)
+
+### Batch B — Train ARIA speed fix
+- `POST /api/aria/training-profile/extract-from-document` now returns
+  `{job_id, eta_seconds, hint, is_ocr}` instantly. The actual text
+  extraction + Claude structuring runs in a background
+  `asyncio.create_task` worker that writes to a new
+  `training_extraction_jobs` collection.
+- `GET /api/aria/training-profile/extract-job/{job_id}` for polling —
+  returns `{status, phase, elapsed_seconds, slow_warn}` while running,
+  then the full result dict on completion.
+- **SHA-256 content cache**: re-uploading the same file is matched on
+  `file_hash` and returns the cached `done` job's result instantly
+  (`{cached: true, ...}`). Verified end-to-end: same file replayed
+  twice → 2nd response in ~50ms.
+- **OCR-aware ETA + hint**: image / PPT uploads get `eta_seconds=45` and
+  the hint "Images & slides typically take 45–60 seconds — OCR is the
+  slow part."
+- **90-second slow-warn**: server reports `slow_warn: true` after 90s
+  in queued/extracting; client renders amber inline banner + one-time
+  toast "Taking longer than usual — feel free to navigate away. We'll
+  notify you when it's ready."
+- **TrainAriaV2 progress card**: phase label · elapsed · eta · progress
+  bar (purple → amber if slow → emerald on done) · slow-warn banner ·
+  green ✓ chips per extracted field on completion.
+
+### V1–V10 — ALL PASS
+V1–V8, V10 from Batch A. V9 verified live in this turn.
+
+
+
+### What landed
+- **Sidebar nav restructure** (`components/AppLayout.js`):
+  Home → **Command Center**, Intelligence Feed → **Instinct Feed**, Lead
+  Inbox + Automations merged into single **Automation** item, plus new
+  **ADVANCED · ARIA TOOLS** divider with **Call Booking** + **AI Setup
+  Assistant**. Removed from nav (backend preserved): Outreach Campaigns,
+  32-Touchpoint Journey, Human Handoff, Weekly Recap, Founder Briefs,
+  Revival Engine, Sales Playbooks, Troubleshooting.
+- **Command Center page** (new `workspace/pages/CommandCenter.js`):
+  purple gradient hero + dynamic greeting using the logged-in user's
+  first name + setup-state-aware subtext ("Your workspace is X% ready
+  …" / "Aria's ready — let's get her some leads to work." / "Aria is
+  working on N leads…") + 3 CTAs (Add lead-or-prospect / Import CSV /
+  Watch demo, all mode-aware) + 3 step cards (mode-aware copy) +
+  "What lights up here" chips OR live KPIs once leads exist.
+- **WorkspacePullBar** (`components/WorkspacePullBar.js`):
+  dynamic top-bar action buttons — one "Pull from <X>" button per
+  CONNECTED integration only (reads `/api/pt/integrations`). Always
+  trailing "Aria rescore leads". No-integrations state shows
+  "Connect an integration →" CTA. Per spec choice 2b: providers
+  without a backend pull endpoint show "Coming soon" toast on click.
+- **Automation page** (`workspace/pages/Automation.js`): single page
+  with three tabs — Lead Inbox · Campaigns · Touchpoints — embeds the
+  existing LeadFeed / Campaigns / TouchpointMap components with
+  `embedded={true}` so the PageHeader doesn't double-stack.
+- **Instinct rename**: `/app/intelligence` → `/app/instinct`. Legacy
+  path redirects.
+- **Call Booking stub** (`workspace/pages/CallBooking.js`):
+  pre-Calendly stub with 3 feature blurbs + "Connect in Integrations" CTA.
+- **Hardcoded "Pietential" strings stripped** from
+  `TouchpointMap.js` subtitle.
+
+### V1–V10 verification (9/10 PASS, V9 in Batch B)
+All 9 visual checks pass live — verified with Playwright screenshots.
+V9 (Train ARIA upload streaming) is the scheduled Batch B work.
+
+
 
 ### Continued (latest turn — Force-promote + 3 more extractions)
 - **Force-promote plan UI** — new master-admin action in

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Megaphone, EnvelopeOpen, LinkedinLogo } from '@phosphor-icons/react';
 import { ptApi, PageHeader, EmptyState, fmtDate } from '../shared';
 
-const PtCampaigns = () => {
+const PtCampaigns = ({ embedded = false }) => {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -15,7 +15,7 @@ const PtCampaigns = () => {
 
   return (
     <div data-testid="pt-campaigns-page">
-      <PageHeader title="Campaigns" subtitle="Saleshandy and Lemlist campaigns rolled up — every campaign synced or imported lives here." />
+      {!embedded && <PageHeader title="Campaigns" subtitle="Saleshandy and Lemlist campaigns rolled up — every campaign synced or imported lives here." />}
 
       <div className="flex items-center gap-2 mb-4" data-testid="pt-campaigns-filters">
         <button onClick={() => setFilter('')} data-testid="pt-camp-filter-all"

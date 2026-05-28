@@ -4,7 +4,7 @@ import { Plus, Upload, MagnifyingGlass, X } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, EmptyState, StageBadge, SOURCE_LABELS, fmtDate } from '../shared';
 
-const LeadFeed = () => {
+const LeadFeed = ({ embedded = false }) => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ stage: '', source: '', q: '', score_min: '', score_max: '' });
@@ -52,7 +52,7 @@ const LeadFeed = () => {
 
   return (
     <div data-testid="pt-leadfeed-page">
-      <PageHeader title="Lead Feed" subtitle="Real leads who have engaged. No samples."
+      {!embedded && <PageHeader title="Lead Feed" subtitle="Real leads who have engaged. No samples."
         right={
           <div className="flex items-center gap-2">
             {newSinceLastSeen > 0 && (
@@ -75,7 +75,7 @@ const LeadFeed = () => {
             </button>
           </div>
         }
-      />
+      />}
 
       {/* Filters */}
       <div className="bg-white border border-[#E2E8F0] rounded-lg p-3 flex items-center gap-2 flex-wrap mb-4" data-testid="pt-leadfeed-filters">

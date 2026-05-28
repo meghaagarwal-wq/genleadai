@@ -911,58 +911,209 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 from fastapi import UploadFile, File  # noqa: E402
 
+# iter108 Batch B — async extraction jobs + content-hash cache
+import asyncio as _asyncio  # noqa: E402
+import hashlib as _hashlib  # noqa: E402
+import uuid as _uuid  # noqa: E402
+from datetime import datetime as _dt, timezone as _tz  # noqa: E402
+
+_extraction_jobs_col = db["training_extraction_jobs"]
+# Composite index: cache hits are looked up by (tenant_id, file_hash, status="done")
+try:
+    _extraction_jobs_col.create_index([("tenant_id", 1), ("file_hash", 1), ("status", 1)])
+    _extraction_jobs_col.create_index([("job_id", 1)], unique=True)
+except Exception:
+    pass
+
+
+def _image_or_ppt(filename: str) -> bool:
+    f = (filename or "").lower()
+    return f.endswith((".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".ppt", ".pptx"))
+
+
+async def _run_extraction_job(job_id: str, tenant_id: str, filename: str, content: bytes):
+    """Background worker — does the same pipeline as the sync endpoint
+    but writes status into _extraction_jobs_col so the frontend can poll."""
+    from routes.aria_auto_map import _extract_text
+    try:
+        text = _extract_text(filename or "", content)
+        if not text or len(text.strip()) < 50:
+            _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
+                "status": "error",
+                "error": "Couldn't read enough text from this file. Accepted: PDF, DOCX, PPT, PPTX, XLSX, JPG, PNG, WEBP, TXT.",
+                "finished_at": _dt.now(_tz.utc).isoformat(),
+            }})
+            return
+
+        _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
+            "status": "extracting",
+            "text_chars": len(text),
+            "phase": "claude",
+        }})
+
+        extracted = await _extract_with_claude(text)
+
+        settings = (tenants_col.find_one({"id": tenant_id}, {"_id": 0}) or {}).get("settings") or {}
+        existing = ((settings.get("aria_training_profile") or {}).get("data")) or _empty_profile()
+        merged = _merge_into_profile(existing, extracted)
+        tenants_col.update_one(
+            {"id": tenant_id},
+            {"$set": {"settings.aria_training_profile.data": merged}},
+        )
+        assembled = reassemble_for_tenant(tenant_id)
+        fields_filled = sum(1 for k, v in extracted.items() if v and v != "NOT_FOUND" and v != [])
+
+        result = {
+            "ok": True,
+            "filename": filename,
+            "text_chars": len(text),
+            "fields_extracted": fields_filled,
+            "icps_extracted": len(extracted.get("icp_profiles") or []),
+            "icps_merged_total": len(merged.get("icp_profiles") or []),
+            "version": assembled["version"],
+            "assembled_at": assembled["assembled_at"],
+            "extracted_preview": {
+                "what_you_sell": (extracted.get("what_you_sell") or "")[:120],
+                "who_you_sell_to": (extracted.get("who_you_sell_to") or "")[:120],
+                "icp_names": [i.get("icp_name") for i in (extracted.get("icp_profiles") or [])],
+            },
+            "extracted_fields": {
+                # Stream-friendly per-field map — frontend can render as fields
+                # populate. Stored on completion only (we don't truly stream
+                # mid-Claude, since the API is single-shot).
+                k: (v if isinstance(v, (str, list, dict)) else str(v))
+                for k, v in extracted.items()
+                if v and v != "NOT_FOUND" and v != []
+            },
+        }
+        _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
+            "status": "done",
+            "result": result,
+            "finished_at": _dt.now(_tz.utc).isoformat(),
+        }})
+    except HTTPException as he:
+        _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
+            "status": "error", "error": str(he.detail)[:280],
+            "finished_at": _dt.now(_tz.utc).isoformat(),
+        }})
+    except Exception as e:
+        _extraction_jobs_col.update_one({"job_id": job_id}, {"$set": {
+            "status": "error", "error": f"Internal: {str(e)[:200]}",
+            "finished_at": _dt.now(_tz.utc).isoformat(),
+        }})
+
 
 @router.post("/training-profile/extract-from-document")
 async def extract_from_document(
     file: UploadFile = File(...),
     tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
 ):
-    """Upload a document → extract Aria training fields → merge + re-assemble."""
-    from routes.aria_auto_map import _extract_text
+    """iter108 Batch B — async + content-hash cached extraction.
 
+    Flow:
+      1. Hash the upload (sha256). If a `done` job exists for this tenant +
+         hash, return its cached result instantly (`cached=true`).
+      2. Else create a job doc + kick off background extraction.
+      3. Return `{job_id, status: "queued", eta_seconds, hint}` so the
+         frontend can show progress UI immediately and poll
+         `/training-profile/extract-job/{job_id}`.
+    """
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file.")
     if len(content) > _MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"File too large (max {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB).")
 
-    text = _extract_text(file.filename or "", content)
-    if not text or len(text.strip()) < 50:
-        raise HTTPException(
-            400,
-            "Couldn't read enough text from this file. Accepted types: "
-            "PDF, DOCX, PPT, PPTX, XLSX, JPG, PNG, WEBP, TXT. "
-            "For scanned PDFs, save as image (JPG/PNG) so OCR runs."
-        )
+    file_hash = _hashlib.sha256(content).hexdigest()
 
-    extracted = await _extract_with_claude(text)
-
-    settings = (tenants_col.find_one({"id": tenant["id"]}, {"_id": 0}) or {}).get("settings") or {}
-    existing = ((settings.get("aria_training_profile") or {}).get("data")) or _empty_profile()
-    merged = _merge_into_profile(existing, extracted)
-
-    tenants_col.update_one(
-        {"id": tenant["id"]},
-        {"$set": {"settings.aria_training_profile.data": merged}},
+    # Cache lookup
+    cached = _extraction_jobs_col.find_one(
+        {"tenant_id": tenant["id"], "file_hash": file_hash, "status": "done"},
+        {"_id": 0, "result": 1, "job_id": 1, "finished_at": 1},
+        sort=[("finished_at", -1)],
     )
-    assembled = reassemble_for_tenant(tenant["id"])
+    if cached and cached.get("result"):
+        return {
+            "cached": True,
+            "job_id": cached.get("job_id"),
+            "status": "done",
+            "finished_at": cached.get("finished_at"),
+            **cached["result"],
+        }
 
-    fields_filled = sum(1 for k, v in extracted.items() if v and v != "NOT_FOUND" and v != [])
-    return {
-        "ok": True,
+    # Create job + kick off worker
+    job_id = _uuid.uuid4().hex
+    eta = 45 if _image_or_ppt(file.filename or "") else 25
+    hint = (
+        "Images & slides typically take 45–60 seconds — OCR is the slow part."
+        if _image_or_ppt(file.filename or "")
+        else "Most docs land in 20–30 seconds."
+    )
+    _extraction_jobs_col.insert_one({
+        "job_id": job_id,
+        "tenant_id": tenant["id"],
+        "file_hash": file_hash,
         "filename": file.filename,
-        "text_chars": len(text),
-        "fields_extracted": fields_filled,
-        "icps_extracted": len(extracted.get("icp_profiles") or []),
-        "icps_merged_total": len(merged.get("icp_profiles") or []),
-        "version": assembled["version"],
-        "assembled_at": assembled["assembled_at"],
-        "extracted_preview": {
-            "what_you_sell": (extracted.get("what_you_sell") or "")[:120],
-            "who_you_sell_to": (extracted.get("who_you_sell_to") or "")[:120],
-            "icp_names": [i.get("icp_name") for i in (extracted.get("icp_profiles") or [])],
-        },
+        "size_bytes": len(content),
+        "is_ocr": _image_or_ppt(file.filename or ""),
+        "status": "queued",
+        "phase": "text_extraction",
+        "started_at": _dt.now(_tz.utc).isoformat(),
+        "finished_at": None,
+        "result": None,
+        "error": None,
+    })
+    _asyncio.create_task(_run_extraction_job(job_id, tenant["id"], file.filename or "upload", content))
+    return {
+        "cached": False,
+        "job_id": job_id,
+        "status": "queued",
+        "eta_seconds": eta,
+        "hint": hint,
+        "is_ocr": _image_or_ppt(file.filename or ""),
     }
+
+
+@router.get("/training-profile/extract-job/{job_id}")
+async def extract_job_status(
+    job_id: str,
+    tenant: dict = Depends(require_tenant_role(["owner", "admin", "master_admin"])),
+):
+    """Poll an extraction job. Returns:
+      - `{status: "queued"|"extracting", phase, elapsed_seconds, eta_seconds, slow_warn}` while running
+      - `{status: "done", ...full result fields}` on completion
+      - `{status: "error", error}` on failure
+    """
+    job = _extraction_jobs_col.find_one(
+        {"job_id": job_id, "tenant_id": tenant["id"]},
+        {"_id": 0},
+    )
+    if not job:
+        raise HTTPException(404, "Extraction job not found")
+
+    started = job.get("started_at")
+    elapsed = 0
+    if started:
+        try:
+            d = _dt.fromisoformat(started.replace("Z", "+00:00"))
+            elapsed = int((_dt.now(_tz.utc) - d).total_seconds())
+        except Exception:
+            pass
+
+    base = {
+        "job_id": job_id,
+        "filename": job.get("filename"),
+        "status": job.get("status"),
+        "phase": job.get("phase"),
+        "elapsed_seconds": elapsed,
+        "is_ocr": job.get("is_ocr", False),
+        "slow_warn": elapsed > 90 and job.get("status") in ("queued", "extracting"),
+    }
+    if job.get("status") == "done":
+        return {**base, **(job.get("result") or {}), "status": "done"}
+    if job.get("status") == "error":
+        return {**base, "error": job.get("error")}
+    return base
 
 
 # ─── Phase 2: Auto-train from existing workspace data ────────────────────

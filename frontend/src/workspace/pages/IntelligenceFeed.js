@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import api from '../../config/api';
 import { toast } from 'sonner';
+import WorkspacePullBar from '../../components/WorkspacePullBar';
 
 const SIGNAL_LABELS = {
   deal_closed:       { label: 'Deal closed',       color: 'bg-emerald-100 text-emerald-700' },
@@ -347,7 +348,8 @@ const PtIntelligenceFeed = () => {
     <div className="max-w-6xl mx-auto p-6 lg:p-10" data-testid="pt-intelligence-feed-page">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Intelligence Feed</h1>
+          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#7C35DC]">Instinct</div>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">Instinct Feed</h1>
           <p className="text-sm text-slate-600 max-w-2xl">
             New buying signals, funding rounds, hiring moves, and other moments worth
             acting on. Aria classifies them with confidence ≥ 70% and drafts the
@@ -359,12 +361,15 @@ const PtIntelligenceFeed = () => {
             status_counts={scanMeta.status_counts}
           />
         </div>
-        <button
-          data-testid="pt-insights-scan-btn"
-          onClick={runScan}
-          disabled={scanning}
-          className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
-        >{scanning ? 'Scanning prospects…' : 'Run scan now'}</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <WorkspacePullBar />
+          <button
+            data-testid="pt-insights-scan-btn"
+            onClick={runScan}
+            disabled={scanning}
+            className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+          >{scanning ? 'Scanning prospects…' : 'Run scan now'}</button>
+        </div>
       </div>
 
       <div className="mb-6">

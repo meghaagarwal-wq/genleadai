@@ -19,9 +19,9 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  House, Brain, Tray, ChatCircle, Target, GraduationCap, Lightning,
+  House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
-  CaretDown, Buildings,
+  CaretDown, Buildings, CalendarBlank, Robot,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import NotificationsBell from './NotificationsBell';
@@ -32,19 +32,22 @@ import api from '../config/api';
 
 // ── Nav definition ──────────────────────────────────────────────────────
 // `modes` (optional): when present, the item is only shown when the active
-// workspace's mode is in the list. Same rule for every workspace —
-// NEVER tenant-id specific.
-const NAV = [
-  { to: '/app',                label: 'Home',              icon: House },
-  { to: '/app/intelligence',   label: 'Intelligence Feed', icon: Brain,        modes: ['b2b', 'hybrid'] },
-  { to: '/app/leads',          label: 'Lead Inbox',        icon: Tray,         modes: ['b2c', 'hybrid'] },
-  { to: '/app/conversations',  label: 'Conversations',     icon: ChatCircle },
-  { to: '/app/icps',           label: 'ICPs',              icon: Target },
-  { to: '/app/train-aria',     label: 'Train ARIA',        icon: GraduationCap },
-  { to: '/app/automations',    label: 'Automations',       icon: Lightning },
-  { to: '/app/integrations',   label: 'Integrations',      icon: Plug },
-  { to: '/app/reports',        label: 'Reports',           icon: ChartLineUp },
-  { to: '/app/settings',       label: 'Settings',          icon: GearSix },
+// workspace's mode is in the list. Same rule for every workspace.
+const NAV_PRIMARY = [
+  { to: '/app',                label: 'Command Center', icon: House },
+  { to: '/app/instinct',       label: 'Instinct Feed',  icon: Brain,        modes: ['b2b', 'hybrid'] },
+  { to: '/app/automation',     label: 'Automation',     icon: Lightning,    modes: ['b2c', 'hybrid'] },
+  { to: '/app/conversations',  label: 'Conversations',  icon: ChatCircle },
+  { to: '/app/icps',           label: 'ICPs',           icon: Target },
+  { to: '/app/train-aria',     label: 'Train ARIA',     icon: GraduationCap },
+  { to: '/app/integrations',   label: 'Integrations',   icon: Plug },
+  { to: '/app/reports',        label: 'Reports',        icon: ChartLineUp },
+  { to: '/app/settings',       label: 'Settings',       icon: GearSix },
+];
+
+const NAV_ADVANCED = [
+  { to: '/app/call-booking',   label: 'Call Booking',       icon: CalendarBlank },
+  { to: '/app/ai-setup',       label: 'AI Setup Assistant', icon: Robot },
 ];
 
 
@@ -202,7 +205,7 @@ const AppLayout = ({ children }) => {
 
   // Mode guard — block direct-URL bypass of nav-hidden routes.
   useEffect(() => {
-    const guarded = NAV.find(n => n.modes && location.pathname === n.to);
+    const guarded = NAV_PRIMARY.find(n => n.modes && location.pathname === n.to);
     if (guarded && !guarded.modes.includes(workspaceType)) {
       navigate('/app', { replace: true });
     }
@@ -218,7 +221,7 @@ const AppLayout = ({ children }) => {
     window.dispatchEvent(new Event('aria:tenant-changed-route'));
   };
 
-  const visibleNav = NAV.filter((item) => !item.modes || item.modes.includes(workspaceType));
+  const visibleNav = NAV_PRIMARY.filter((item) => !item.modes || item.modes.includes(workspaceType));
 
   const Sidebar = ({ mobile = false }) => (
     <aside
@@ -254,6 +257,38 @@ const AppLayout = ({ children }) => {
               key={item.to}
               to={item.to}
               end={item.to === '/app'}
+              onClick={() => mobile && setMobileOpen(false)}
+              data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? 'text-white font-semibold'
+                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                }`
+              }
+              style={({ isActive }) =>
+                isActive
+                  ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' }
+                  : { fontFamily: 'Plus Jakarta Sans' }
+              }
+            >
+              <item.icon size={18} weight="duotone" />
+              <span className="text-sm">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+
+        {/* ADVANCED · ARIA TOOLS */}
+        <div className="mt-5 mb-2 px-3 flex items-center gap-2">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[var(--sidebar-text-muted)]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ADVANCED · ARIA TOOLS</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+        <div className="space-y-0.5">
+          {NAV_ADVANCED.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
               onClick={() => mobile && setMobileOpen(false)}
               data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
               className={({ isActive }) =>

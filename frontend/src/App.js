@@ -50,13 +50,14 @@ import AdminLayout from './admin/AdminLayout';
 
 // Client app shell + pages (the unified /app/* tree)
 import AppLayout from './components/AppLayout';
-import Overview from './workspace/pages/Overview';
+import CommandCenter from './workspace/pages/CommandCenter';
 import LeadFeed from './workspace/pages/LeadFeed';
 import LeadDetail from './workspace/pages/LeadDetail';
 import IntelligenceFeed from './workspace/pages/IntelligenceFeed';
 import Reports from './workspace/pages/Reports';
 import Integrations from './workspace/pages/Integrations';
-import Automations from './workspace/pages/Automations';
+import Automation from './workspace/pages/Automation';
+import CallBooking from './workspace/pages/CallBooking';
 import AutomationLogs from './workspace/pages/AutomationLogs';
 import Campaigns from './workspace/pages/Campaigns';
 import Accounts from './workspace/pages/Accounts';
@@ -219,8 +220,8 @@ function App() {
                   <Route path="/integrations" element={<Navigate to="/app/integrations" replace />} />
                   <Route path="/reports" element={<Navigate to="/app/reports" replace />} />
                   <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
-                  <Route path="/aria-agent/*" element={<Navigate to="/app/intelligence" replace />} />
-                  <Route path="/contacts" element={<Navigate to="/app/leads" replace />} />
+                  <Route path="/aria-agent/*" element={<Navigate to="/app/instinct" replace />} />
+                  <Route path="/contacts" element={<Navigate to="/app/automation" replace />} />
                   <Route path="/follow-ups" element={<Navigate to="/app" replace />} />
                   <Route path="/sleeping-leads" element={<Navigate to="/app/leads" replace />} />
                   <Route path="/your-5-today" element={<Navigate to="/app" replace />} />
@@ -246,15 +247,18 @@ function App() {
                       <ProtectedRoute>
                         <AppLayout>
                           <Routes>
-                            <Route path="/" element={<Overview />} />
-                            <Route path="/intelligence" element={<IntelligenceFeed />} />
+                            <Route path="/" element={<CommandCenter />} />
+                            <Route path="/instinct" element={<IntelligenceFeed />} />
+                            <Route path="/intelligence" element={<Navigate to="/app/instinct" replace />} />
+                            <Route path="/automation" element={<Automation />} />
+                            <Route path="/automations" element={<Navigate to="/app/automation" replace />} />
                             <Route path="/leads" element={<LeadFeed />} />
                             <Route path="/leads/:id" element={<LeadDetail />} />
                             <Route path="/conversations" element={<Conversations />} />
                             <Route path="/icps" element={<ICPManager />} />
                             <Route path="/train-aria" element={<TrainAriaV2 />} />
                             <Route path="/ai-setup" element={<AISetupAssistant />} />
-                            <Route path="/automations" element={<Automations />} />
+                            <Route path="/call-booking" element={<CallBooking />} />
                             <Route path="/integrations" element={<Integrations />} />
                             <Route path="/reports" element={<Reports />} />
                             <Route path="/settings" element={<Settings />} />

@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { MapTrifold } from '@phosphor-icons/react';
 import { ptApi, PageHeader } from '../shared';
 
-const PtTouchpointMap = () => {
+const PtTouchpointMap = ({ embedded = false }) => {
   const [tps, setTps] = useState([]);
   useEffect(() => { ptApi.get('/api/pt/touchpoints').then(r => setTps(r.data.touchpoints || [])).catch(() => {}); }, []);
 
   return (
     <div data-testid="pt-touchpoint-map-page">
-      <PageHeader title="Touchpoint Map" subtitle="The 10 ways prospects engage with Pietential — and what Aria does at each step." />
+      {!embedded && <PageHeader title="Touchpoint Map" subtitle="The 10 ways prospects engage — and what Aria does at each step." />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="pt-touchpoints-grid">
         {tps.map((tp, i) => (
