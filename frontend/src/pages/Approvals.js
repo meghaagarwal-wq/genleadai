@@ -164,12 +164,8 @@ const Approvals = () => {
       toast.success(`${succeeded}/${processed} sent${failed > 0 ? ` · ${failed} failed` : ''}`);
       // Sandbox hint if ANY row failed with a sandbox-style error
       if (failed > 0 && Array.isArray(results)) {
-        const sandboxHit = results.some((row) =>
-          row.dispatch_result && isSandboxRejection(row.dispatch_result.error)
-        );
-        // Even though row.dispatch_result isn't in the bulk-approve response shape,
-        // we add a graceful fallback: peek at the toast string itself
-        if (sandboxHit || succeeded === 0) sandboxToastNote();
+        const sandboxHit = results.some((row) => row && !row.sent && isSandboxRejection(row.error));
+        if (sandboxHit) sandboxToastNote();
       }
       await fetchItems();
     } catch (err) {

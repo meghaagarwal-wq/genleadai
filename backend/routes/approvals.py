@@ -257,7 +257,13 @@ async def bulk_approve(
                 succeeded += 1
             else:
                 failed += 1
-            results.append({"id": str(doc["_id"]), "status": new_status, "sent": dispatch.get("sent")})
+            results.append({
+                "id": str(doc["_id"]),
+                "status": new_status,
+                "sent": dispatch.get("sent"),
+                "error": dispatch.get("error"),
+                "provider": dispatch.get("provider"),
+            })
         except Exception as e:  # noqa: BLE001
             logger.exception("bulk_approve: error on %s", doc.get("_id"))
             failed += 1

@@ -1,3 +1,64 @@
+## Iter 120 — Batch 8: 8 PM Approval Digest + Sandbox Hint (Feb 2026)
+
+### What shipped
+**A. `/app/backend/routes/aria_approval_digest.py` (NEW)**
+- 4 REST endpoints: GET/POST `/config`, POST `/send-now`, GET `/last`.
+- `approval_digest_loop()` — 60s tick, fires once per tenant per local
+  day at `send_hour_local` (default 20 = 8 PM), respects `weekdays_only`
+  + TZ offset (default IST 5.5).
+- **Skip-if-empty enforced**: no Resend call when queue has 0 drafts.
+  Logs `{skipped:true, reason:"queue_empty"}` to `aria_approval_digest_sent`.
+- HTML rendered with two CTAs:
+  • `[Approve All]` → `https://app.genleadai.com/app/approvals?action=bulk-approve`
+  • `[Open Queue → ]` → `https://app.genleadai.com/app/approvals`
+- Per-card UI: prospect name + channel glyph + signal hint + first 2
+  lines of body + intent pill.
+- Subject format verified: `[N] draft waiting your review — ARIA` (or
+  `drafts` plural), em-dash U+2014.
+
+**B. Sandbox / Production hint on approve toasts (`Approvals.js`)**
+- `isSandboxRejection(err)` regex matches Resend sandbox rejection text
+  (`/verify a domain at resend\.com\/domains|testing emails to your own/i`).
+- On hit: secondary `toast.info` with id `sandbox-resend-hint` (dedupe)
+  duration 8s — *"Connect a verified Resend domain in Settings →
+  Integrations to send to other recipients."*
+- Wired in 3 places: single approve, edit-send, bulk-approve.
+- bulk-approve now returns per-row `error` + `provider` (used to
+  detect sandbox-hit on PARTIAL failure too, not just all-fail).
+
+**C. Deep-link `?action=bulk-approve` on `/app/approvals`**
+- When the digest email's [Approve All] is clicked, the founder lands
+  on `/app/approvals?action=bulk-approve` while logged in.
+- Auto-fires `bulkApprove({skipConfirm: true})` once items are loaded
+  (no `window.confirm` popup since intent is already explicit).
+- URL param cleared with `replace:true` so a reload doesn't re-trigger.
+
+### Verification (test_reports/iteration_120.json)
+- Backend 7/7 PASS · Frontend 3/3 reproducible PASS + code audit PASS
+- Sandbox-hint code-path verified by inspection (the env in question
+  routes to `logged_only`, not Resend; the regex + dedupe id are
+  correct).
+- Integration-issue from QA report (bulk-approve missing per-row
+  error in response) — **FIXED in this iter** before close. `/api/approvals/bulk-approve`
+  now returns `results[i] = {id, status, sent, error, provider}`.
+
+### Status
+- All 8 batches PASS.
+- Daily founder workflow now: 8 AM Morning Brief → all-day autonomous
+  operation → 8 PM Approval Queue digest. Single-click approve from
+  either inbox or app.
+
+### Backlog (3 items the user flagged for the demo)
+1. Conversation thread view (rollup outbound_log + inbound_messages +
+   activities per lead).
+2. Auto-approve rule ("if fit_score > 0.85 AND intent = positive →
+   auto-approve").
+3. Connect real Proxycurl + Serper keys on Pietential workspace via
+   `/app/integrations` → unlocks live crawl for the Joyston demo.
+
+---
+
+
 ## Iter 119 — Batch 7: Approval Queue · LOOP USABLE WITHOUT DB (Feb 2026)
 
 ### What shipped
