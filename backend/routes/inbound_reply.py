@@ -152,6 +152,7 @@ Classify the reply. Return ONLY this JSON:
             tenant_id=tenant_id,
             session_id=f"qualify-reply-{lead_id}",
             response_format="json",
+            sanitize_user_input=True,  # iter124 — lead's reply is user-sourced
         )
         if not isinstance(result, dict):
             raise ClaudeServiceError("non-dict response")

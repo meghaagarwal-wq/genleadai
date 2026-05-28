@@ -175,6 +175,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter121 Batch 9 — Auto-approve rule + Notification settings aggregator
     from .aria_settings import router as aria_settings_router
 
+    # iter124 — 32-Touchpoint Journey Builder (CRUD + Claude generation)
+    from .journey import router as journey_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -232,5 +235,6 @@ def register_all_routes(app: FastAPI) -> None:
         approvals_router,
         approval_digest_router,
         aria_settings_router,
+        journey_router,
     ):
         app.include_router(router)

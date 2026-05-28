@@ -206,6 +206,7 @@ async def generate_email(request: AIEmailGenerateRequest, current_user: dict = D
                 tenant_id=current_user.get("tenant_id"),
                 session_id=f"email_gen_{request.lead_id}",
                 response_format="json",
+                sanitize_user_input=True,  # iter124 — lead fields are externally-sourced
             )
         except ClaudeServiceError:
             email_result = {

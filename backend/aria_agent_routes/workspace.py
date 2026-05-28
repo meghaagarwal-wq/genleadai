@@ -416,6 +416,26 @@ Format: {channel_hint}
 
 Return ONLY the message text — no JSON, no explanation, no preamble."""
 
+    # iter124 — KB RAG retrieval at query time. If the founder's note looks
+    # like a product-specific question, we ground Claude with the top-3
+    # matching knowledge_base_chunks. If nothing matches well enough, we
+    # log a "missing KB" event so the workspace owner can be nudged later.
+    if safe_user_note and len(safe_user_note) > 12:
+        try:
+            from services.kb_rag_service import retrieve_context, notify_owner_missing_kb
+            rag = await retrieve_context(
+                tenant_id=lead.get("tenant_id") or (current_user.get("tenant_id") if isinstance(current_user, dict) else None) or "",
+                question=safe_user_note,
+                top_k=3,
+                min_score=0.05,
+            )
+            if rag.get("matched"):
+                prompt = rag["context"] + "\n\n" + prompt
+            elif rag.get("reason") == "no_match":
+                notify_owner_missing_kb(lead.get("tenant_id") or "", safe_user_note)
+        except Exception:  # noqa: BLE001
+            pass
+
     try:
         from services.claude_service import claude_call, TaskType
         resp = await claude_call(

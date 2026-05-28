@@ -87,6 +87,7 @@ async def _classify_with_claude(tenant: dict, body: str) -> dict:
             prompt=f"Message: {body!r}\n\nReturn JSON only.",
             tenant_id=tenant.get("id"),
             response_format="json",
+            sanitize_user_input=True,  # iter124 — inbound message is lead-sourced
         )
         cat = (data.get("category") or "UNCLEAR").upper()
         if cat not in CATEGORIES:

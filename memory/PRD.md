@@ -1,3 +1,93 @@
+## Iter 124 — CLOSE IT OUT (Feb 28, 2026)
+
+Massive sweep closing the highest-priority gaps from the May 28 audit.
+Triggered by the user's "execute everything in one continuous run" prompt.
+
+### 1. 32-Touchpoint Journey — Full Builder Rebuild
+- `TouchpointMap.js` rebuilt end-to-end (the previous 64-line grid is gone).
+- **4 views**: Flowchart (vertical chain with branch-edge labels),
+  Timeline (vertical day-axis), Pipeline (kanban per channel), Conditional
+  (editable branching-rule list).
+- **Generate Journey with AI**: `claude-sonnet-4-5` produces an N-step
+  sequence from the workspace training profile. Channel-mixed, branched
+  conditional_logic, <150-word bodies in brand voice. Verified live: 3-tp
+  generation completed in 15.9s with LinkedIn → Email → WhatsApp,
+  templated `{{first_name}}`, and "if no reply → end" branches.
+- **Per-touchpoint Regenerate** with surrounding context (±2 nearby
+  touchpoints) so the regenerated step stays consistent with the rest.
+- **Inline edit** every field (channel select, timing input, goal input,
+  body textarea, conditional_logic textarea). Save button auto-gates on
+  dirty state.
+- **Drag-style reorder** via ↑/↓ buttons (POST /api/journey/touchpoints/reorder).
+- Backend: `routes/journey.py` — CRUD + generate + per-tp regenerate.
+  Mongo collection `journey_touchpoints` with `(tenant_id, number)` index.
+
+### 2. Prompt-injection Sanitiser — Wired across lead-sourced paths
+Added `sanitize_user_input=True` to every Claude call where the prompt
+contains externally-controlled text:
+- `routes/inbound_reply.py` — lead's reply → qualifier
+- `routes/classification.py` — inbound signal classification
+- `routes/ai.py` — email-generate (lead fields)
+- `aria_agent_routes/workspace.py` — already wired (verified)
+- New journey route — generate + regenerate both flagged
+
+### 3. Knowledge-base RAG at Query Time
+- New `services/kb_rag_service.py`:
+  - `_extract_keywords()` — Claude haiku → 3-6 search keywords.
+  - `_score()` — Jaccard overlap of keyword tokens vs chunk tokens.
+  - `retrieve_context()` — top-3 chunks ≥ min_score (0.05). Returns a
+    ready-to-prepend prompt block.
+  - `notify_owner_missing_kb()` — logs "no match" events to a new
+    `kb_missing_log` collection for the bell to surface.
+- Wired into `aria_agent_routes/workspace.py` ask-reply path: if the
+  founder's note is ≥12 chars, we run RAG; matched chunks prepended;
+  unmatched questions logged for the owner.
+
+### 4. Instagram + Facebook Crawl
+- `crawl_service.py`:
+  - New `serper_instagram_search()` / `serper_facebook_search()` —
+    Serper `site:instagram.com` / `site:facebook.com` queries.
+  - `crawl_prospect()` now takes a `platforms=[…]` filter (defaults to
+    the prior `["linkedin","web","news"]` so existing callers are
+    unchanged). New platforms: `instagram`, `facebook`.
+  - Per-platform budget consumption respects the existing 8-call cap.
+  - Empty platform → `errors:[{"source":"instagram","message":"platform_empty"}]`.
+
+### 5. Real-time API-key Validation (onBlur)
+- `routes/oauth_providers.py` — new `POST /api/integrations/{provider}/validate-key`
+  endpoint (does NOT persist). Per-provider live ping for: serper,
+  proxycurl, resend, apollo, saleshandy, lemlist, 360dialog.
+- `pages/Integrations.js` — Field gains `onBlur` callback; validation
+  chip shows spinner / green check / red warning / amber "couldn't
+  verify". Save button disabled while `valid=false`.
+- Verified live: invalid Proxycurl key → `{valid:false, message:"Proxycurl rejected key (410)"}`.
+
+### 6. Conversation Thread — already shipped iter121, re-verified
+### 7. Auto-approve Rule — already shipped iter121, surfaces in
+   Settings → Notifications card.
+
+### Tests
+- New `tests/test_iter124_close_it_out.py` — **9/9 PASS**
+  (Journey CRUD, KB RAG scoring, sanitiser wiring, IG/FB helpers exist)
+- Existing `tests/test_iter121_batch9_final.py` — **13/13 PASS** (regression)
+- V10 architectural guard: PASS
+- Backend + Frontend smoke: HTTP 200
+
+### Live verification (admin@demo.com / ten_demo)
+- `/app/touchpoints` renders all 4 views with 3 real Claude-generated
+  touchpoints; AI Summary topbar button still works; tour modal
+  dismissable.
+- `POST /api/journey/generate {count:3}` returned 3 real touchpoints in
+  ~16s with branched conditional_logic.
+- `POST /api/integrations/proxycurl/validate-key` correctly rejects bad
+  keys (HTTP 410 from Proxycurl).
+
+### Production deploy
+Backend + Frontend changes are in preview. User must hit **Save to
+GitHub** in the chat input + click **Deploy** to push to
+`app.genleadai.com` (agent does not have deploy access).
+
+
 ## Iter 123 — AI Summary + Daily Aria Brief on Command Center (Feb 28, 2026)
 
 Closes audit gaps 8.8 + 8.9 from the May 28 102-point checkup.

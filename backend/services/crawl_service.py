@@ -189,6 +189,20 @@ async def serper_news_search(api_key: str, query: str, num: int = 8) -> Dict[str
     )
 
 
+# ─── Instagram + Facebook crawl (via Serper site: search) ───────────────
+# We use Serper site: filters because the public IG/FB Graph API requires
+# a per-app review for non-owned pages — Serper hits the public-web index
+# instead, which is what shows up in the audit report for these platforms.
+async def serper_instagram_search(api_key: str, handle_or_company: str, num: int = 8) -> Dict[str, Any]:
+    q = f"site:instagram.com {handle_or_company}"
+    return await _serper_post(api_key, "/search", {"q": q, "gl": "us", "hl": "en", "num": num})
+
+
+async def serper_facebook_search(api_key: str, handle_or_company: str, num: int = 8) -> Dict[str, Any]:
+    q = f"site:facebook.com {handle_or_company}"
+    return await _serper_post(api_key, "/search", {"q": q, "gl": "us", "hl": "en", "num": num})
+
+
 # ─── High-level orchestrator ────────────────────────────────────────────
 async def crawl_prospect(
     *,
@@ -203,29 +217,46 @@ async def crawl_prospect(
     linkedin_company_url: Optional[str] = None,
     industry: Optional[str] = None,
     bypass_budget: bool = False,
+    platforms: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Run a multi-platform crawl for a single prospect.
+
+    `platforms` (optional) is a list filter — any of:
+      ``linkedin``, ``web``, ``news``, ``instagram``, ``facebook``.
+    Defaults to ``["linkedin","web","news"]`` so existing callers stay
+    unchanged. The ``instagram`` / ``facebook`` platforms hit the Serper
+    site:-filtered search and inherit the 8-call cap.
 
     Returns a stable dict:
         {
           "linkedin_profile": {...} | None,
           "linkedin_company": {...} | None,
-          "web_results":      [{title, snippet, link, source}, ...],
-          "news_results":     [{title, snippet, link, source, date}, ...],
-          "sources_attempted": ["proxycurl", "serper"],
-          "sources_succeeded": ["serper"],
+          "web_results":      [...],
+          "news_results":     [...],
+          "instagram_results": [...],
+          "facebook_results":  [...],
+          "sources_attempted": [...],
+          "sources_succeeded": [...],
           "calls_made":        4,
-          "errors":            [{source, message}],
+          "errors":            [...],
         }
     """
     proxycurl_key = _get_api_key(tenant_id, "proxycurl")
     serper_key = _get_api_key(tenant_id, "serper")
+    platforms = platforms or ["linkedin", "web", "news"]
+    want_linkedin = "linkedin" in platforms
+    want_web = "web" in platforms
+    want_news = "news" in platforms
+    want_ig = "instagram" in platforms
+    want_fb = "facebook" in platforms
 
     out: Dict[str, Any] = {
         "linkedin_profile": None,
         "linkedin_company": None,
         "web_results": [],
         "news_results": [],
+        "instagram_results": [],
+        "facebook_results": [],
         "sources_attempted": [],
         "sources_succeeded": [],
         "calls_made": 0,
@@ -234,7 +265,7 @@ async def crawl_prospect(
 
     # ── Plan calls (max 5; leave 3 in budget for future re-runs / playbook) ──
     planned = 0
-    if proxycurl_key:
+    if proxycurl_key and want_linkedin:
         out["sources_attempted"].append("proxycurl")
         if not linkedin_url:
             planned += 1  # resolve
@@ -243,7 +274,14 @@ async def crawl_prospect(
             planned += 1  # company profile
     if serper_key:
         out["sources_attempted"].append("serper")
-        planned += 2  # web + news
+        if want_web:
+            planned += 1
+        if want_news:
+            planned += 1
+        if want_ig:
+            planned += 1
+        if want_fb:
+            planned += 1
 
     if planned == 0:
         raise MissingCredential(
@@ -255,7 +293,7 @@ async def crawl_prospect(
         _assert_budget(tenant_id, lead_id, planned)
 
     # ── Proxycurl path ──
-    if proxycurl_key:
+    if proxycurl_key and want_linkedin:
         try:
             resolved_url = linkedin_url
             if not resolved_url and company_domain:
@@ -300,40 +338,78 @@ async def crawl_prospect(
         try:
             query_seed = " ".join(p for p in [first_name, last_name, company_name] if p) or (email or "")
             company_query = company_name or company_domain or ""
-            web_task = serper_web_search(serper_key, query_seed.strip(), num=10)
-            news_task = serper_news_search(serper_key, company_query.strip() or query_seed.strip(), num=8) if company_query else None
-            if news_task:
-                web, news = await asyncio.gather(web_task, news_task, return_exceptions=False)
+            handle_query = company_name or company_domain or query_seed.strip()
+
+            if want_web:
+                web = await serper_web_search(serper_key, query_seed.strip(), num=10)
+                _bump_budget(tenant_id, lead_id, "serper_web")
+                out["calls_made"] += 1
+                organic = (web.get("organic") or [])[:10]
+                out["web_results"] = [
+                    {
+                        "title": r.get("title"),
+                        "snippet": r.get("snippet"),
+                        "link": r.get("link"),
+                        "source": (r.get("link") or "").split("/")[2] if r.get("link") else None,
+                        "position": r.get("position"),
+                    }
+                    for r in organic if r.get("title")
+                ]
+
+            if want_news and company_query:
+                news = await serper_news_search(serper_key, company_query.strip(), num=8)
                 _bump_budget(tenant_id, lead_id, "serper_news")
                 out["calls_made"] += 1
-            else:
-                web = await web_task
-                news = {}
-            _bump_budget(tenant_id, lead_id, "serper_web")
-            out["calls_made"] += 1
+                news_items = (news.get("news") or [])[:8]
+                out["news_results"] = [
+                    {
+                        "title": n.get("title"),
+                        "snippet": n.get("snippet"),
+                        "link": n.get("link"),
+                        "source": n.get("source"),
+                        "date": n.get("date"),
+                    }
+                    for n in news_items if n.get("title")
+                ]
 
-            organic = (web.get("organic") or [])[:10]
-            out["web_results"] = [
-                {
-                    "title": r.get("title"),
-                    "snippet": r.get("snippet"),
-                    "link": r.get("link"),
-                    "source": (r.get("link") or "").split("/")[2] if r.get("link") else None,
-                    "position": r.get("position"),
-                }
-                for r in organic if r.get("title")
-            ]
-            news_items = (news.get("news") or [])[:8] if news else []
-            out["news_results"] = [
-                {
-                    "title": n.get("title"),
-                    "snippet": n.get("snippet"),
-                    "link": n.get("link"),
-                    "source": n.get("source"),
-                    "date": n.get("date"),
-                }
-                for n in news_items if n.get("title")
-            ]
+            if want_ig and handle_query:
+                try:
+                    ig = await serper_instagram_search(serper_key, handle_query, num=8)
+                    _bump_budget(tenant_id, lead_id, "serper_instagram")
+                    out["calls_made"] += 1
+                    ig_items = (ig.get("organic") or [])[:8]
+                    out["instagram_results"] = [
+                        {
+                            "title": r.get("title"),
+                            "snippet": r.get("snippet"),
+                            "link": r.get("link"),
+                        }
+                        for r in ig_items if r.get("title")
+                    ]
+                    if not out["instagram_results"]:
+                        out["errors"].append({"source": "instagram", "message": "platform_empty"})
+                except CrawlError as e:
+                    out["errors"].append({"source": "instagram", "message": str(e)[:200]})
+
+            if want_fb and handle_query:
+                try:
+                    fb = await serper_facebook_search(serper_key, handle_query, num=8)
+                    _bump_budget(tenant_id, lead_id, "serper_facebook")
+                    out["calls_made"] += 1
+                    fb_items = (fb.get("organic") or [])[:8]
+                    out["facebook_results"] = [
+                        {
+                            "title": r.get("title"),
+                            "snippet": r.get("snippet"),
+                            "link": r.get("link"),
+                        }
+                        for r in fb_items if r.get("title")
+                    ]
+                    if not out["facebook_results"]:
+                        out["errors"].append({"source": "facebook", "message": "platform_empty"})
+                except CrawlError as e:
+                    out["errors"].append({"source": "facebook", "message": str(e)[:200]})
+
             out["sources_succeeded"].append("serper")
         except CrawlError as e:
             out["errors"].append({"source": "serper", "message": str(e)[:200]})

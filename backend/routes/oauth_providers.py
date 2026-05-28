@@ -445,6 +445,76 @@ async def configure_api_key(
     return {"configured": True, "provider": provider, "auth_type": "api_key"}
 
 
+# iter124 — Real-time API-key validation (onBlur from the Connect modal).
+# Hits a cheap, well-known endpoint on the provider with the supplied key.
+# Does NOT persist anything. Returns {valid, message}.
+async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, Any]) -> Dict[str, Any]:
+    import httpx
+    timeout = httpx.Timeout(8.0, connect=4.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            if provider == "serper":
+                r = await client.post(
+                    "https://google.serper.dev/search",
+                    headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+                    json={"q": "test", "num": 1, "gl": "us"},
+                )
+                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Serper rejected key ({r.status_code})"}
+            if provider == "proxycurl":
+                r = await client.get(
+                    "https://nubela.co/proxycurl/api/credit-balance",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Proxycurl rejected key ({r.status_code})"}
+            if provider == "resend":
+                r = await client.get(
+                    "https://api.resend.com/domains",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                return {"valid": r.status_code in (200, 401) and r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Resend rejected key ({r.status_code})"}
+            if provider == "apollo":
+                r = await client.post(
+                    "https://api.apollo.io/v1/auth/health",
+                    json={"api_key": api_key},
+                )
+                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Apollo rejected key ({r.status_code})"}
+            if provider == "saleshandy":
+                r = await client.get(
+                    "https://open-api.saleshandy.com/v1/sequences",
+                    headers={"Authorization": api_key},
+                    params={"limit": 1},
+                )
+                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Saleshandy rejected key ({r.status_code})"}
+            if provider == "lemlist":
+                r = await client.get(
+                    "https://api.lemlist.com/api/team",
+                    auth=("", api_key),
+                )
+                return {"valid": r.status_code == 200, "message": "Key valid" if r.status_code == 200 else f"Lemlist rejected key ({r.status_code})"}
+            if provider == "360dialog":
+                r = await client.get(
+                    "https://waba-v2.360dialog.io/v1/configs/templates",
+                    headers={"D360-API-KEY": api_key},
+                    params={"limit": 1},
+                )
+                return {"valid": r.status_code in (200, 204), "message": "Key valid" if r.status_code in (200, 204) else f"360dialog rejected key ({r.status_code})"}
+    except Exception as e:  # noqa: BLE001
+        return {"valid": None, "message": f"Validator unreachable ({str(e)[:80]}). Will retry on Save."}
+    return {"valid": None, "message": "No live validator for this provider; will verify on Save."}
+
+
+@router.post("/{provider}/validate-key")
+async def validate_api_key(
+    provider: str,
+    body: ApiKeyBody,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Real-time validation — does NOT persist the key. Returns {valid, message}."""
+    _require_owner(tenant)
+    result = await _validate_api_key_live(provider, body.api_key, body.extra_config or {})
+    return {"provider": provider, **result}
+
+
 # ─── Catalogue (all known providers — for the frontend registry sync) ───
 # Iter109c — API-key providers are not in PROVIDER_SPECS (those are OAuth-only).
 # Listing them here gives a single source of truth for QA + frontend sync.

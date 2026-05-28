@@ -274,8 +274,28 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
   const [showSecret, setShowSecret] = useState(false);
   const [showWhy, setShowWhy] = useState(false);
   const [googleScopeOn, setGoogleScopeOn] = useState({ gmail: true, calendar: true, ads: true });
+  // iter124 — real-time API-key validation (onBlur).
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState(null); // null | { valid, message }
   const isOAuth = !!provider.oauth;
   const isGoogle = provider.id === 'google';
+
+  const validateKey = async () => {
+    if (!apiKey || !apiKey.trim()) { setValidation(null); return; }
+    setValidating(true);
+    setValidation(null);
+    try {
+      const { data } = await api.post(`/api/integrations/${provider.id}/validate-key`, {
+        api_key: apiKey,
+        extra_config: extra,
+      });
+      setValidation({ valid: !!data.valid, message: data.message || (data.valid ? 'Key valid' : 'Key invalid') });
+    } catch (e) {
+      // Backend may not yet have provider-specific /validate-key — fall back to /test on POST-save.
+      // Surface as "couldn't verify" rather than blocking the user.
+      setValidation({ valid: null, message: e?.response?.data?.detail || 'Could not verify key (will validate on Save).' });
+    } finally { setValidating(false); }
+  };
 
   const handleSubmit = async () => {
     setBusy(true);
@@ -421,7 +441,8 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
           </>
         ) : (
           <>
-            <Field label="API key" value={apiKey} onChange={setApiKey}
+            <Field label="API key" value={apiKey} onChange={(v) => { setApiKey(v); setValidation(null); }}
+                   onBlur={validateKey}
                    type={showSecret ? 'text' : 'password'} testId="connect-input-api-key"
                    rightSlot={
                      <button type="button" onClick={() => setShowSecret((v) => !v)}
@@ -429,6 +450,32 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
                        {showSecret ? <EyeSlash size={14} /> : <Eye size={14} />}
                      </button>
                    } />
+            {/* iter124 — real-time validation chip */}
+            {(validating || validation) && (
+              <div className="text-[11px] -mt-1 mb-2.5 flex items-center gap-1.5" data-testid="connect-input-api-key-validation">
+                {validating ? (
+                  <>
+                    <CircleNotch size={11} className="animate-spin" style={{ color: 'var(--theme-text-muted)' }} />
+                    <span style={{ color: 'var(--theme-text-muted)' }}>Validating key…</span>
+                  </>
+                ) : validation?.valid === true ? (
+                  <>
+                    <CheckCircle size={12} weight="fill" style={{ color: '#22c55e' }} />
+                    <span style={{ color: '#22c55e' }}>{validation.message}</span>
+                  </>
+                ) : validation?.valid === false ? (
+                  <>
+                    <Warning size={12} weight="fill" style={{ color: '#ef4444' }} />
+                    <span style={{ color: '#ef4444' }}>{validation.message}</span>
+                  </>
+                ) : (
+                  <>
+                    <Warning size={12} style={{ color: '#f59e0b' }} />
+                    <span style={{ color: '#f59e0b' }}>{validation?.message}</span>
+                  </>
+                )}
+              </div>
+            )}
             {extraFields.map((f) => (
               <Field key={f} label={f.replace(/_/g, ' ')} value={extra[f] || ''} onChange={(v) => setExtra({ ...extra, [f]: v })}
                      testId={`connect-input-${f}`} />
@@ -436,7 +483,7 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
           </>
         )}
 
-        <button onClick={handleSubmit} disabled={busy} data-testid="connect-modal-submit"
+        <button onClick={handleSubmit} disabled={busy || (!isOAuth && validation?.valid === false)} data-testid="connect-modal-submit"
                 className="w-full mt-3 px-4 py-2 rounded-md font-bold text-sm text-white disabled:opacity-50"
                 style={{ background: 'var(--theme-purple)' }}>
           {busy ? <CircleNotch size={14} className="animate-spin inline -mt-0.5 mr-1" /> : null}
@@ -447,7 +494,7 @@ const ConnectModal = ({ provider, status, onClose, onComplete }) => {
   );
 };
 
-const Field = ({ label, value, onChange, type = 'text', testId, rightSlot }) => (
+const Field = ({ label, value, onChange, onBlur, type = 'text', testId, rightSlot }) => (
   <label className="block mb-2.5">
     <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: 'var(--theme-text-muted)' }}>{label}</span>
     <div className="relative mt-1">
@@ -455,6 +502,7 @@ const Field = ({ label, value, onChange, type = 'text', testId, rightSlot }) => 
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         data-testid={testId}
         className="w-full px-3 py-2 rounded-md text-sm outline-none border"
         style={{
