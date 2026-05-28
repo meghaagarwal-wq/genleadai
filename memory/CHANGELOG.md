@@ -1,5 +1,21 @@
 # Changelog
 
+## iter109 Batch 3 — V9 + Final 20-check audit (2026-05-28) ✅ PRODUCTION READY
+**Section 7 — V9 Train ARIA streaming (8/8 ✅)**
+- V9.1 progress card <100ms · V9.2 phase labels · V9.3 ≥4 field chips · V9.4 90s slow-warn · V9.5 backend-tracked across navigation · V9.6 cache flash <200ms · V9.7 completeness re-renders after save · V9.8 nudge targets correct section.
+
+**Section 8 — Final Platform-Ready audit (20/20 ✅)**
+- UI consistency: F1 Pietential B2B + F2 ten_demo Hybrid + F3 sidebar identical-except-mode + F4 theme persists + F5 light mode readable.
+- Navigation: F6 Pietential hides Automation + F7 ten_demo has both + F8 ADVANCED tools section + F9 /touchpoints full builder + F10 /instinct + F11 /automation 3 tabs.
+- Data: F12 KPIs match DB · F13 dynamic pull buttons · F14 insight cards from DB.
+- Train ARIA: F15 immediate progress · F16 completeness updates · F17 cache flash · F18 version history.
+- Security: F19 no password_hash leak · F20 /admin protected (frontend + backend).
+
+**Tests:** 13/13 backend pytest + 15/15 frontend UI checks. Zero regressions, zero product bugs (`/app/test_reports/iteration_110.json`).
+
+
+# Changelog
+
 ## iter109 Batch 2 — Sections 2, 3, 5, 6 (2026-05-28)
 **Section 2 — Command Center rebuild**
 - New backend `routes/command_center.py` exposing `/api/aria/command-center/{kpis,signals,pipeline,next-scan}` with mode-aware aggregates (no hardcoded numbers).
