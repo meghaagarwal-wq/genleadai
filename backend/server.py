@@ -2886,6 +2886,14 @@ async def _start_morning_brief_loop():
     print("[MorningBrief] Background loop started (60s tick)")
 
 
+@app.on_event("startup")
+async def _start_linkedin_poller_loop():
+    """iter118 Batch 6 — LinkedIn comment polling for inbound replies."""
+    from routes.inbound_reply import linkedin_comment_poller_loop
+    asyncio.create_task(linkedin_comment_poller_loop())
+    print("[InboundReply] LinkedIn comment poller started (5min tick)")
+
+
 
 # EOD-wrap module moved to routes/aria_eod_wrap.py (iter108 ACTION 3)
 

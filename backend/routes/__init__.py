@@ -163,6 +163,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter117 Batch 5 — ARIA Morning Brief (weekday 8 AM cron + Founder Brief email)
     from .aria_morning_brief import router as morning_brief_router
 
+    # iter118 Batch 6 — Inbound Reply Tracker (Resend + 360dialog + LinkedIn polling)
+    from .inbound_reply import router as inbound_reply_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -216,5 +219,6 @@ def register_all_routes(app: FastAPI) -> None:
         call_booking_router,
         intel_router,
         morning_brief_router,
+        inbound_reply_router,
     ):
         app.include_router(router)
