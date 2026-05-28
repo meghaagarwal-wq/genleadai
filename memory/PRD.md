@@ -1,3 +1,43 @@
+## Iter 115–116 — Pre-Deploy Full-Day Checkup (Feb 2026)
+
+### What shipped (iter115)
+- **Batch action — "Run Intel on hot leads"**
+  - Backend: `POST /api/intel/batch/hot-leads` — iterates pt_leads where
+    `stage ∈ {hot, engaged, session_pilot}` AND `score ≥ min_score`, runs
+    crawl + Claude synthesis sequentially (per-lead isolation so one
+    failure doesn't abort the batch), respects 8-call cap, supports
+    `skip_existing`. Returns `{processed, succeeded, failed, results}`.
+  - Frontend: new button on `/app/leads` (data-testid
+    `pt-leadfeed-run-intel-btn`) + result banner
+    (`pt-leadfeed-batch-result`) with per-lead PASS/FAIL chips.
+- **V10 pre-commit grep guard** — `/app/scripts/check_v10.sh` (rg-based,
+  self-tested: exits 0 on clean tree, exits 1 when an
+  `emergentintegrations.llm.chat` import or `LlmChat(`/`with_model(`/
+  `UserMessage(`/`anthropic.messages.create` call is injected anywhere
+  outside `services/claude_service.py`). Wire as pre-commit hook:
+  `ln -s ../../scripts/check_v10.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`.
+- **providers/list fix** — `/api/integrations/providers/list` now returns
+  all 13 providers (5 OAuth + 8 API-key) instead of OAuth-only.
+
+### Verification — iter115 + iter116 PASS/FAIL matrix
+- PRECHECK_V10_GUARD ✅
+- AUTH ✅  TENANT ✅  UNIVERSAL_OAUTH ✅ (providers count fixed in iter116)
+- CALL_BOOKING ✅
+- CLAUDE_WRAPPER_V10–V25 ✅ (17/17 from iter113)
+- INTEL_V26–V35 ✅ (17/17 from iter114)
+- BATCH_HOT_LEADS ✅  LEGACY_REGRESSION ✅ (109/111 — 2 pre-existing flakes)
+- MONGO_HEALTH ✅  FRONTEND_SMOKE ✅ (iter116 — 9/9)
+- DEPLOYMENT_READINESS ✅ (.env clean, /api prefix, no localhost in src,
+  no _id leaks)
+- **Verdict: PROD-READY**
+
+### Open cosmetic (P3)
+- One React hydration warning: `<span>` inside `<option>` in an AppLayout
+  select. Cosmetic only, no functional impact.
+
+---
+
+
 ## Iter 114 — Batch 4 (Multi-Platform Crawl + Outreach Playbook) COMPLETE (Feb 2026)
 
 ### What shipped
