@@ -1,3 +1,76 @@
+## Iter 114 — Batch 4 (Multi-Platform Crawl + Outreach Playbook) COMPLETE (Feb 2026)
+
+### What shipped
+Full Batch 4 stack — backend orchestrator + Claude synthesis + outreach
+playbook + channel-adaptive composer + frontend Intel tab.
+
+### Backend
+- `/app/backend/services/crawl_service.py` (NEW) — Proxycurl + Serper
+  primitives (`fetch_linkedin_profile`, `resolve_linkedin_profile`,
+  `fetch_linkedin_company`, `serper_web_search`, `serper_news_search`)
+  plus high-level `crawl_prospect()` orchestrator that:
+  • pulls Fernet-encrypted keys from `integration_configs` (Batch 1) — never `.env`
+  • enforces a hard cap of **8 external API calls per prospect** via
+    a new `prospect_crawl_log` collection.
+  • returns a stable shape even when one source fails (errors collected
+    per-source).
+- `/app/backend/services/intel_service.py` (NEW) — three Claude-powered
+  functions, ALL routed through `claude_call()`:
+  • `synthesise_intel()` → 8-signal taxonomy
+    (intent / growth / pain / trigger_event / competitive / buying_authority /
+    engagement / risk) + interests + risk_flags + fit_score + best_hook.
+  • `generate_playbook()` → recommended channel, send timing, opening message,
+    lead magnet, 3-step follow-up plan, success/abort signals.
+  • `compose_message()` → channel-adaptive composer for WhatsApp / Email
+    (returns `{subject, body}`) / LinkedIn.
+- `/app/backend/routes/intel.py` (NEW) — 5 REST endpoints under `/api/intel/{lead_id}/`:
+  `research`, `(GET)` profile, `playbook`, `compose`, `budget`.
+- `/app/backend/routes/__init__.py` — `intel_router` registered after
+  `call_booking_router`.
+
+### Frontend
+- `/app/frontend/src/workspace/pages/IntelTab.js` (NEW) — single-file
+  Intel UI: fit gauge, signals list, risk flags, interests, buying
+  authority, outreach playbook (opening message + follow-up plan), and
+  channel-adaptive composer with WhatsApp / Email / LinkedIn tabs +
+  optional founder steer.
+- `/app/frontend/src/workspace/pages/LeadDetail.js` — added tab strip
+  (`Overview` / `Intel`) at the top of the Pietential lead detail page;
+  Overview = existing grid, Intel = the new component.
+- Proxycurl + Serper were already registered in
+  `/app/frontend/src/config/integrations.js` (Batch 1) — tenants connect
+  their keys via the Universal Integrations UI.
+
+### Architectural rules upheld
+- **V10**: zero direct `LlmChat` / `with_model` / `anthropic.messages`
+  anywhere in `crawl_service.py`, `intel_service.py`, `routes/intel.py`
+  (grep-verified by the test agent).
+- All Claude traffic routes through `services.claude_service.claude_call`.
+- API keys are **never** in `.env` — pulled at call-time from the
+  encrypted `integration_configs` collection.
+- Hard 8-call cap per prospect tracked in `prospect_crawl_log`.
+
+### Verification (test_reports/iteration_114.json)
+- **Backend: 17/17 PASS (100%)** — endpoints, 503 fallback when keys
+  missing, 429 budget enforcement, 400 'no profile' guards, schema
+  validation for all 3 channels, V10 grep check.
+- **Frontend: 4/4 flows PASS (100%)** — tab strip renders, Intel empty
+  state renders, Run Intel button triggers /research without crashing,
+  Overview ↔ Intel switch is clean.
+
+### Open follow-ups (non-blocking, P2)
+- Token-count instrumentation in `api_usage_log` (carry-over from
+  iter113; still using `len // 4` heuristic).
+- Toast for /research failure could use a longer duration / dedicated
+  data-testid for deterministic e2e assertions.
+
+### Next up
+Once tenants connect Proxycurl + Serper keys via the Integrations UI,
+the live happy path (real crawl → real synthesis) is unblocked.
+
+---
+
+
 ## Iter 113 — Batch 3 (Claude Deep Integration) COMPLETE (Feb 2026)
 
 ### What shipped
