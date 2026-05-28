@@ -4,6 +4,7 @@ import { ArrowLeft, LinkSimple, Trash, Lightning, Note, Plus, Brain, Copy, Spark
 import { toast } from 'sonner';
 import { ptApi, PageHeader, StageBadge, SOURCE_LABELS, fmtDateTime } from '../shared';
 import AskAriaModal from '../components/AskAriaModal';
+import IntelTab from './IntelTab';
 
 const PtLeadDetail = () => {
   const { id } = useParams();
@@ -13,6 +14,7 @@ const PtLeadDetail = () => {
   const [simEvent, setSimEvent] = useState('saleshandy.email_clicked');
   const [rules, setRules] = useState([]);
   const [askOpen, setAskOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
   const navigate = useNavigate();
 
   const load = async () => {
@@ -85,6 +87,36 @@ const PtLeadDetail = () => {
         }
       />
 
+      {/* iter113 Batch 4 — Overview / Intel tab strip */}
+      <div className="flex items-center gap-1 mb-4 border-b border-[#E2E8F0]" data-testid="pt-detail-tabs">
+        {[
+          { id: 'overview', label: 'Overview' },
+          { id: 'intel', label: 'Intel' },
+        ].map((t) => {
+          const active = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              data-testid={`pt-detail-tab-${t.id}`}
+              className={`relative px-4 py-2 text-sm font-semibold transition-colors ${active ? 'text-[#7C35DC]' : 'text-[#64748B] hover:text-[#0F172A]'}`}
+            >
+              {t.id === 'intel' && <Brain size={12} weight="duotone" className="inline mr-1 -mt-0.5" />}
+              {t.label}
+              {active && (
+                <span
+                  className="absolute left-0 right-0 -bottom-px h-[2px]"
+                  style={{ background: 'linear-gradient(90deg, #4C1D95 0%, #7C35DC 100%)' }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === 'intel' ? (
+        <IntelTab leadId={id} lead={lead} />
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left col — Identity + Status */}
         <div className="space-y-4">
@@ -216,6 +248,7 @@ const PtLeadDetail = () => {
           )}
         </div>
       </div>
+      )}
 
       {askOpen && (
         <AskAriaModal

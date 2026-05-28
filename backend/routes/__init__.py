@@ -157,6 +157,9 @@ def register_all_routes(app: FastAPI) -> None:
     # Iter109c Batch 2 — Call Booking (Google Calendar + Meet)
     from .call_booking import router as call_booking_router
 
+    # iter113 Batch 4 — Multi-Platform Crawl + Intelligence + Outreach Playbook
+    from .intel import router as intel_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -208,5 +211,6 @@ def register_all_routes(app: FastAPI) -> None:
         demo_seeder_router,
         command_center_router,
         call_booking_router,
+        intel_router,
     ):
         app.include_router(router)
