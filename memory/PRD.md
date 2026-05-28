@@ -1,3 +1,53 @@
+## Iter 123 — AI Summary + Daily Aria Brief on Command Center (Feb 28, 2026)
+
+Closes audit gaps 8.8 + 8.9 from the May 28 102-point checkup.
+
+### What shipped
+- **AI Summary topbar button** — new purple gradient `Sparkle` button in
+  AppLayout header opens a slide-over drawer
+  (`AiSummaryDrawer.js`) that fetches
+  `GET /api/aria/command-center/ai-summary` and renders the 7-day Claude
+  Sonnet briefing as 3 paragraphs (What happened / working / needs
+  attention). Includes a Refresh button (passes `force_refresh=true`),
+  collapsible "raw 7-day facts" details, cached-status indicator, and
+  Escape-to-close.
+- **Daily Aria Brief card** — new section on Command Center between the
+  hero and KPI grid that renders `GET /api/aria/today`:
+  - Momentum chip: 🏆 Wins logged / 🔥 Busy day / ☀️ Quiet day with
+    matching accent.
+  - Six-stat strip: Touches · New leads · Booked · Wins · Overdue
+    (red when >0) · Hot untouched (purple).
+  - Tomorrow · top 3 chips linking to `/app/leads`.
+- All test IDs added: `topbar-ai-summary-btn`, `ai-summary-drawer`,
+  `ai-summary-body`, `ai-summary-refresh`, `cmd-daily-brief`,
+  `cmd-brief-headline`, `brief-stat-*`, `cmd-brief-tomorrow-*`.
+
+### Verified live (ten_demo, admin@demo.com)
+- Topbar button visible.
+- Drawer fetches real Claude content ("Over the past seven days, the
+  pipeline showed minimal top-of-funnel activity…").
+- Drawer closes on Escape.
+- Daily Brief headline: "No outreach logged yet today", Quiet Day chip,
+  totals from `/api/aria/today` (Overdue=49 red, New Leads=1).
+- Tomorrow top 3 renders Quinn Varma · 93, Olivia Thompson · 91, Casey
+  Evans · 90.
+
+### Files changed
+- `frontend/src/components/AiSummaryDrawer.js` (NEW)
+- `frontend/src/components/AppLayout.js` (Sparkle import + button +
+  drawer mount + state)
+- `frontend/src/workspace/pages/CommandCenter.js` (Sun/Trophy/Fire
+  imports, `today` state + fetch, `DailyBriefCard` + `BriefStat`
+  components)
+
+### Remaining audit gaps (post iter123)
+- ❌ 32-Touchpoint Journey full builder (Block 3, 6 items)
+- ❌ Knowledge base RAG retrieval at query time (8.10)
+- ❌ Prompt-injection sanitiser callers (8.7)
+- ❌ Instagram/Facebook crawl (9.3)
+- ❌ Real-time API-key validation on Connect modal (6.4)
+
+
 ## Iter 122 — Batch 9 FULL VERIFICATION (Feb 28, 2026)
 
 Full automated pass/fail run on Batch 9 demo-unlocks. **100% PASS** on

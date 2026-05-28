@@ -22,6 +22,7 @@ import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
   CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold, CheckCircle,
+  Sparkle,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -29,6 +30,7 @@ import NotificationsBell from './NotificationsBell';
 import AriaAvatar from './AriaAvatar';
 import AriaToastWatcher from './AriaToastWatcher';
 import AriaTourModal from './AriaTourModal';
+import AiSummaryDrawer from './AiSummaryDrawer';
 import api from '../config/api';
 
 // ── Nav definition ──────────────────────────────────────────────────────
@@ -219,6 +221,7 @@ const AppLayout = ({ children }) => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceType, setWorkspaceType] = useState('hybrid');
+  const [aiSummaryOpen, setAiSummaryOpen] = useState(false);
 
   // Refetch workspace mode whenever the active tenant changes.
   useEffect(() => {
@@ -454,6 +457,17 @@ const AppLayout = ({ children }) => {
               />
             </div>
             <ThemeToggle />
+            <button
+              onClick={() => setAiSummaryOpen(true)}
+              data-testid="topbar-ai-summary-btn"
+              aria-label="Open ARIA's 7-day AI summary"
+              title="ARIA's 7-day briefing"
+              className="hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold text-white transition-colors"
+              style={{ background: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 60%)', fontFamily: 'Plus Jakarta Sans' }}
+            >
+              <Sparkle size={13} weight="fill" />
+              AI Summary
+            </button>
             <NotificationsBell />
           </div>
         </header>
@@ -464,6 +478,7 @@ const AppLayout = ({ children }) => {
 
       <AriaToastWatcher />
       <AriaTourModal />
+      <AiSummaryDrawer open={aiSummaryOpen} onClose={() => setAiSummaryOpen(false)} />
     </div>
   );
 };

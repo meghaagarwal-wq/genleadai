@@ -18,7 +18,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowRight, Clock, Lightning, PlayCircle, Plus, Upload, Sparkle, CompassTool,
-  CircleNotch,
+  CircleNotch, Sun, Trophy, Fire,
 } from '@phosphor-icons/react';
 import { useAuth } from '../../context/AuthContext';
 import { ptApi } from '../shared';
@@ -153,18 +153,20 @@ const CommandCenter = () => {
   const [pipeline, setPipeline] = useState({ leads: [] });
   const [nextScan, setNextScan] = useState(null);
   const [health, setHealth] = useState(null);
+  const [today, setToday] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [wt, k, s, p, ns, hl] = await Promise.all([
+      const [wt, k, s, p, ns, hl, td] = await Promise.all([
         api.get('/api/aria/workspace-type').catch(() => ({ data: { workspace_type: 'hybrid' } })),
         api.get('/api/aria/command-center/kpis').catch(() => ({ data: null })),
         api.get('/api/aria/command-center/signals').catch(() => ({ data: { signals: [], total_pending: 0 } })),
         api.get('/api/aria/command-center/pipeline').catch(() => ({ data: { leads: [] } })),
         api.get('/api/aria/command-center/next-scan').catch(() => ({ data: null })),
         ptApi.get('/api/pt/setup/health').catch(() => ({ data: null })),
+        api.get('/api/aria/today').catch(() => ({ data: null })),
       ]);
       setMode(wt.data?.workspace_type || 'hybrid');
       setKpi(k.data);
@@ -172,6 +174,7 @@ const CommandCenter = () => {
       setPipeline(p.data);
       setNextScan(ns.data);
       setHealth(hl.data);
+      setToday(td.data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -339,6 +342,9 @@ const CommandCenter = () => {
         </div>
       </div>
 
+      {/* DAILY ARIA BRIEF — today's headline + key totals + tomorrow's top 3 */}
+      {today && <DailyBriefCard today={today} />}
+
       {/* KPI GRID */}
       {kpi?.items && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" data-testid="cmd-kpi-grid">
@@ -359,6 +365,105 @@ const CommandCenter = () => {
     </div>
   );
 };
+
+
+// ── DailyBriefCard ──────────────────────────────────────────────────────
+// Renders /api/aria/today: momentum headline, today's totals, tomorrow's
+// top 3 prospects. Surfaces the existing EOD wrap data on the dashboard
+// itself so the founder doesn't have to wait for the 8 PM email.
+const DailyBriefCard = ({ today }) => {
+  const t = today.totals || {};
+  const momentum = today.momentum || 'quiet'; // 'wins' | 'busy' | 'quiet'
+  const momentumStyle = {
+    wins:  { color: '#16a34a', dim: 'rgba(22,163,74,0.10)',  Icon: Trophy,    label: 'Wins logged' },
+    busy:  { color: '#7C35DC', dim: 'rgba(124,53,220,0.10)', Icon: Fire,      label: 'Busy day'    },
+    quiet: { color: '#94a3b8', dim: 'rgba(148,163,184,0.10)', Icon: Sun,       label: 'Quiet day'   },
+  }[momentum] || { color: '#94a3b8', dim: 'rgba(148,163,184,0.10)', Icon: Sun, label: '' };
+  const MIcon = momentumStyle.Icon;
+
+  const tomorrow = (today.tomorrow_top_3 || []).slice(0, 3);
+
+  return (
+    <div
+      className="rounded-xl border p-5 md:p-6"
+      style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+      data-testid="cmd-daily-brief"
+    >
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: momentumStyle.dim, color: momentumStyle.color }}
+          >
+            <MIcon size={16} weight="duotone" />
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: 'var(--theme-text-muted)', fontFamily: 'Plus Jakarta Sans' }}>
+              Daily Aria Brief · {today.date_label}
+            </div>
+            <div className="text-base font-bold mt-0.5" style={{ color: 'var(--theme-text)', fontFamily: 'Space Grotesk, Inter' }} data-testid="cmd-brief-headline">
+              {today.headline}
+            </div>
+          </div>
+        </div>
+        <span
+          className="text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-1 rounded-full"
+          style={{ background: momentumStyle.dim, color: momentumStyle.color, fontFamily: 'Plus Jakarta Sans' }}
+        >
+          {momentumStyle.label}
+        </span>
+      </div>
+
+      {/* Totals strip */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4" data-testid="cmd-brief-totals">
+        <BriefStat label="Touches"  value={t.total_touches ?? 0} testid="brief-stat-touches" />
+        <BriefStat label="New leads" value={t.new_leads ?? 0}    testid="brief-stat-new-leads" />
+        <BriefStat label="Booked"   value={t.meetings_booked ?? 0} testid="brief-stat-booked" />
+        <BriefStat label="Wins"     value={t.wins ?? 0}          accent="#16a34a" testid="brief-stat-wins" />
+        <BriefStat label="Overdue"  value={t.overdue_pending ?? 0} accent={(t.overdue_pending ?? 0) > 0 ? '#dc2626' : undefined} testid="brief-stat-overdue" />
+        <BriefStat label="Hot untouched" value={today.hot_untouched_count ?? 0} accent="#7C35DC" testid="brief-stat-hot-untouched" />
+      </div>
+
+      {/* Tomorrow's top 3 */}
+      {tomorrow.length > 0 && (
+        <div className="pt-3 border-t" style={{ borderColor: 'var(--theme-border)' }} data-testid="cmd-brief-tomorrow">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: 'var(--theme-text-muted)', fontFamily: 'Plus Jakarta Sans' }}>
+            Tomorrow · top 3
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {tomorrow.map((row, i) => (
+              <Link
+                key={i}
+                to="/app/leads"
+                data-testid={`cmd-brief-tomorrow-${i}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border transition-colors hover:bg-[var(--theme-surface2)]"
+                style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)', fontFamily: 'Plus Jakarta Sans' }}
+                title={row.phone || ''}
+              >
+                <span className="font-semibold">{row.name}</span>
+                {row.company && <span style={{ color: 'var(--theme-text-muted)' }}>· {row.company}</span>}
+                <span
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-1"
+                  style={{ background: 'rgba(124,53,220,0.12)', color: 'var(--theme-purple-light, #7C35DC)' }}
+                >
+                  {row.icp_score}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BriefStat = ({ label, value, accent, testid }) => (
+  <div data-testid={testid}>
+    <div className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--theme-text-muted)', fontFamily: 'Plus Jakarta Sans' }}>{label}</div>
+    <div className="text-xl font-extrabold mt-0.5" style={{ color: accent || 'var(--theme-text)', fontFamily: 'Space Grotesk, Inter' }}>{value}</div>
+  </div>
+);
 
 
 // ── KPI Card ────────────────────────────────────────────────────────────
