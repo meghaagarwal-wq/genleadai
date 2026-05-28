@@ -411,7 +411,7 @@ export default function ReviewPanel({
           >Cancel</button>
           <button
             type="button"
-            onClick={onPublish}
+            onClick={() => onPublish()}
             disabled={publishing}
             data-testid="auto-map-publish-btn"
             className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50"

@@ -116,8 +116,11 @@ export default function AISetupAssistant() {
     }
   };
 
-  const handlePublish = async (forceEmpty = false) => {
+  const handlePublish = async (forceEmptyArg = false) => {
     if (!extracted) return;
+    // iter125 — Guard against a caller accidentally forwarding a React
+    // SyntheticEvent / DOM element as the first arg. Coerce to a real bool.
+    const forceEmpty = forceEmptyArg === true;
     setStage('publishing');
     try {
       const r = await api.post('/api/aria/auto-map/publish', {
