@@ -1,3 +1,72 @@
+## Iter 118 — Batch 6: Inbound Reply Tracker · LOOP FULLY CLOSED (Feb 2026)
+
+ARIA now **listens** in addition to speaking. The second half of the
+autonomous loop is live.
+
+### What shipped
+**A. `/app/backend/routes/inbound_reply.py` (NEW, ~430 LOC)**
+- `POST /api/webhooks/resend` — Svix-signed inbound. Handles
+  `email.received`, `email.bounced`, `email.complained`. Lazy `svix`
+  verification (skips with warning if lib missing).
+- `POST /api/webhooks/360dialog` — HMAC-SHA256 signed inbound. Parses
+  WhatsApp Cloud API payload, maps via `metadata.phone_number_id` →
+  tenant.
+- `GET /api/webhooks/health` — uptime probe.
+- `linkedin_comment_poller_loop()` — 5-minute tick. For every tenant
+  with LinkedIn OAuth + every UGC post in `outbound_log`, polls
+  `/v2/socialActions/{shareUrn}/comments` and threads new comments to
+  the originating lead.
+
+**B. On every matched inbound reply (`_process_inbound`):**
+1. Insert `inbound_messages` (idempotency by `external_id`).
+2. Insert `activities` event (timeline · `activity_type='inbound_reply'`).
+3. Bump `pt_leads.stage = 'replied'` (preserves `prior_stage`).
+4. Silent Claude qualification → `{intent, sentiment, urgency, summary,
+   next_action_hint}`. Heuristic fallback on any failure.
+5. If intent NOT in {unsubscribe, not_interested} AND an intel profile
+   exists → draft ARIA's next message via the channel-adaptive composer
+   → queue to `pending_outreach` with `status='awaiting_owner_approval'`.
+   **Never auto-sends.**
+
+**C. Cosmetics**
+- `bcrypt` pinned to `3.2.2` (passlib `__about__` AttributeError noise
+  GONE — verified 0/3 logins emit the trapped error).
+- `<span>` inside `<option>` in `LeadDetail.js` — could not reproduce;
+  no actual span found nested in any `<option>` across the codebase.
+  Marking as "cannot reproduce".
+
+### Verification (test_reports/iteration_118.json)
+**Backend: 18/18 PASS (100%)**
+- Resend inbound (matched) → timeline + stage flip + qualification + draft queue
+- Resend duplicate → `{duplicate: true}` (idempotency holds)
+- Resend bounce → activity inserted, no draft
+- Resend unmatched sender → `unmatched: true` flag, no false positives
+- Resend unsubscribe → qualification.intent='unsubscribe', NO draft queued
+- 360dialog inbound (matched) → all four side-effects fire
+- 360dialog idempotency holds
+- 360dialog unmatched tenant_id → graceful no-op
+- LinkedIn poller starts cleanly, no-op safe when no OAuth configured
+- V10 guard still exit 0
+- Regression: intel/compose-and-send, batch/hot-leads, morning-brief
+  send-now, login — all still green
+- bcrypt: 0 passlib noise
+
+### Status
+**ARIA Final Integration Prompt is now 6-of-6 batches complete:**
+1. Universal OAuth ✅
+2. Call Booking ✅
+3. Claude Deep Integration (V10) ✅
+4. Multi-Platform Crawl + Outreach Playbook ✅
+5. Morning Brief + Send Dispatch ✅
+6. Inbound Reply Tracker ✅
+
+ARIA: researches → surfaces signal → drafts → sends → listens → qualifies
+→ drafts the next reply → waits for founder approval. Full
+research-to-response loop.
+
+---
+
+
 ## Iter 117 — Batch 5: Autonomous Loop CLOSED (Feb 2026)
 
 The full ARIA loop is live: **research → signal → draft → send**.
