@@ -36,6 +36,7 @@ from deps import (
     get_current_user,
     leads_collection,
 )
+from routes.tenants import get_active_tenant
 
 router = APIRouter(tags=["iter108-eod-wrap"])
 
@@ -53,8 +54,13 @@ def _get_eod_wrap_config() -> dict:
     return eod_wrap_collection.find_one({"scope": "workspace"}, {"_id": 0}) or {}
 
 
-def _compute_eod_wrap(tz_off_hours: float = 0.0) -> dict:
-    """Compute today's wrap data. 'Today' = the founder's local calendar day."""
+def _compute_eod_wrap(tz_off_hours: float = 0.0, tenant_id: str | None = None) -> dict:
+    """Compute today's wrap data. 'Today' = the founder's local calendar day.
+
+    iter125 — When `tenant_id` is supplied, all collection reads are
+    filtered to that workspace. When None (used by the cron loop) the
+    behaviour is the previous global aggregate.
+    """
     # Late imports — these helpers live in server.py / new modules.
     from server import _fmt_inr  # noqa: WPS433
     from routes.aria_call_priority import _compute_call_priority  # noqa: WPS433
@@ -66,8 +72,10 @@ def _compute_eod_wrap(tz_off_hours: float = 0.0) -> dict:
     day_start_iso = day_start_utc.isoformat()
     now_iso = now_utc.isoformat()
 
+    tenant_filter = {"tenant_id": tenant_id} if tenant_id else {}
+
     today_activities = list(activities_collection.find(
-        {"created_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {**tenant_filter, "created_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 0, "lead_id": 1, "activity_type": 1, "subject": 1, "user_id": 1, "created_at": 1, "outcome": 1},
     ))
 
@@ -82,17 +90,17 @@ def _compute_eod_wrap(tz_off_hours: float = 0.0) -> dict:
     status_changes_today = [a for a in today_activities if a.get("activity_type") == "status_changed"]
 
     new_leads_today = list(leads_collection.find(
-        {"created_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {**tenant_filter, "created_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "source_channel": 1},
     ))
     new_leads_count = len(new_leads_today)
 
     wins_today = list(leads_collection.find(
-        {"status": "won", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {**tenant_filter, "status": "won", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "deal_value": 1},
     ))
     losses_today = list(leads_collection.find(
-        {"status": "lost", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {**tenant_filter, "status": "lost", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "lost_reason": 1},
     ))
 
@@ -115,11 +123,12 @@ def _compute_eod_wrap(tz_off_hours: float = 0.0) -> dict:
     rep_rows = sorted(rep_map.values(), key=lambda r: r["total"], reverse=True)[:5]
 
     hot_untouched = list(leads_collection.find(
-        {"icp_score": {"$gte": 80}, "status": "new", "last_contacted_at": {"$in": [None]}},
+        {**tenant_filter, "icp_score": {"$gte": 80}, "status": "new", "last_contacted_at": {"$in": [None]}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "source_channel": 1},
     ).limit(5))
 
     overdue_pending = leads_collection.count_documents({
+        **tenant_filter,
         "next_followup_at": {"$lt": now_iso},
         "status": {"$nin": ["won", "lost", "unqualified"]},
     })
@@ -329,12 +338,17 @@ async def eod_wrap_preview(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/api/aria/today")
-async def aria_today(current_user: dict = Depends(get_current_user)):
-    """Lightweight live snapshot of today's wrap totals — for the Dashboard widget."""
+async def aria_today(
+    current_user: dict = Depends(get_current_user),
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Lightweight live snapshot of today's wrap totals — for the Dashboard widget.
+    iter125 — Now tenant-scoped so the Pietential dashboard does not see
+    GenLeadAI Demo's lead counts."""
     from server import _fmt_inr  # late import (circular avoidance)
     cfg = _get_eod_wrap_config()
     tz_off = float((cfg or {}).get("timezone_offset_hours") or 0.0)
-    wrap = _compute_eod_wrap(tz_off_hours=tz_off)
+    wrap = _compute_eod_wrap(tz_off_hours=tz_off, tenant_id=tenant["id"])
     t = wrap["totals"]
     momentum = wrap["momentum"]
     if t["wins"] > 0:
