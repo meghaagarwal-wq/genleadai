@@ -148,6 +148,9 @@ def register_all_routes(app: FastAPI) -> None:
     from .aria_call_priority import router as aria_call_priority_router
     from .demo_seeder import router as demo_seeder_router
 
+    # Iter109 Batch 2 — Command Center KPIs (mode-aware aggregates)
+    from .command_center import router as command_center_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -192,5 +195,6 @@ def register_all_routes(app: FastAPI) -> None:
         lead_magnets_router,
         aria_call_priority_router,
         demo_seeder_router,
+        command_center_router,
     ):
         app.include_router(router)

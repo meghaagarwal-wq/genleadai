@@ -54,7 +54,28 @@ const Automation = () => {
       <div data-testid={`automation-tab-content-${tab}`}>
         {tab === 'inbox' && <LeadFeed embedded />}
         {tab === 'campaigns' && <Campaigns embedded />}
-        {tab === 'touchpoints' && <TouchpointMap embedded />}
+        {tab === 'touchpoints' && (
+          <div className="space-y-4" data-testid="automation-touchpoints-tab">
+            <div className="flex items-center justify-between gap-3 flex-wrap rounded-lg border p-4"
+                 style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
+              <div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>32-Touchpoint Journey</div>
+                <div className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>
+                  Full visual builder: flowchart · timeline · pipeline · conditional logic
+                </div>
+              </div>
+              <Link
+                to="/app/touchpoints"
+                data-testid="automation-touchpoints-open-builder"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white"
+                style={{ background: 'var(--theme-purple)' }}
+              >
+                Open Full Journey Builder →
+              </Link>
+            </div>
+            <TouchpointMap embedded />
+          </div>
+        )}
       </div>
 
       <div className="text-[11px] text-[#94A3B8] pt-3 border-t border-[#F1F5F9]">

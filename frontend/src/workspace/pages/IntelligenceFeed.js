@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import api from '../../config/api';
 import { toast } from 'sonner';
 import WorkspacePullBar from '../../components/WorkspacePullBar';
@@ -291,6 +291,8 @@ const PtIntelligenceFeed = () => {
   const [cards, setCards] = useState([]);
   const [integrationsStatus, setIntegrationsStatus] = useState(null);
   const [filter, setFilter] = useState('new');
+  const [signalType, setSignalType] = useState('all');
+  const [sortBy, setSortBy] = useState('recency');
   const [scanMeta, setScanMeta] = useState({ last_scan_at: null, last_scan_count: 0, status_counts: {} });
 
   const load = useCallback(async () => {
@@ -315,6 +317,22 @@ const PtIntelligenceFeed = () => {
   }, [filter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // iter109 Batch 2 — client-side signal-type filter + sort
+  const visibleCards = useMemo(() => {
+    let arr = cards.slice();
+    if (signalType !== 'all') {
+      arr = arr.filter((c) => c.signal_type === signalType);
+    }
+    if (sortBy === 'icp_match') {
+      arr.sort((a, b) => (b.icp_match_score || 0) - (a.icp_match_score || 0));
+    } else if (sortBy === 'confidence') {
+      arr.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+    } else {
+      arr.sort((a, b) => (new Date(b.created_at || 0).getTime()) - (new Date(a.created_at || 0).getTime()));
+    }
+    return arr;
+  }, [cards, signalType, sortBy]);
 
   const runScan = async () => {
     setScanning(true);
@@ -376,33 +394,57 @@ const PtIntelligenceFeed = () => {
         <IntegrationsCard status={integrationsStatus} onSave={(s) => setIntegrationsStatus(s)} />
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        {['new', 'sent', 'dismissed', 'all'].map((f) => (
-          <button
-            key={f}
-            data-testid={`pt-insights-filter-${f}`}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
-              filter === f ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >{f.charAt(0).toUpperCase() + f.slice(1)}</button>
-        ))}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap" data-testid="instinct-filter-bar">
+        <div className="flex items-center gap-2 flex-wrap">
+          {['new', 'sent', 'dismissed', 'all'].map((f) => (
+            <button
+              key={f}
+              data-testid={`pt-insights-filter-${f}`}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-colors ${
+                filter === f ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >{f.charAt(0).toUpperCase() + f.slice(1)}</button>
+          ))}
+          <select
+            value={signalType}
+            onChange={(e) => setSignalType(e.target.value)}
+            data-testid="instinct-signal-type-filter"
+            className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-full bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="all">All Signals</option>
+            {Object.entries(SIGNAL_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Sort</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            data-testid="instinct-sort-by"
+            className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-full bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="recency">Recency</option>
+            <option value="icp_match">ICP Match Score</option>
+            <option value="confidence">Confidence</option>
+          </select>
+        </div>
       </div>
 
       {loading ? (
         <div className="text-slate-500 text-sm p-4">Loading…</div>
-      ) : cards.length === 0 ? (
+      ) : visibleCards.length === 0 ? (
         <div className="border border-dashed border-slate-300 rounded-xl p-10 text-center bg-slate-50" data-testid="pt-insights-empty">
-          <div className="text-base font-semibold text-slate-700 mb-1">No new signals yet</div>
+          <div className="text-base font-semibold text-slate-700 mb-1">No signals yet</div>
           <div className="text-sm text-slate-500">
-            Hit <strong>Run scan now</strong> to fetch signals across your prospects. Without
-            Proxycurl + NewsAPI keys, Aria runs in conservative mode — connect them above
-            for richer enrichment.
+            Prospects are being scanned daily at the configured time. Hit <strong>Run scan now</strong> to fetch immediately.
           </div>
         </div>
       ) : (
-        <div className="space-y-3" data-testid="pt-insights-feed-list">
-          {cards.map((c) => (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3" data-testid="pt-insights-feed-list">
+          {visibleCards.map((c) => (
             <InsightCard key={c.id} card={c} onAction={onAction} />
           ))}
         </div>

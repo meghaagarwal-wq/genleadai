@@ -21,7 +21,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
-  CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon,
+  CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold,
 } from '@phosphor-icons/react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -47,8 +47,9 @@ const NAV_PRIMARY = [
 ];
 
 const NAV_ADVANCED = [
-  { to: '/app/call-booking',   label: 'Call Booking',       icon: CalendarBlank },
-  { to: '/app/ai-setup',       label: 'AI Setup Assistant', icon: Robot },
+  { to: '/app/touchpoints',    label: '32-Touchpoint Journey', icon: MapTrifold },
+  { to: '/app/call-booking',   label: 'Call Booking',          icon: CalendarBlank },
+  { to: '/app/ai-setup',       label: 'AI Setup Assistant',    icon: Robot },
 ];
 
 
