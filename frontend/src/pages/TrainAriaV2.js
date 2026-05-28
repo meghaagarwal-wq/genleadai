@@ -301,7 +301,7 @@ const CompletenessBar = ({ data, onJumpToSection }) => {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1.5">
           <span className="text-sm font-semibold text-slate-900" data-testid="completeness-label">
-            {pct >= 100 ? '🎉 Profile fully trained' : `Profile ${pct}% trained`}
+            {pct >= 100 ? '🎉 Profile 100% trained' : `Profile ${pct}% trained`}
           </span>
           <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded border ${tone.chip}`}>
             {data.filled_count}/{data.total} fields

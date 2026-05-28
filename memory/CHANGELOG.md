@@ -1,5 +1,23 @@
 # Changelog
 
+## iter109 Batch 1 — Theme toggle + Train ARIA polish (2026-05-28)
+**Section 1 — Theme toggle**
+- New `ThemeContext` (`/app/frontend/src/context/ThemeContext.js`) — defaults to dark, persists to `localStorage.aria_theme`, sets `<html data-theme="dark|light">`.
+- Token palette in `index.css`: dark `--theme-bg #0a0a0f`, light `--theme-bg #f8f7ff`, plus surface/border/text/accent tokens matching the Aria Dashboard spec.
+- Sun/moon toggle in AppLayout topbar (`[data-testid=theme-toggle]`).
+- Shell (sidebar gradient, topbar bg, main content bg, search input, workspace switcher) flips with theme.
+
+**Section 4 — Train ARIA polish (all 4 items)**
+- 4a: `GET /api/aria/training-profile/completeness` returns percent + missing[] + next-section nudge. UI bar at top of Train ARIA shows `🎉 Profile X% trained` with nudge link that jumps to the missing section.
+- 4b: Duplicate file upload triggers a 1.5s `[data-testid=extract-cache-flash]` green panel before transitioning to the normal extracted-fields summary.
+- 4c: TTL index `ttl_finished_at_30d` on `training_extraction_jobs.finished_at_dt` (expireAfterSeconds 2592000 = 30d) — bounds cache growth.
+- 4d: `EXTRACTION_PROMPT_VERSION = "v1"` constant included in cache key + result body. Bump the constant to invalidate all cached extractions.
+
+**Tests:** iter109 backend 6/6 ✅, frontend 100% behaviour ✅ (`/app/test_reports/iteration_108.json`).
+
+
+# Changelog
+
 ## iter108 Batch B — Train ARIA async document extraction (2026-05-28)
 - Async extraction job model: `POST /api/aria/training-profile/extract-from-document`
   now returns `{cached, job_id, status, eta_seconds, hint, is_ocr}` instead of

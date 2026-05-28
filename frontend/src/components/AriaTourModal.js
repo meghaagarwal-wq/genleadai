@@ -22,6 +22,9 @@ import {
 } from '@phosphor-icons/react';
 
 const STORAGE_KEY = 'aria.tour.completed.v1';
+// iter109 — accept either localStorage key so e2e tests can pre-seed without
+// knowing the internal versioned name. Both are honored as "tour seen".
+const STORAGE_KEY_ALIAS = 'aria_tour_completed';
 
 const STEPS = [
   {
@@ -75,7 +78,12 @@ const AriaTourModal = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const forceTour = searchParams.get('tour') === '1';
-  const [open, setOpen] = useState(() => forceTour || localStorage.getItem(STORAGE_KEY) !== '1');
+  const [open, setOpen] = useState(() => {
+    if (forceTour) return true;
+    const seen = localStorage.getItem(STORAGE_KEY) === '1' ||
+                 localStorage.getItem(STORAGE_KEY_ALIAS) === 'true';
+    return !seen;
+  });
   const [idx, setIdx] = useState(0);
 
   // Strip ?tour=1 from URL once we open it, so refresh doesn't re-trigger
@@ -104,6 +112,7 @@ const AriaTourModal = () => {
 
   const complete = (navigateTo) => {
     localStorage.setItem(STORAGE_KEY, '1');
+    localStorage.setItem(STORAGE_KEY_ALIAS, 'true');
     setOpen(false);
     if (navigateTo) navigate(navigateTo);
   };
