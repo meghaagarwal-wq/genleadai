@@ -1,3 +1,48 @@
+## Iter 113 — Batch 3 (Claude Deep Integration) COMPLETE (Feb 2026)
+
+### What shipped
+All remaining direct `LlmChat` / `with_model` / `anthropic.messages.create`
+call-sites in the backend were migrated to the centralised
+`services.claude_service.claude_call()` wrapper. **V10 architectural rule
+(zero direct Claude calls outside the wrapper) is now enforced.**
+
+### Files migrated this iteration
+- `/app/backend/routes/ai.py` — `/score`, `/email-generate`, `/chat`, `/summarize`
+  (full rewrite) → ICP_SCORING / INSIGHT_GENERATION / CONVERSATION / SUMMARY tasks.
+- `/app/backend/routes/pietential.py` — `ask_aria_reply` → INSIGHT_GENERATION
+  with `sanitize_user_input=True`.
+- `/app/backend/routes/health_engine.py` — `classify_sentiment` → SIGNAL_CLASSIFICATION (haiku).
+- `/app/backend/routes/aria_auto_map.py` — `_claude_analyze` (doc parsing) +
+  `/improve` → EXTRACTION / INSIGHT_GENERATION with `response_format="json"`.
+- `/app/backend/routes/touchpoint_engine.py` — `_render_with_claude` → TOUCHPOINT_GENERATION.
+- `/app/backend/routes/touchpoint_preview.py` — `_claude_render` → TOUCHPOINT_GENERATION.
+- `/app/backend/aria_agent_routes/workspace.py` — `ask_aria_reply` → INSIGHT_GENERATION
+  with `sanitize_user_input=True`.
+- `/app/backend/server.py` — `launch_revival_campaign` + `pre_call_research`
+  → INSIGHT_GENERATION; top-level `from emergentintegrations.llm.chat import …`
+  removed.
+- Unused `LlmChat`/`UserMessage` imports stripped from 12 aria_agent_routes
+  modules + `aria_agent.py`.
+
+### Verification (test_reports/iteration_113.json)
+- **Backend regression suite: 15/15 PASS (100%).**
+- V10 enforced via grep test inside the new regression file
+  `/app/backend/tests/test_iter113_claude_wrapper_batch3.py`.
+- `api_usage_log` MongoDB collection received 21 fresh audit entries
+  (tenant_id=ten_demo, model=claude-sonnet-4-5-20250929, task_type populated).
+- Prompt-injection sanitiser path on `/api/ai/chat` absorbed adversarial
+  input cleanly — no 500.
+- Open minor: `prompt_tokens`/`completion_tokens` stored via length
+  heuristic (`len // 4`) rather than SDK-reported `response.usage`.
+  Flagged for follow-up before any token-quota / billing feature.
+
+### Next up
+Batch 4 — Multi-Platform Crawl + Outreach Playbook (pending user
+go-ahead — needs Proxycurl + Serper API keys via the Integrations UI).
+
+---
+
+
 ## Iter 108 — UI standardisation (Feb 2026, Batch A + B)
 
 ### Batch B — Train ARIA speed fix
