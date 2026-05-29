@@ -1,5 +1,25 @@
 # Changelog
 
+## iter129 — Draft with ARIA button on the Conversations reply box (2026-02-29) ✅
+**Backend**
+- `POST /api/conversations/lead/{lead_id}/draft` (`routes/conversations.py`) — loads the lead's cached intel profile (if any) and calls `services.intel_service.compose_message` for a channel-adaptive single-shot draft.
+- Resolves leads from both `pt_leads` (Pietential) and `leads` (legacy ObjectId) collections.
+- Accepts `{channel: whatsapp|email|linkedin, user_steer?}`. Returns `{channel, draft, subject, ai_powered, has_intel, error}`.
+- **Refusal guard**: when there's no intel profile and Claude returns a meta-refusal ("I can't draft this"), the endpoint silently substitutes a generic channel-appropriate opener so the founder always gets a usable starter.
+
+**Frontend (`ConversationThread.js`)**
+- New **Draft with ARIA** button next to Send (purple-outline pill with Sparkle icon).
+- Uses the current textarea content as `user_steer` so the founder can guide the draft with a one-liner ("emphasise our 30-day pilot").
+- Toast UX:
+  - `has_intel=true` → "Draft ready — grounded in this lead's intel profile"
+  - `has_intel=false` → "Draft ready — no intel profile yet, so it's a generic opener. Run Intel scan for sharper drafts."
+- New keyboard shortcut **`d`** → trigger Draft with ARIA.
+- Shortcut hint bar updated.
+
+**Tests** — `/app/backend/tests/test_iter129_draft_with_aria.py` — **4/4 passing** (bad channel, unknown lead, draft text for each channel, user_steer accepted).
+
+
+
 ## iter128 — Conversation reply box + extended keyboard shortcuts (2026-02-29) ✅
 **Backend**
 - `POST /api/conversations/lead/{lead_id}/send` (`routes/conversations.py`) — routes through the existing `dispatch_outreach` chokepoint so outbound_log + reply tracking stay in sync.

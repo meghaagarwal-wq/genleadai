@@ -24,7 +24,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ChatCircleText, EnvelopeSimple, LinkedinLogo, ArrowsClockwise,
   Robot, User, Gear, MagnifyingGlass, CheckCircle, Warning, ArrowBendUpLeft, ArrowBendUpRight,
-  PaperPlaneTilt,
+  PaperPlaneTilt, Sparkle,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi } from '../shared';
@@ -108,6 +108,38 @@ const ConversationThread = ({ leadId }) => {
     }
   };
 
+  // iter129 — "Draft with ARIA" button.
+  // Calls /api/conversations/lead/:id/draft → channel-adaptive composer
+  // (intel_service.compose_message) and drops the result into the
+  // textarea. The founder can then edit before sending.
+  const [drafting, setDrafting] = useState(false);
+  const draftWithAria = async () => {
+    setDrafting(true);
+    try {
+      const r = await ptApi.post(`/api/conversations/lead/${leadId}/draft`, {
+        channel: replyChannel,
+        user_steer: replyBody.trim() || undefined,  // founder hint = current textarea
+      });
+      const draft = r.data?.draft || '';
+      if (!draft) {
+        toast.error('ARIA had nothing to draft. Run an Intel scan first to give her context.');
+        return;
+      }
+      setReplyBody(draft);
+      if (r.data?.has_intel) {
+        toast.success('Draft ready — grounded in this lead\'s intel profile');
+      } else {
+        toast.info('Draft ready — no intel profile yet, so it\'s a generic opener. Run Intel scan for sharper drafts.');
+      }
+      // Focus the textarea so the founder can edit immediately.
+      setTimeout(() => replyRef.current?.focus(), 50);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Draft failed');
+    } finally {
+      setDrafting(false);
+    }
+  };
+
   // Filter
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -163,6 +195,12 @@ const ConversationThread = ({ leadId }) => {
         e.preventDefault();
         setSendAs((v) => (v === 'aria' ? 'me' : 'aria'));
         toast(`Send as ${sendAs === 'aria' ? 'me' : 'ARIA'}`, { duration: 1200 });
+        return;
+      }
+      // d → draft with ARIA.
+      if (e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        draftWithAria();
         return;
       }
       if (!filtered.length) return;
@@ -372,20 +410,36 @@ const ConversationThread = ({ leadId }) => {
             ref={replyRef}
             value={replyBody}
             onChange={(e) => setReplyBody(e.target.value)}
-            placeholder={`Type a message — ⌘/Ctrl + Enter to send (or press r to focus, e to toggle Send-as).`}
+            placeholder={`Type a message — ⌘/Ctrl + Enter to send (or press r to focus, e to toggle Send-as, d to draft with ARIA).`}
             rows={2}
             data-testid="thread-reply-textarea"
             className="flex-1 px-3 py-2 text-sm border border-[#E2E8F0] rounded-md outline-none focus:border-[#7C35DC] resize-none"
           />
-          <button
-            onClick={sendReply}
-            disabled={sending || !replyBody.trim()}
-            data-testid="thread-reply-send-btn"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold text-white disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
-          >
-            <PaperPlaneTilt size={12} weight="fill" /> {sending ? 'Sending…' : 'Send'}
-          </button>
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={draftWithAria}
+              disabled={drafting}
+              data-testid="thread-reply-draft-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold border disabled:opacity-50"
+              style={{
+                borderColor: '#7C35DC',
+                color: '#7C35DC',
+                background: '#FAF7FF',
+              }}
+              title="Press d to draft with ARIA"
+            >
+              <Sparkle size={11} weight="fill" /> {drafting ? 'Drafting…' : 'Draft with ARIA'}
+            </button>
+            <button
+              onClick={sendReply}
+              disabled={sending || !replyBody.trim()}
+              data-testid="thread-reply-send-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold text-white disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
+            >
+              <PaperPlaneTilt size={12} weight="fill" /> {sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -396,6 +450,8 @@ const ConversationThread = ({ leadId }) => {
         <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">/</kbd> filter
         <span>·</span>
         <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">r</kbd> reply
+        <span>·</span>
+        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">d</kbd> draft with ARIA
         <span>·</span>
         <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">e</kbd> toggle send-as
         <span>·</span>

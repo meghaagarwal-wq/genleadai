@@ -11,6 +11,7 @@ from deps import db
 from routes.tenants import get_active_tenant
 from security.helpers import safe_query_param  # iter80 — S9.5
 from services.outreach_dispatch import dispatch_outreach
+from services.intel_service import compose_message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -247,4 +248,114 @@ async def send_reply(
         "provider_id": result.get("provider_id"),
         "channel": body.channel,
         "send_as": body.send_as,
+    }
+
+
+
+# ─── POST /api/conversations/lead/{lead_id}/draft ───────────────────────
+# "Draft with ARIA" button on the Conversations tab. Loads the lead's
+# cached intel profile (if any) and runs the channel-adaptive composer
+# so the founder can edit before sending. No outbound is dispatched —
+# this only returns the draft text.
+intel_profiles_col = db["intel_profiles"]
+
+
+class DraftRequest(BaseModel):
+    channel: str = Field(..., description="whatsapp | email | linkedin")
+    user_steer: Optional[str] = Field(default=None, max_length=400, description="Optional founder note that nudges the draft.")
+
+
+@router.post("/lead/{lead_id}/draft")
+async def draft_reply(
+    lead_id: str,
+    body: DraftRequest,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Generate a one-shot draft message for the reply box."""
+    channel = (body.channel or "").strip().lower()
+    if channel not in {"whatsapp", "email", "linkedin"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported channel: {channel}")
+
+    tenant_id = tenant["id"]
+
+    # Resolve lead from either store so Pietential prospects work too.
+    # Legacy leads use ObjectId — try both string id field and _id.
+    lead = pt_leads_col.find_one({"id": lead_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not lead:
+        try:
+            from bson import ObjectId
+            if ObjectId.is_valid(lead_id):
+                lead = leads_col.find_one(
+                    {"_id": ObjectId(lead_id), "tenant_id": tenant_id},
+                    {"_id": 0},
+                )
+        except Exception:
+            lead = None
+    if not lead:
+        lead = leads_col.find_one({"id": lead_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    name = (f"{lead.get('first_name', '')} {lead.get('last_name', '')}").strip() or lead.get("name") or lead.get("email") or "Prospect"
+    lead_meta = {
+        "name": name,
+        "first_name": lead.get("first_name") or (name.split(" ", 1)[0] if name else "there"),
+        "company": lead.get("company_name") or lead.get("company") or lead.get("domain"),
+    }
+
+    profile = intel_profiles_col.find_one({"tenant_id": tenant_id, "lead_id": lead_id}, {"_id": 0}) or {}
+
+    composed = await compose_message(
+        tenant_id=tenant_id,
+        lead_id=lead_id,
+        channel=channel,
+        lead_meta=lead_meta,
+        profile=profile,
+        user_steer=body.user_steer,
+    )
+
+    # Normalise for the reply box: a single text blob (UI doesn't show a
+    # separate subject input yet).
+    msg = composed.get("message")
+    if channel == "email" and isinstance(msg, dict):
+        text = msg.get("body") or ""
+        subject = msg.get("subject") or ""
+    else:
+        text = msg if isinstance(msg, str) else (msg.get("body") if isinstance(msg, dict) else "")
+        subject = None
+
+    # Refusal guard — when there's no intel profile + no ICP score, Claude
+    # often returns a meta-response ("I can't draft this") rather than a
+    # message. Detect that and fall back to a generic opener so the
+    # founder gets a starter draft they can edit, instead of a refusal.
+    refusal_markers = ("i cannot", "i can't", "i won't", "i will not", "should not be contacted", "no real intelligence", "without any relevant signals")
+    low = (text or "").lower()
+    if not profile and any(m in low for m in refusal_markers):
+        first_name = lead_meta.get("first_name") or "there"
+        company = lead_meta.get("company") or "your team"
+        if channel == "email":
+            text = (
+                f"Hi {first_name},\n\nI came across {company} and wanted to reach out. "
+                f"We help founders like you shorten the gap between captured leads and booked calls — "
+                f"would a 15-minute chat this week be useful?\n\nBest,\nAria"
+            )
+            subject = subject or f"Quick idea for {company}"
+        elif channel == "whatsapp":
+            text = (
+                f"Hi {first_name} — quick idea worth 15 mins for {company}. "
+                f"Open to a chat this week?"
+            )
+        else:  # linkedin
+            text = (
+                f"Hi {first_name}, would love to connect. I work with founders on "
+                f"closing the gap between captured leads and booked calls — happy to share what's worked."
+            )
+
+    return {
+        "channel": channel,
+        "draft": text,
+        "subject": subject,
+        "ai_powered": bool(composed.get("ai_powered")),
+        "has_intel": bool(profile),
+        "error": composed.get("error"),
     }
