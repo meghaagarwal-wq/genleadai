@@ -161,6 +161,114 @@ async def research_lead(
     return {"cached": False, "profile": profile, "crawl_meta": profile.get("crawl_meta")}
 
 
+# ─── POST /api/intel/scan-hot ───────────────────────────────────────────
+# Batch action invoked from the Lead Inbox top bar. Queues an intel scan
+# for every lead in the active tenant whose ICP score (or tier) clears
+# the configured threshold. Returns the candidate count immediately and
+# fires the actual crawls in the background — the founder sees results
+# trickle into the Intel tab as each scan finishes.
+class ScanHotRequest(BaseModel):
+    min_icp_score: int = Field(default=80, ge=0, le=100, description="ICP score floor. Default 80 ≈ 'hot' leads.")
+    refresh: bool = Field(default=False, description="If true, re-scan even leads that already have a cached profile.")
+    max_leads: int = Field(default=50, ge=1, le=200, description="Hard cap so a single click cannot blow the crawl budget.")
+
+
+@router.post("/scan-hot")
+async def scan_hot_leads(
+    body: ScanHotRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Find every hot lead in the active tenant + queue intel scans for
+    each one. Returns the queued list synchronously; crawls run in the
+    background so the request returns instantly.
+    """
+    tenant_id = current_user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Active tenant required")
+
+    # Pull candidates from both lead stores (pt_leads + legacy leads)
+    # so the batch covers Pietential workspaces too.
+    candidates: List[Dict[str, Any]] = []
+
+    def _add(doc: Dict[str, Any], src: str):
+        if not doc:
+            return
+        candidates.append({
+            "lead_id": str(doc.get("id") or doc.get("_id")),
+            "name": (f"{doc.get('first_name', '')} {doc.get('last_name', '')}").strip() or doc.get("name") or doc.get("email") or "Lead",
+            "icp_score": doc.get("icp_score") or 0,
+            "icp_tier": doc.get("icp_tier"),
+            "source": src,
+        })
+
+    # Legacy CRM leads — sort by score desc + apply cap.
+    for d in leads_col.find(
+        {
+            "tenant_id": tenant_id,
+            "$or": [
+                {"icp_score": {"$gte": body.min_icp_score}},
+                {"icp_tier": "hot"},
+            ],
+        },
+        {"_id": 1, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1, "icp_score": 1, "icp_tier": 1},
+    ).sort([("icp_score", -1)]).limit(body.max_leads):
+        _add(d, "legacy")
+
+    # Pietential pt_leads — covers Pietential workspaces.
+    remaining = max(0, body.max_leads - len(candidates))
+    if remaining > 0:
+        for d in pt_leads_col.find(
+            {
+                "tenant_id": tenant_id,
+                "$or": [
+                    {"icp_score": {"$gte": body.min_icp_score}},
+                    {"icp_tier": "hot"},
+                ],
+            },
+            {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1, "icp_score": 1, "icp_tier": 1},
+        ).sort([("icp_score", -1)]).limit(remaining):
+            _add(d, "pt")
+
+    if not candidates:
+        return {"queued": 0, "leads": [], "message": "No hot leads matched. Try lowering the score threshold."}
+
+    # Fire each scan in the background. Failures (missing creds, budget
+    # exceeded) are logged but never block the response — the Intel tab
+    # surfaces per-lead errors when the founder opens that lead.
+    async def _run_one(lead_id: str):
+        try:
+            lead = _load_lead(tenant_id, lead_id)
+            crawl = await crawl_prospect(
+                tenant_id=tenant_id, lead_id=lead_id,
+                first_name=lead["first_name"], last_name=lead["last_name"],
+                email=lead["email"], company_name=lead["company"],
+                company_domain=lead["domain"], linkedin_url=lead["linkedin_url"],
+                industry=lead["industry"],
+            )
+            await synthesise_intel(
+                tenant_id=tenant_id, lead_id=lead_id,
+                lead_meta={
+                    "name": lead["name"], "first_name": lead["first_name"],
+                    "company": lead["company"] or lead["domain"],
+                    "domain": lead["domain"], "icp": lead["icp"],
+                },
+                crawl=crawl,
+            )
+        except Exception as e:
+            logger.warning("[scan-hot] %s failed: %s", lead_id, str(e)[:160])
+
+    # Detached background tasks — survives the response.
+    for c in candidates:
+        asyncio.create_task(_run_one(c["lead_id"]))
+
+    return {
+        "queued": len(candidates),
+        "leads": candidates,
+        "threshold": body.min_icp_score,
+        "message": f"Queued intel scans for {len(candidates)} hot lead(s). Results appear in each lead's Intel tab as they complete.",
+    }
+
+
 # ─── GET /api/intel/{lead_id} ───────────────────────────────────────────
 @router.get("/{lead_id}")
 async def get_intel(lead_id: str, current_user: dict = Depends(get_current_user)):

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Upload, MagnifyingGlass, X, Brain, Sparkle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi, PageHeader, EmptyState, StageBadge, SOURCE_LABELS, fmtDate } from '../shared';
+import api from '../../config/api';
 
 const LeadFeed = ({ embedded = false }) => {
   const [leads, setLeads] = useState([]);
@@ -52,27 +53,42 @@ const LeadFeed = ({ embedded = false }) => {
   }, [liveCursor]);
   const dismissLiveBadge = () => setNewSinceLastSeen(0);
 
-  // iter114 Batch 4 — One-click "Run Intel on all hot leads"
+  // iter126 — One-click "Scan all hot leads" — uses the new global
+  // /api/intel/scan-hot endpoint which covers both leads + pt_leads, fires
+  // crawls in the background, and returns the queued count instantly.
   const runBatchIntel = async () => {
     setBatchBusy(true);
     setBatchResult(null);
     try {
-      const r = await ptApi.post('/api/intel/batch/hot-leads', {
-        stages: ['hot', 'engaged', 'session_pilot'],
-        min_score: 70,
-        limit: 25,
-        skip_existing: true,
+      const r = await api.post('/api/intel/scan-hot', {
+        min_icp_score: 80,
+        refresh: false,
+        max_leads: 50,
       });
-      setBatchResult(r.data);
-      if (r.data.aborted) {
-        toast.error('Connect RapidAPI or Serper on /app/integrations first');
-      } else if (r.data.processed === 0) {
-        toast.info('All hot leads already have intel.');
+      // Normalise to the existing batchResult shape so the toast/banner
+      // logic below still renders correctly.
+      const normalised = {
+        processed: r.data.queued || 0,
+        succeeded: r.data.queued || 0,
+        failed: 0,
+        aborted: false,
+        threshold: r.data.threshold,
+        leads: r.data.leads || [],
+      };
+      setBatchResult(normalised);
+      if (normalised.processed === 0) {
+        toast.info(r.data.message || 'No hot leads matched.');
       } else {
-        toast.success(`Intel synthesised for ${r.data.succeeded}/${r.data.processed} hot leads`);
+        toast.success(`Queued intel scans for ${normalised.processed} hot lead(s). Results appear in each lead's Intel tab as they finish.`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Batch intel failed');
+      const detail = err.response?.data?.detail || 'Batch intel failed';
+      if (err.response?.status === 503) {
+        toast.error('Connect RapidAPI or Serper on /app/integrations first');
+        setBatchResult({ aborted: true, reason: detail });
+      } else {
+        toast.error(detail);
+      }
     } finally {
       setBatchBusy(false);
     }
@@ -93,10 +109,10 @@ const LeadFeed = ({ embedded = false }) => {
                 {newSinceLastSeen} new
               </button>
             )}
-            <button onClick={runBatchIntel} disabled={batchBusy} data-testid="pt-leadfeed-run-intel-btn"
+            <button onClick={runBatchIntel} disabled={batchBusy} data-testid="scan-all-hot-leads-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
-              <Brain size={14} weight="duotone" /> {batchBusy ? 'Synthesising…' : 'Run Intel on hot leads'}
+              <Brain size={14} weight="duotone" /> {batchBusy ? 'Queuing scans…' : 'Scan all hot leads'}
             </button>
             <button onClick={() => setShowCsv(true)} data-testid="import-csv-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">

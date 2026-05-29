@@ -1,5 +1,16 @@
 # Changelog
 
+## iter127 — Scan all hot leads batch action (2026-02-29) ✅
+- New `POST /api/intel/scan-hot` endpoint (`routes/intel.py`):
+  - Covers both legacy `leads` and Pietential `pt_leads` collections.
+  - Returns the queued count synchronously and runs all crawls + Claude synthesis as detached `asyncio.create_task` background jobs so the UI returns instantly.
+  - Tenant-scoped, configurable `min_icp_score` (default 80), hard cap `max_leads` (default 50, max 200).
+- Frontend: `LeadFeed.js` "Scan all hot leads" button (relabeled from "Run Intel on hot leads") now calls the new endpoint and shows a friendlier toast ("Queued intel scans for N hot lead(s). Results appear in each lead's Intel tab as they finish.")
+- `data-testid="scan-all-hot-leads-btn"` for E2E hooks.
+- Tests: `/app/backend/tests/test_iter127_scan_hot.py` — 3/3 passing (queued count, high threshold, input validation).
+
+
+
 ## iter126 — Lead 360 + Sidebar Lead Count + Pipeline Snapshot + Insert-blank (2026-02-29) ✅
 **Lead 360 view (5-tab unified lead profile)**
 - New `/app/frontend/src/workspace/pages/Lead360.js` (≈540 lines) wired at route `/app/leads/:id`.
