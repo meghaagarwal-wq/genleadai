@@ -146,6 +146,21 @@ const TouchpointMap = () => {
     } catch { toast.error('Reorder failed'); load(); }
   };
 
+  // Drag-and-drop reorder from the flowchart view — caller supplies the
+  // full renumbered list. Optimistically update, then persist.
+  const reorderAll = async (renumbered) => {
+    const prev = tps;
+    setTps(renumbered);
+    try {
+      await api.post('/api/journey/touchpoints/reorder', {
+        order: renumbered.map((t) => ({ id: t.id, number: t.number })),
+      });
+    } catch {
+      toast.error('Reorder failed — reverting');
+      setTps(prev);
+    }
+  };
+
   return (
     <div className="space-y-4" data-testid="touchpoint-journey-page" style={{ color: 'var(--theme-text)' }}>
       {/* Header */}
@@ -249,6 +264,7 @@ const TouchpointMap = () => {
           onScoreWithAI={() => toast('AI scoring is on the roadmap — pending live send data.')}
           onPatch={patchTouchpoint}
           onRegenerate={regenerate}
+          onReorder={reorderAll}
         />
       )}
       {!loading && tps.length > 0 && view === 'timeline' && (

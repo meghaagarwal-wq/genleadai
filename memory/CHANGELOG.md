@@ -1,5 +1,29 @@
 # Changelog
 
+## iter125 — server.py refactor + Journey drag-and-drop (2026-02-29) ✅
+**server.py split (3,254 → 2,382 lines)**
+- Extracted Founder Command Center → `routes/founder_command_center.py`
+- Extracted Public API + Web form + Embed code → `routes/public_api.py`
+- Extracted API key management → `routes/api_keys.py`
+- Extracted Audit log + CSV exports → `routes/exports_audit.py`
+- Extracted Legacy onboarding + TTV milestones → `routes/onboarding_legacy.py`
+- All registered through `routes/__init__.register_all_routes`
+- Re-exports kept for back-compat (`_fmt_inr`, `verify_api_key`, `log_audit`,
+  collection references) so cross-module callers (e.g. `aria_eod_wrap`) and
+  legacy tests continue to work.
+
+**Journey drag-and-drop reorder**
+- `JourneyFlowchart.jsx` step cards are now HTML5-draggable with visual cues
+  (purple border + glow on drop target, dim source while dragging,
+  `DotsSixVertical` grab handle inside each step header).
+- Dropping a card calls a new `onReorder(renumbered)` prop, which `TouchpointMap.js`
+  wires to optimistic-update local state and persist via the existing
+  `POST /api/journey/touchpoints/reorder` endpoint.
+- Tests: `/app/backend/tests/test_iter125_refactor_and_drag.py` (7 passing —
+  covers all moved endpoints + full drag-payload reorder cycle).
+
+
+
 ## iter109c Batch 2 — Google OAuth + Call Booking + Audit trail (2026-05-28) ✅
 **Audit trail footer**
 - New columns on `integration_configs`: `configured_by_user_id`, `configured_by_name`, `configured_at`, `connected_by_user_id`, `connected_by_name`.

@@ -178,6 +178,13 @@ def register_all_routes(app: FastAPI) -> None:
     # iter124 — 32-Touchpoint Journey Builder (CRUD + Claude generation)
     from .journey import router as journey_router
 
+    # iter125 — server.py refactor: extracted self-contained endpoint groups
+    from .founder_command_center import router as founder_command_center_router
+    from .public_api import router as public_api_router
+    from .api_keys import router as api_keys_router
+    from .exports_audit import router as exports_audit_router
+    from .onboarding_legacy import router as onboarding_legacy_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -236,5 +243,10 @@ def register_all_routes(app: FastAPI) -> None:
         approval_digest_router,
         aria_settings_router,
         journey_router,
+        founder_command_center_router,
+        public_api_router,
+        api_keys_router,
+        exports_audit_router,
+        onboarding_legacy_router,
     ):
         app.include_router(router)

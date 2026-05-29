@@ -35,7 +35,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import {
   EnvelopeSimple, WhatsappLogo, LinkedinLogo, ChatCircleText, PhoneCall,
   Lightning, Bell, Tag, StopCircle, Sparkle, Plus, Minus, ArrowsOut, Download,
-  Share, DotsThree, MagnifyingGlass,
+  Share, DotsThree, MagnifyingGlass, DotsSixVertical,
 } from '@phosphor-icons/react';
 
 // ─── Static config ──────────────────────────────────────────────────────
@@ -105,8 +105,10 @@ const deriveAction = (tp) => {
 
 
 // ─── Component ──────────────────────────────────────────────────────────
-const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRegenerate }) => {
+const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRegenerate, onReorder }) => {
   const [zoom, setZoom] = useState(1);
+  const [dragId, setDragId] = useState(null);     // id of card being dragged
+  const [dragOverId, setDragOverId] = useState(null); // id of card hovered
   const containerRef = useRef(null);
 
   // Pre-compute per-touchpoint geometry so edges and minimap share coords.
@@ -133,6 +135,37 @@ const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRege
 
   const grade = journeyStrength?.grade || (tps.length >= 24 ? 'A' : tps.length >= 16 ? 'B' : tps.length >= 8 ? 'C' : 'D');
   const score = journeyStrength?.score ?? Math.min(99.9, tps.length * 3.1);
+
+  // Drag-and-drop reorder: swap source.number ↔ target.number, then
+  // rebuild a sequential numbering and bubble up to the parent.
+  const handleDragStart = (id) => (e) => {
+    setDragId(id);
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); } catch { /* ignore */ }
+  };
+  const handleDragOver = (id) => (e) => {
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'move'; } catch { /* ignore */ }
+    if (id !== dragOverId) setDragOverId(id);
+  };
+  const handleDragLeave = () => setDragOverId(null);
+  const handleDrop = (targetId) => (e) => {
+    e.preventDefault();
+    const sourceId = dragId || (() => { try { return e.dataTransfer.getData('text/plain'); } catch { return null; } })();
+    setDragId(null); setDragOverId(null);
+    if (!sourceId || sourceId === targetId || !onReorder) return;
+
+    const ordered = [...tps].sort((a, b) => (a.number || 0) - (b.number || 0));
+    const srcIdx = ordered.findIndex((t) => t.id === sourceId);
+    const dstIdx = ordered.findIndex((t) => t.id === targetId);
+    if (srcIdx < 0 || dstIdx < 0) return;
+    // Move the source card into the destination slot, shifting others.
+    const [moved] = ordered.splice(srcIdx, 1);
+    ordered.splice(dstIdx, 0, moved);
+    // Renumber 1..N sequentially.
+    const renumbered = ordered.map((t, i) => ({ ...t, number: i + 1 }));
+    onReorder(renumbered);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   return (
     <div className="space-y-4" data-testid="journey-flowchart-v2">
@@ -300,7 +333,20 @@ const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRege
 
           {/* Rows */}
           {rows.map((r) => (
-            <FlowRow key={r.tp.id} row={r} onPatch={onPatch} onRegenerate={onRegenerate} />
+            <FlowRow
+              key={r.tp.id}
+              row={r}
+              onPatch={onPatch}
+              onRegenerate={onRegenerate}
+              draggable={!!onReorder}
+              isDragging={dragId === r.tp.id}
+              isDragOver={dragOverId === r.tp.id && dragId !== r.tp.id}
+              onDragStart={handleDragStart(r.tp.id)}
+              onDragOver={handleDragOver(r.tp.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop(r.tp.id)}
+              onDragEnd={handleDragEnd}
+            />
           ))}
         </div>
 
@@ -369,7 +415,11 @@ const Edge = ({ x1, y1, x2, y2, color, dashed, label }) => {
   );
 };
 
-const FlowRow = ({ row, onPatch, onRegenerate }) => {
+const FlowRow = ({
+  row, onPatch, onRegenerate,
+  draggable, isDragging, isDragOver,
+  onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
+}) => {
   const { tp, y, cond, action } = row;
   const style = CHANNEL_STYLE[tp.channel] || CHANNEL_STYLE.email;
   const ChIcon = style.Icon;
@@ -378,17 +428,41 @@ const FlowRow = ({ row, onPatch, onRegenerate }) => {
     <>
       {/* Step card (left col) */}
       <div
-        className="absolute rounded-lg border shadow-sm transition-shadow hover:shadow-md cursor-pointer"
+        className="absolute rounded-lg border shadow-sm transition-all cursor-pointer"
         style={{
           top: y, left: COL_X.step, width: COL_W.step, minHeight: ROW_H - 8,
           background: 'var(--theme-surface)',
-          borderColor: 'var(--theme-border-strong)',
+          borderColor: isDragOver ? '#7C35DC' : 'var(--theme-border-strong)',
+          borderWidth: isDragOver ? 2 : 1,
+          opacity: isDragging ? 0.4 : 1,
+          boxShadow: isDragOver
+            ? '0 8px 24px rgba(124,53,220,0.30)'
+            : isDragging
+              ? '0 12px 28px rgba(0,0,0,0.20)'
+              : undefined,
+          transform: isDragging ? 'scale(0.98)' : undefined,
         }}
         data-testid={`flow-step-${tp.id}`}
+        draggable={!!draggable}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
         onClick={() => onPatch?.(tp.id, {})}
       >
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-t-lg" style={{ background: style.dim }}>
           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: style.color, fontFamily: 'Plus Jakarta Sans' }}>
+            {draggable && (
+              <DotsSixVertical
+                size={12}
+                weight="bold"
+                className="cursor-grab active:cursor-grabbing"
+                style={{ color: 'var(--theme-text-muted)', marginRight: 2 }}
+                data-testid={`flow-step-drag-handle-${tp.id}`}
+                aria-label="Drag to reorder"
+              />
+            )}
             <ChIcon size={11} weight="duotone" /> Step {tp.number} · {style.label}
           </span>
           <span className="text-[10px] font-semibold" style={{ color: 'var(--theme-text-muted)' }}>
