@@ -465,8 +465,17 @@ async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, A
     def _result(status: int, label: str) -> Dict[str, Any]:
         if status in (200, 204):
             return {"valid": True, "message": "Key valid · provider responded"}
-        if status in (401, 403):
-            return {"valid": False, "message": f"{label} rejected key ({status})"}
+        if status == 401:
+            return {"valid": False, "message": f"{label} rejected key (401 unauthorized)"}
+        if status == 403:
+            # RapidAPI returns 403 when the key is valid but the workspace
+            # has no active subscription for THIS API. Treat as a warning
+            # so the integration card stays connected — the user just
+            # needs to subscribe on rapidapi.com.
+            return {"valid": None, "message": f"{label} key recognised but no active subscription (403). Subscribe on rapidapi.com."}
+        if status == 429:
+            # Quota exhausted, key is fine.
+            return {"valid": None, "message": f"{label} rate-limited (429). Key is valid but quota exhausted."}
         return {"valid": None, "message": f"{label} answered HTTP {status} — could not verify"}
 
     try:
@@ -523,22 +532,35 @@ async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, A
                 )
                 return _result(r.status_code, "360dialog")
             if provider == "rapidapi":
-                # RapidAPI LinkedIn scraper — uses X-RapidAPI-Key + X-RapidAPI-Host.
-                # The specific scraper host is set via extra_config.host;
-                # defaults to fresh-linkedin-profile-data.p.rapidapi.com.
-                host = (extra.get("host") or "fresh-linkedin-profile-data.p.rapidapi.com").strip()
-                # A cheap GET that every popular LinkedIn scraper host serves
-                # is /get-linkedin-profile with a public, well-known URL. 401
-                # means the key is wrong; anything else (200/403/422) means
-                # the key is at least accepted by RapidAPI.
+                host = (extra.get("host") or "linkedin-data-api.p.rapidapi.com").strip()
+                paths = {
+                    "linkedin-data-api.p.rapidapi.com":           ("/get-profile-data-by-url", {"url": "https://www.linkedin.com/in/williamhgates/"}),
+                    "fresh-linkedin-profile-data.p.rapidapi.com": ("/get-linkedin-profile",    {"linkedin_url": "https://www.linkedin.com/in/williamhgates/"}),
+                }
+                path, params = paths.get(host, paths["linkedin-data-api.p.rapidapi.com"])
                 try:
                     r = await client.get(
-                        f"https://{host}/get-linkedin-profile",
+                        f"https://{host}{path}",
                         headers={"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host},
-                        params={"linkedin_url": "https://www.linkedin.com/in/williamhgates/"},
+                        params=params,
                     )
                 except Exception:  # noqa: BLE001
                     return {"valid": None, "message": f"RapidAPI host {host} unreachable — will retry on Save."}
+                # 403 from RapidAPI = key recognised but workspace is not
+                # subscribed to THIS API. Hand the user a direct subscribe URL.
+                if r.status_code == 403:
+                    subscribe_url = {
+                        "linkedin-data-api.p.rapidapi.com":           "https://rapidapi.com/rockapis-rockapis-default/api/linkedin-data-api/pricing",
+                        "fresh-linkedin-profile-data.p.rapidapi.com": "https://rapidapi.com/freshdata-freshdata-default/api/fresh-linkedin-profile-data/pricing",
+                    }.get(host, f"https://rapidapi.com/marketplace/api/{host.split('.')[0]}")
+                    return {
+                        "valid": None,
+                        "message": (
+                            f"Your RapidAPI key is valid but not yet subscribed to {host}. "
+                            f"Click → {subscribe_url} and subscribe to the Basic (free) plan, "
+                            f"then click Test again."
+                        ),
+                    }
                 return _result(r.status_code, f"RapidAPI ({host})")
     except Exception as e:  # noqa: BLE001
         return {"valid": None, "message": f"Validator unreachable ({str(e)[:80]}). Will retry on Save."}

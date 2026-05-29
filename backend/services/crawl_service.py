@@ -192,7 +192,53 @@ async def fetch_linkedin_company(api_key: str, company_url: str) -> Dict[str, An
 # names the rest of the pipeline expects (first_name, last_name,
 # headline, occupation, summary, country, city, experiences[], etc.).
 # This means intel_service / claude synthesis stays untouched.
-RAPIDAPI_DEFAULT_HOST = "fresh-linkedin-profile-data.p.rapidapi.com"
+RAPIDAPI_DEFAULT_HOST = "linkedin-data-api.p.rapidapi.com"
+
+
+# Endpoint shapes vary across RapidAPI LinkedIn providers. We dispatch
+# the path + param-mapping per host so a customer can pick whichever
+# provider has the best uptime / pricing for them. To add a new host:
+# drop a new entry below — no other code changes needed.
+RAPIDAPI_HOST_SPECS: Dict[str, Dict[str, Any]] = {
+    # ── Rocketrider's "LinkedIn Data API" (user's chosen primary host) ──
+    "linkedin-data-api.p.rapidapi.com": {
+        "profile_by_url": ("/get-profile-data-by-url", lambda url: {"url": url}),
+        "profile_posts": ("/get-profile-posts",        lambda url: {"username": _username_from_url(url)}),
+        "company_by_url": ("/get-company-details",     lambda url: {"username": _username_from_url(url)}),
+        "search_people": ("/search-people",            lambda q:  {"keywords": q, "start": "0"}),
+        "search_url_key": "profileURL",  # field in /search-people response that holds the URL
+    },
+    # ── FreshData's "Fresh LinkedIn Profile Data" (fallback host) ──
+    "fresh-linkedin-profile-data.p.rapidapi.com": {
+        "profile_by_url":  ("/get-linkedin-profile",       lambda url: {"linkedin_url": url, "include_skills": "false", "include_certifications": "false"}),
+        "profile_posts":   ("/get-profile-posts",          lambda url: {"linkedin_url": url, "limit": "10"}),
+        "company_by_url":  ("/get-company-by-linkedinurl", lambda url: {"linkedin_url": url}),
+        "search_people":   ("/search-people",              lambda q:  {"keywords": q, "limit": "1"}),
+        "search_url_key":  "linkedin_url",
+    },
+}
+
+
+def _username_from_url(linkedin_url: str) -> str:
+    """Extract the trailing slug from a LinkedIn /in/<slug> or /company/<slug> URL.
+
+    `linkedin-data-api.p.rapidapi.com` takes the slug rather than the
+    full URL on its profile-posts and company endpoints."""
+    if not linkedin_url:
+        return ""
+    url = linkedin_url.rstrip("/")
+    for needle in ("/in/", "/company/", "/school/"):
+        if needle in url:
+            return url.split(needle, 1)[1].split("/")[0].split("?")[0]
+    # Fallback: last path segment
+    return url.split("/")[-1].split("?")[0]
+
+
+def _host_spec(host: str) -> Dict[str, Any]:
+    """Look up the endpoint spec for a host. Falls back to the first
+    registered host if an unknown one is supplied, so a typo doesn't
+    crash the whole crawl."""
+    return RAPIDAPI_HOST_SPECS.get(host) or next(iter(RAPIDAPI_HOST_SPECS.values()))
 
 
 async def _rapidapi_get(
@@ -217,49 +263,63 @@ async def _rapidapi_get(
 
 
 def _rapidapi_normalise_profile(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Map the RapidAPI response into the Proxycurl-shape our pipeline
-    already understands. The 'Fresh LinkedIn Profile Data' provider
-    nests its payload under {"data": {...}} on success — handle both
-    flat and nested shapes so other RapidAPI hosts also work."""
+    """Map any RapidAPI provider's response into the Proxycurl-shape our
+    pipeline already understands. Handles three known wrappers:
+       1. flat dict (linkedin-data-api root response)
+       2. {"data": {...}} (fresh-linkedin-profile-data)
+       3. {"response": {...}} (some lesser-used hosts)
+    Field names span snake_case + camelCase — try both."""
     if not raw:
         return {}
-    d = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+    d = raw
+    if isinstance(raw.get("data"), dict):
+        d = raw["data"]
+    elif isinstance(raw.get("response"), dict):
+        d = raw["response"]
 
-    experiences = d.get("experiences") or d.get("experience") or []
-    educations = d.get("educations") or d.get("education") or []
+    experiences = d.get("experiences") or d.get("experience") or d.get("position") or []
+    educations  = d.get("educations")  or d.get("education")  or d.get("educations_v2") or []
+
+    # geo can be a dict {full, country, city} (linkedin-data-api) or flat strings (fresh-linkedin-profile-data)
+    geo = d.get("geo") if isinstance(d.get("geo"), dict) else {}
+    country = d.get("country") or d.get("country_full_name") or d.get("location_country") or geo.get("country")
+    city    = d.get("city")    or d.get("location_city")    or geo.get("city")
 
     return {
         "first_name":   d.get("first_name") or d.get("firstName"),
         "last_name":    d.get("last_name")  or d.get("lastName"),
-        "full_name":    d.get("full_name")  or d.get("name"),
-        "headline":     d.get("headline")   or d.get("subtitle"),
-        "occupation":   d.get("occupation") or d.get("position") or d.get("headline"),
-        "summary":      d.get("summary")    or d.get("about"),
-        "country":      d.get("country")    or d.get("country_full_name") or d.get("location_country"),
-        "city":         d.get("city")       or d.get("location_city"),
-        "profile_pic_url": d.get("profile_pic_url") or d.get("profilePic") or d.get("profile_image_url"),
-        "linkedin_url":     d.get("linkedin_url") or d.get("profile_url") or d.get("input_url"),
-        "follower_count":   d.get("follower_count") or d.get("followers"),
-        "connection_count": d.get("connection_count") or d.get("connections"),
+        "full_name":    d.get("full_name")  or d.get("fullName") or d.get("name") or (
+            " ".join(p for p in [d.get("firstName"), d.get("lastName")] if p) or None
+        ),
+        "headline":     d.get("headline")   or d.get("subtitle") or d.get("title"),
+        "occupation":   d.get("occupation") or d.get("headline") or d.get("subtitle"),
+        "summary":      d.get("summary")    or d.get("about")    or d.get("description"),
+        "country":      country,
+        "city":         city,
+        "profile_pic_url": d.get("profile_pic_url") or d.get("profilePicture") or d.get("profilePic") or d.get("profile_image_url"),
+        "linkedin_url":     d.get("linkedin_url") or d.get("profile_url") or d.get("input_url") or d.get("profileURL"),
+        "follower_count":   d.get("follower_count") or d.get("followers") or d.get("followersCount"),
+        "connection_count": d.get("connection_count") or d.get("connections") or d.get("connectionsCount"),
         # Normalised list of past + current roles for Claude synthesis.
         "experiences": [
             {
-                "title":   e.get("title") or e.get("position"),
-                "company": e.get("company") or e.get("companyName") or (e.get("company_info") or {}).get("name"),
-                "location": e.get("location"),
-                "starts_at": e.get("starts_at") or e.get("start_date") or e.get("startDate"),
-                "ends_at":   e.get("ends_at")   or e.get("end_date")   or e.get("endDate"),
+                "title":   e.get("title") or e.get("position") or e.get("role"),
+                "company": e.get("company") or e.get("companyName") or (e.get("company_info") or {}).get("name") or e.get("companyId"),
+                "location": e.get("location") or (e.get("location_v2") or {}).get("full"),
+                "starts_at": e.get("starts_at") or e.get("start_date") or e.get("startDate") or (e.get("start") or {}).get("year"),
+                "ends_at":   e.get("ends_at")   or e.get("end_date")   or e.get("endDate")   or (e.get("end")   or {}).get("year"),
                 "description": e.get("description"),
+                "company_linkedin_profile_url": e.get("company_linkedin_profile_url") or e.get("companyUrl") or e.get("company_url"),
             }
             for e in experiences if isinstance(e, dict)
         ],
         "education": [
             {
                 "school": e.get("school") or e.get("schoolName"),
-                "degree_name": e.get("degree_name") or e.get("degree"),
+                "degree_name": e.get("degree_name") or e.get("degree") or e.get("degreeName"),
                 "field_of_study": e.get("field_of_study") or e.get("fieldOfStudy"),
-                "starts_at": e.get("starts_at") or e.get("start_date"),
-                "ends_at":   e.get("ends_at")   or e.get("end_date"),
+                "starts_at": e.get("starts_at") or e.get("start_date") or e.get("startDate"),
+                "ends_at":   e.get("ends_at")   or e.get("end_date")   or e.get("endDate"),
             }
             for e in educations if isinstance(e, dict)
         ],
@@ -290,10 +350,9 @@ async def rapidapi_get_person_profile(
     api_key: str, host: str, linkedin_url: str,
 ) -> Dict[str, Any]:
     """Fetch a normalised LinkedIn person profile via RapidAPI."""
-    raw = await _rapidapi_get(
-        api_key, host, "/get-linkedin-profile",
-        {"linkedin_url": linkedin_url, "include_skills": "false", "include_certifications": "false"},
-    )
+    spec = _host_spec(host)
+    path, params_fn = spec["profile_by_url"]
+    raw = await _rapidapi_get(api_key, host, path, params_fn(linkedin_url))
     normalised = _rapidapi_normalise_profile(raw)
     if normalised:
         normalised["_host"] = host
@@ -303,28 +362,27 @@ async def rapidapi_get_person_profile(
 async def rapidapi_get_company_profile(
     api_key: str, host: str, company_url: str,
 ) -> Dict[str, Any]:
-    raw = await _rapidapi_get(
-        api_key, host, "/get-company-by-linkedinurl",
-        {"linkedin_url": company_url},
-    )
+    spec = _host_spec(host)
+    path, params_fn = spec["company_by_url"]
+    raw = await _rapidapi_get(api_key, host, path, params_fn(company_url))
     return _rapidapi_normalise_company(raw)
 
 
 async def rapidapi_get_person_posts(
     api_key: str, host: str, linkedin_url: str, limit: int = 10,
 ) -> List[Dict[str, Any]]:
-    """Recent posts by a person. Returns a list of {text, url, posted_at}.
+    """Recent posts by a person. Returns [{text, url, posted_at, reactions}, …].
 
-    This is the headline value-add over Proxycurl: real recent activity
-    feeds the intel synthesis with timely signals (deal announcements,
-    job changes, etc.)."""
-    raw = await _rapidapi_get(
-        api_key, host, "/get-profile-posts",
-        {"linkedin_url": linkedin_url, "limit": str(limit)},
-    )
+    The headline value-add over Proxycurl: real recent activity feeds
+    the intel synthesis with timely signals (deal announcements, job
+    changes, etc.)."""
+    spec = _host_spec(host)
+    path, params_fn = spec["profile_posts"]
+    raw = await _rapidapi_get(api_key, host, path, params_fn(linkedin_url))
     if not raw:
         return []
-    items = raw.get("data") or raw.get("posts") or raw.get("results") or []
+    # Different hosts wrap posts under different keys.
+    items = raw.get("data") or raw.get("posts") or raw.get("results") or raw.get("response") or []
     if not isinstance(items, list):
         return []
     out: List[Dict[str, Any]] = []
@@ -332,10 +390,10 @@ async def rapidapi_get_person_posts(
         if not isinstance(p, dict):
             continue
         out.append({
-            "text":      p.get("text") or p.get("commentary") or p.get("content"),
-            "url":       p.get("url") or p.get("post_url") or p.get("share_url"),
-            "posted_at": p.get("posted_at") or p.get("date") or p.get("created_at"),
-            "reactions": p.get("reactions") or p.get("like_count") or p.get("total_reactions"),
+            "text": p.get("text") or p.get("commentary") or p.get("content") or p.get("description"),
+            "url": p.get("url") or p.get("post_url") or p.get("share_url") or p.get("postUrl"),
+            "posted_at": p.get("posted_at") or p.get("date") or p.get("created_at") or p.get("postedAt") or p.get("time"),
+            "reactions": p.get("reactions") or p.get("like_count") or p.get("total_reactions") or p.get("likeCount"),
         })
     return out
 
@@ -343,24 +401,29 @@ async def rapidapi_get_person_posts(
 async def rapidapi_resolve_linkedin_profile(
     api_key: str, host: str, *, first_name: str, last_name: Optional[str], company_name: Optional[str],
 ) -> Optional[str]:
-    """Best-effort handle resolver. The 'Fresh LinkedIn Profile Data'
-    host exposes /search-people; if the chosen host doesn't, this
-    returns None and the caller falls back to Serper-based discovery."""
+    """Best-effort handle resolver. Returns the first search hit's LinkedIn
+    URL or None if the host's search endpoint doesn't surface a match."""
     if not first_name:
         return None
     q = " ".join(p for p in [first_name, last_name, company_name] if p).strip()
+    spec = _host_spec(host)
+    path, params_fn = spec["search_people"]
     try:
-        data = await _rapidapi_get(
-            api_key, host, "/search-people",
-            {"keywords": q, "geo_codes": "", "company": company_name or "", "limit": "1"},
-        )
+        data = await _rapidapi_get(api_key, host, path, params_fn(q))
     except CrawlError:
         return None
-    items = data.get("data") or data.get("results") or []
+    items = data.get("data") or data.get("results") or data.get("response") or []
     if isinstance(items, list) and items:
         first = items[0]
         if isinstance(first, dict):
-            return first.get("linkedin_url") or first.get("profile_url") or first.get("url")
+            url_key = spec.get("search_url_key") or "linkedin_url"
+            return (
+                first.get(url_key)
+                or first.get("linkedin_url")
+                or first.get("profile_url")
+                or first.get("url")
+                or first.get("profileURL")
+            )
     return None
 
 

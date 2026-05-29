@@ -208,15 +208,16 @@ export const INTEGRATIONS = [
     name: 'RapidAPI · LinkedIn',
     logo: '/logos/rapidapi.svg',
     category: 'enrichment',
-    services: ['LinkedIn profile + posts via RapidAPI'],
+    services: ['LinkedIn profile + posts + company via RapidAPI'],
     oauth: false,
     api_key: true,
     requires: ['api_key', 'host'],
     setup_instructions:
-      'Subscribe to a LinkedIn scraper on rapidapi.com (recommended: "Fresh LinkedIn Profile Data"). ' +
-      'Copy the X-RapidAPI-Key from any code sample. Leave host empty to use the default ' +
+      'Subscribe to a LinkedIn scraper on rapidapi.com. Default host is ' +
+      'linkedin-data-api.p.rapidapi.com (Rocketrider). Copy the X-RapidAPI-Key from any ' +
+      'code sample, paste here, leave Host empty for the default or override with ' +
       'fresh-linkedin-profile-data.p.rapidapi.com.',
-    console_url: 'https://rapidapi.com/freshdata-freshdata-default/api/fresh-linkedin-profile-data',
+    console_url: 'https://rapidapi.com/rockapis-rockapis-default/api/linkedin-data-api',
     pull_label: null,
     supports_pull: false,
     what_this_unlocks: [
