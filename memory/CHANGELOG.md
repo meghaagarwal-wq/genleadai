@@ -1,5 +1,36 @@
 # Changelog
 
+## iter132 — Auto-learn voice on edited send (2026-02-29) ✅
+**Frontend (`ConversationThread.js`)**
+- When the founder manually edits an ARIA-generated draft (compared via `lastDraftTextRef.current`) and clicks **Send**, a follow-up toast appears with a **[Learn ✓]** action button.
+- Click Learn ✓ → posts the edited body as a new `voice_seeds` entry (label = `Auto-learned <date>`).
+- Toast auto-dismisses after 5s if ignored. No modal, no friction.
+- Edit-detection guards: needs `lastDraftTextRef.current` (an ARIA draft was made this session) **and** `text !== last_draft.trim()` **and** `text.length >= 20`.
+- Bug fix during ship: switched from `api.post` → `ptApi.post` (the correct axios instance in this file).
+
+**End-to-end smoke verified:**
+- Draft ARIA → edit textarea → Send → toast appears → click Learn ✓ → confirmation toast → seed visible on `/app/voice-training` with label "Auto-learned May 29".
+
+## iter134 — Scan progress toast bar (2026-02-29) ✅
+**Backend (`routes/intel.py`)**
+- `POST /api/intel/scan-hot` now returns a `batch_id` along with the queued list.
+- New endpoint: `GET /api/intel/scan-hot/status/{batch_id}` → `{total, completed, failed, in_progress, progress_pct, is_finished, started_at, finished_at}`.
+- In-memory tracker (`_SCAN_BATCHES`) updated by each background task in a try/finally so completed+failed always sum to total.
+- 1-hour GC keeps the dict bounded across long-running backend processes.
+
+**Frontend (`LeadFeed.js`)**
+- Clicking **Scan all hot leads** spawns a sticky `toast.loading` with a live `(N/total)` counter that polls every 4s.
+- On finish:
+  - All succeeded → green toast "Intel scan complete — N/total succeeded"
+  - Mixed → warning toast with succeeded/failed split
+  - All failed → red toast: "Intel scan failed — N/total errored. Check RapidAPI subscription."
+
+**Tests** — `/app/backend/tests/test_iter134_scan_progress.py` — **3/3 passing** (batch_id returned, status shape, 404 unknown batch).
+
+**Production diagnostic confirmed:** preview scan returned `28/28 errored` → the live toast surfaced "Check RapidAPI subscription" — exactly the message the founder needs to unblock production.
+
+
+
 ## iter131 — Voice Training (founder voice signature) (2026-02-29) ✅
 **Backend** — New `routes/voice_seeds.py`:
 - `GET /api/voice-seeds` · `POST /api/voice-seeds` · `PATCH /api/voice-seeds/{id}` · `DELETE /api/voice-seeds/{id}`

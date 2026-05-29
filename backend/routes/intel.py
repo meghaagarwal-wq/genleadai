@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,6 +48,27 @@ router = APIRouter(prefix="/api/intel", tags=["intel"])
 pt_leads_col = db["pt_leads"]
 leads_col = db["leads"]
 intel_profiles_col = db["intel_profiles"]
+
+
+# ─── iter134 — Scan all hot leads progress tracking ─────────────────────
+# In-memory batch state keyed by batch_id. Survives only the lifetime of
+# the backend process (which is fine — a fresh deploy abandons in-flight
+# batches anyway). GC'd opportunistically when older than 1 hour.
+_SCAN_BATCHES: Dict[str, Dict[str, Any]] = {}
+
+
+def _gc_scan_batches():
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    stale = []
+    for bid, b in _SCAN_BATCHES.items():
+        try:
+            ts = b.get("finished_at") or b.get("started_at")
+            if ts and datetime.fromisoformat(ts.replace("Z", "+00:00")) < cutoff:
+                stale.append(bid)
+        except Exception:
+            stale.append(bid)
+    for bid in stale:
+        _SCAN_BATCHES.pop(bid, None)
 
 
 # ─── Lead resolution helper ─────────────────────────────────────────────
@@ -232,10 +255,25 @@ async def scan_hot_leads(
     if not candidates:
         return {"queued": 0, "leads": [], "message": "No hot leads matched. Try lowering the score threshold."}
 
+    # iter134 — track progress so the UI can poll for a live "X / N done" toast.
+    batch_id = uuid.uuid4().hex
+    _SCAN_BATCHES[batch_id] = {
+        "tenant_id": tenant_id,
+        "total": len(candidates),
+        "completed": 0,
+        "failed": 0,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": None,
+        "leads": [{"lead_id": c["lead_id"], "name": c["name"], "status": "pending"} for c in candidates],
+    }
+    # Garbage-collect stale batches (>1h) so the in-memory dict can't grow.
+    _gc_scan_batches()
+
     # Fire each scan in the background. Failures (missing creds, budget
     # exceeded) are logged but never block the response — the Intel tab
     # surfaces per-lead errors when the founder opens that lead.
     async def _run_one(lead_id: str):
+        ok = True
         try:
             lead = _load_lead(tenant_id, lead_id)
             crawl = await crawl_prospect(
@@ -255,7 +293,21 @@ async def scan_hot_leads(
                 crawl=crawl,
             )
         except Exception as e:
+            ok = False
             logger.warning("[scan-hot] %s failed: %s", lead_id, str(e)[:160])
+        finally:
+            batch = _SCAN_BATCHES.get(batch_id)
+            if batch:
+                if ok:
+                    batch["completed"] += 1
+                else:
+                    batch["failed"] += 1
+                for row in batch["leads"]:
+                    if row["lead_id"] == lead_id:
+                        row["status"] = "done" if ok else "failed"
+                        break
+                if batch["completed"] + batch["failed"] >= batch["total"]:
+                    batch["finished_at"] = datetime.now(timezone.utc).isoformat()
 
     # Detached background tasks — survives the response.
     for c in candidates:
@@ -265,7 +317,33 @@ async def scan_hot_leads(
         "queued": len(candidates),
         "leads": candidates,
         "threshold": body.min_icp_score,
+        "batch_id": batch_id,
         "message": f"Queued intel scans for {len(candidates)} hot lead(s). Results appear in each lead's Intel tab as they complete.",
+    }
+
+
+# ─── GET /api/intel/scan-hot/status/{batch_id} ──────────────────────────
+# Polled by the Scan all hot leads toast so it can show "12/28 done" and
+# auto-dismiss when the batch finishes.
+@router.get("/scan-hot/status/{batch_id}")
+async def scan_hot_status(batch_id: str, current_user: dict = Depends(get_current_user)):
+    batch = _SCAN_BATCHES.get(batch_id)
+    if not batch or batch.get("tenant_id") != current_user.get("tenant_id"):
+        raise HTTPException(status_code=404, detail="Batch not found")
+    total = batch["total"]
+    completed = batch["completed"]
+    failed = batch["failed"]
+    done = completed + failed
+    return {
+        "batch_id": batch_id,
+        "total": total,
+        "completed": completed,
+        "failed": failed,
+        "in_progress": max(0, total - done),
+        "progress_pct": int((done / total) * 100) if total else 100,
+        "is_finished": done >= total,
+        "started_at": batch["started_at"],
+        "finished_at": batch["finished_at"],
     }
 
 

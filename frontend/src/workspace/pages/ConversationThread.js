@@ -83,20 +83,61 @@ const ConversationThread = ({ leadId }) => {
   }, [thread]);
 
   // iter128 — send the reply via the unified dispatch endpoint.
+  // iter132 — auto-learn voice: if the founder edited an ARIA draft before
+  // sending, offer a one-click toast to save the edited version as a new
+  // voice seed. We compare the final body against the last draft ARIA
+  // produced; if they differ AND a draft was produced this session, the
+  // edit is treated as a "this is how I would have written it" signal.
+  const learnFromEdit = async (text, channel) => {
+    try {
+      const labelStub = new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      await ptApi.post('/api/voice-seeds', {
+        channel,
+        text,
+        label: `Auto-learned ${labelStub}`,
+        active: true,
+      });
+      toast.success('ARIA learned from your edit — future drafts will sound more like you.');
+    } catch (e) {
+      // Most common rejection: tenant hit the 10-seed cap.
+      toast.error(e.response?.data?.detail || 'Could not save voice sample');
+    }
+  };
+
   const sendReply = async () => {
     const text = replyBody.trim();
     if (!text) { toast.error('Type a message first'); return; }
     setSending(true);
+    // Snapshot the edit-vs-draft delta *before* we clear state so the
+    // toast prompt below has clean values to work with.
+    const editedFromAriaDraft = (
+      lastDraftTextRef.current
+      && text !== lastDraftTextRef.current.trim()
+      && text.length >= 20
+    );
+    const channelAtSend = replyChannel;
     try {
       const r = await ptApi.post(`/api/conversations/lead/${leadId}/send`, {
-        channel: replyChannel,
+        channel: channelAtSend,
         body: text,
         send_as: sendAs,
       });
       if (r.data?.sent) {
-        toast.success(`Sent via ${r.data.provider || replyChannel}`);
+        toast.success(`Sent via ${r.data.provider || channelAtSend}`);
       } else if (r.data?.logged_only) {
-        toast.info(`Saved as draft — ${replyChannel} provider not connected yet`);
+        toast.info(`Saved as draft — ${channelAtSend} provider not connected yet`);
+      }
+      // iter132 — friction-free auto-learn prompt. Auto-dismisses after 5s.
+      if (editedFromAriaDraft) {
+        toast('Want ARIA to learn from this edit?', {
+          duration: 5000,
+          action: {
+            label: 'Learn ✓',
+            onClick: () => learnFromEdit(text, channelAtSend === 'whatsapp' || channelAtSend === 'email' || channelAtSend === 'linkedin' ? channelAtSend : 'any'),
+          },
+          // data-testid surfaced via the action button for E2E hooks.
+          className: 'aria-auto-learn-toast',
+        });
       }
       setReplyBody('');
       setAttempt(0);            // iter130 — reset variant counter after send

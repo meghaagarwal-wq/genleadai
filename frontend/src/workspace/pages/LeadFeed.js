@@ -56,6 +56,8 @@ const LeadFeed = ({ embedded = false }) => {
   // iter126 — One-click "Scan all hot leads" — uses the new global
   // /api/intel/scan-hot endpoint which covers both leads + pt_leads, fires
   // crawls in the background, and returns the queued count instantly.
+  // iter134 — also returns a batch_id we can poll for live progress so
+  // the founder gets a "12/28 done" toast instead of radio silence.
   const runBatchIntel = async () => {
     setBatchBusy(true);
     setBatchResult(null);
@@ -65,22 +67,51 @@ const LeadFeed = ({ embedded = false }) => {
         refresh: false,
         max_leads: 50,
       });
-      // Normalise to the existing batchResult shape so the toast/banner
-      // logic below still renders correctly.
+      const queued = r.data.queued || 0;
+      const batchId = r.data.batch_id;
       const normalised = {
-        processed: r.data.queued || 0,
-        succeeded: r.data.queued || 0,
+        processed: queued,
+        succeeded: queued,
         failed: 0,
         aborted: false,
         threshold: r.data.threshold,
         leads: r.data.leads || [],
+        batch_id: batchId,
       };
       setBatchResult(normalised);
-      if (normalised.processed === 0) {
+      if (queued === 0) {
         toast.info(r.data.message || 'No hot leads matched.');
-      } else {
-        toast.success(`Queued intel scans for ${normalised.processed} hot lead(s). Results appear in each lead's Intel tab as they finish.`);
+        return;
       }
+      // iter134 — sticky progress toast that polls every 4s until the
+      // batch finishes. Sonner returns an id we use to update + dismiss.
+      const tid = toast.loading(`Scanning ${queued} hot leads… (0/${queued})`, { duration: Infinity });
+      const poll = async () => {
+        try {
+          const s = await api.get(`/api/intel/scan-hot/status/${batchId}`);
+          const done = (s.data.completed || 0) + (s.data.failed || 0);
+          const total = s.data.total || queued;
+          if (s.data.is_finished) {
+            const succeeded = s.data.completed || 0;
+            const failed = s.data.failed || 0;
+            toast.dismiss(tid);
+            if (failed === 0) {
+              toast.success(`Intel scan complete — ${succeeded}/${total} succeeded`);
+            } else if (succeeded === 0) {
+              toast.error(`Intel scan failed — ${failed}/${total} errored. Check RapidAPI subscription.`);
+            } else {
+              toast.warning(`Intel scan complete — ${succeeded} succeeded, ${failed} failed.`);
+            }
+            return;
+          }
+          toast.loading(`Scanning hot leads… (${done}/${total})`, { id: tid, duration: Infinity });
+          setTimeout(poll, 4000);
+        } catch {
+          toast.dismiss(tid);
+        }
+      };
+      // First poll runs after 2s so the user sees the initial spinner.
+      setTimeout(poll, 2000);
     } catch (err) {
       const detail = err.response?.data?.detail || 'Batch intel failed';
       if (err.response?.status === 503) {
