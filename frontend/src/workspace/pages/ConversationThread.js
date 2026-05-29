@@ -99,6 +99,8 @@ const ConversationThread = ({ leadId }) => {
         toast.info(`Saved as draft — ${replyChannel} provider not connected yet`);
       }
       setReplyBody('');
+      setAttempt(0);            // iter130 — reset variant counter after send
+      setLastDraft('');
       // Refresh the thread so the new message appears at the bottom.
       fetchThread();
     } catch (err) {
@@ -109,16 +111,30 @@ const ConversationThread = ({ leadId }) => {
   };
 
   // iter129 — "Draft with ARIA" button.
-  // Calls /api/conversations/lead/:id/draft → channel-adaptive composer
-  // (intel_service.compose_message) and drops the result into the
-  // textarea. The founder can then edit before sending.
+  // iter130 — Draft variants: track which attempt we're on. On the first
+  // press it's a fresh draft; on subsequent presses ARIA varies the angle
+  // (contrarian hook, then radically shorter direct ask). The counter
+  // resets when the textarea is manually edited or after a successful send.
+  // We mirror the attempt counter in a ref so the keyboard-shortcut handler
+  // sees the latest value even when React batches re-renders.
   const [drafting, setDrafting] = useState(false);
+  const [draftAttempt, setDraftAttempt] = useState(0);
+  const draftAttemptRef = useRef(0);
+  const [lastDraftText, setLastDraftText] = useState('');
+  const lastDraftTextRef = useRef('');
+
+  const setAttempt = (n) => { draftAttemptRef.current = n; setDraftAttempt(n); };
+  const setLastDraft = (s) => { lastDraftTextRef.current = s; setLastDraftText(s); };
+
   const draftWithAria = async () => {
     setDrafting(true);
     try {
+      const currentAttempt = draftAttemptRef.current;
+      const nextAttempt = Math.min(3, currentAttempt + 1);
       const r = await ptApi.post(`/api/conversations/lead/${leadId}/draft`, {
         channel: replyChannel,
-        user_steer: replyBody.trim() || undefined,  // founder hint = current textarea
+        user_steer: (replyBody.trim() && replyBody.trim() !== lastDraftTextRef.current) ? replyBody.trim() : undefined,
+        attempt: nextAttempt,
       });
       const draft = r.data?.draft || '';
       if (!draft) {
@@ -126,13 +142,17 @@ const ConversationThread = ({ leadId }) => {
         return;
       }
       setReplyBody(draft);
+      setLastDraft(draft);
+      setAttempt(nextAttempt);
       if (r.data?.has_intel) {
-        toast.success('Draft ready — grounded in this lead\'s intel profile');
+        toast.success(nextAttempt === 1
+          ? 'Draft ready — grounded in this lead\'s intel profile'
+          : `Variant ${nextAttempt} ready — different angle, same intel`);
       } else {
-        toast.info('Draft ready — no intel profile yet, so it\'s a generic opener. Run Intel scan for sharper drafts.');
+        toast.info(nextAttempt === 1
+          ? 'Draft ready — no intel profile yet, so it\'s a generic opener. Run Intel scan for sharper drafts.'
+          : `Variant ${nextAttempt} ready — try a scan for sharper drafts`);
       }
-      // Focus the textarea so the founder can edit immediately.
-      setTimeout(() => replyRef.current?.focus(), 50);
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Draft failed');
     } finally {
@@ -409,7 +429,13 @@ const ConversationThread = ({ leadId }) => {
           <textarea
             ref={replyRef}
             value={replyBody}
-            onChange={(e) => setReplyBody(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setReplyBody(v);
+              // iter130 — manual edit invalidates the variant chain so the
+              // next press starts fresh at attempt #1.
+              if (v !== lastDraftTextRef.current) setAttempt(0);
+            }}
             placeholder={`Type a message — ⌘/Ctrl + Enter to send (or press r to focus, e to toggle Send-as, d to draft with ARIA).`}
             rows={2}
             data-testid="thread-reply-textarea"
@@ -418,7 +444,7 @@ const ConversationThread = ({ leadId }) => {
           <div className="flex flex-col gap-1.5">
             <button
               onClick={draftWithAria}
-              disabled={drafting}
+              disabled={drafting || draftAttempt >= 3}
               data-testid="thread-reply-draft-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold border disabled:opacity-50"
               style={{
@@ -426,9 +452,20 @@ const ConversationThread = ({ leadId }) => {
                 color: '#7C35DC',
                 background: '#FAF7FF',
               }}
-              title="Press d to draft with ARIA"
+              title={
+                draftAttempt === 0 ? 'Press d to draft with ARIA'
+                : draftAttempt >= 3 ? 'Max 3 variants — edit or send to start over'
+                : 'Press d for another variant'
+              }
             >
-              <Sparkle size={11} weight="fill" /> {drafting ? 'Drafting…' : 'Draft with ARIA'}
+              <Sparkle size={11} weight="fill" />{' '}
+              {drafting
+                ? 'Drafting…'
+                : draftAttempt === 0
+                  ? 'Draft with ARIA'
+                  : draftAttempt >= 3
+                    ? `Variant 3/3`
+                    : `Try another (${draftAttempt}/3)`}
             </button>
             <button
               onClick={sendReply}

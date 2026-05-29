@@ -1,5 +1,32 @@
 # Changelog
 
+## iter130 — Draft variants ("Try another") on the Conversations reply box (2026-02-29) ✅
+**Backend**
+- `DraftRequest.attempt: int = Field(default=1, ge=1, le=3)` accepted by `POST /api/conversations/lead/{lead_id}/draft`.
+- Attempt-specific angle nudges layered on top of any founder `user_steer`:
+  - **#1** — default angle
+  - **#2** — contrarian, curiosity-driven hook + different CTA
+  - **#3** — radically short single-sentence direct ask
+- Refusal-guard fallback also varies per attempt so brand-new prospects (no intel profile) still get three visibly different starter drafts.
+- Refusal-marker list expanded ("don't have enough", "lack the intelligence", "skip this prospect", etc.) to catch every Claude meta-response shape we saw in practice.
+- Response now echoes `attempt` and `max_attempts`.
+
+**Frontend (`ConversationThread.js`)**
+- Draft button label flips:
+  - Initial: **"Draft with ARIA"**
+  - After 1st draft: **"Try another (1/3)"**
+  - After 2nd: **"Try another (2/3)"**
+  - After 3rd: **"Variant 3/3"** (button disabled)
+- Variant counter mirrored in a ref (`draftAttemptRef`, `lastDraftTextRef`) so the value isn't lost to React batching between rapid presses.
+- Manual textarea edit resets the chain to attempt #1.
+- Successful send fully resets (counter + last-draft cache).
+- Removed the auto-focus-after-draft (was causing `d` keypresses to leak into the textarea).
+- Per-attempt toast messages: "Variant 2 ready — different angle, same intel" etc.
+
+**Tests** — `/app/backend/tests/test_iter130_draft_variants.py` — **4/4 passing** (attempt field echo, 422 on out-of-range, 3/3 distinct drafts when no intel, default attempt=1). All iter129 tests still pass.
+
+
+
 ## iter129 — Draft with ARIA button on the Conversations reply box (2026-02-29) ✅
 **Backend**
 - `POST /api/conversations/lead/{lead_id}/draft` (`routes/conversations.py`) — loads the lead's cached intel profile (if any) and calls `services.intel_service.compose_message` for a channel-adaptive single-shot draft.

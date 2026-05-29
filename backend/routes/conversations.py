@@ -263,6 +263,17 @@ intel_profiles_col = db["intel_profiles"]
 class DraftRequest(BaseModel):
     channel: str = Field(..., description="whatsapp | email | linkedin")
     user_steer: Optional[str] = Field(default=None, max_length=400, description="Optional founder note that nudges the draft.")
+    attempt: int = Field(default=1, ge=1, le=3, description="iter130 — 1: default angle · 2: contrarian hook · 3: shortest direct ask")
+
+
+# iter130 — Attempt-specific angle nudges. We add these on top of any
+# `user_steer` the founder typed so successive presses produce visibly
+# different drafts rather than minor reshuffles.
+_ATTEMPT_HINTS = {
+    1: "",
+    2: "Take a noticeably DIFFERENT angle this time — different hook + different CTA. Aim for a more curiosity-driven, slightly contrarian opener.",
+    3: "Be radically shorter and more direct than before. Single-sentence body where possible. Drop the soft preamble entirely. End with a yes/no ask.",
+}
 
 
 @router.post("/lead/{lead_id}/draft")
@@ -305,13 +316,18 @@ async def draft_reply(
 
     profile = intel_profiles_col.find_one({"tenant_id": tenant_id, "lead_id": lead_id}, {"_id": 0}) or {}
 
+    # Compose `effective_steer` = founder steer + attempt-specific angle hint.
+    attempt_hint = _ATTEMPT_HINTS.get(body.attempt, "")
+    effective_steer_parts = [p for p in (body.user_steer, attempt_hint) if p]
+    effective_steer = " · ".join(effective_steer_parts) or None
+
     composed = await compose_message(
         tenant_id=tenant_id,
         lead_id=lead_id,
         channel=channel,
         lead_meta=lead_meta,
         profile=profile,
-        user_steer=body.user_steer,
+        user_steer=effective_steer,
     )
 
     # Normalise for the reply box: a single text blob (UI doesn't show a
@@ -328,28 +344,70 @@ async def draft_reply(
     # often returns a meta-response ("I can't draft this") rather than a
     # message. Detect that and fall back to a generic opener so the
     # founder gets a starter draft they can edit, instead of a refusal.
-    refusal_markers = ("i cannot", "i can't", "i won't", "i will not", "should not be contacted", "no real intelligence", "without any relevant signals")
+    # iter130 — vary the fallback per attempt so "Try another" produces a
+    # visibly different starter even when there's no intel.
+    refusal_markers = (
+        "i cannot", "i can't", "i won't", "i will not",
+        "should not be contacted", "no real intelligence",
+        "without any relevant signals", "don't have enough",
+        "don't have any", "lack the intelligence", "lack any intelligence",
+        "skip this prospect", "no signals available", "no intelligence available",
+        "recommendation:", "i'd be forced",
+    )
     low = (text or "").lower()
     if not profile and any(m in low for m in refusal_markers):
         first_name = lead_meta.get("first_name") or "there"
         company = lead_meta.get("company") or "your team"
         if channel == "email":
-            text = (
-                f"Hi {first_name},\n\nI came across {company} and wanted to reach out. "
-                f"We help founders like you shorten the gap between captured leads and booked calls — "
-                f"would a 15-minute chat this week be useful?\n\nBest,\nAria"
-            )
-            subject = subject or f"Quick idea for {company}"
+            if body.attempt == 2:
+                text = (
+                    f"Hi {first_name},\n\nMost founders I talk to are losing 30%+ of inbound leads to slow follow-up — "
+                    f"not because their reps are bad, but because no one's watching the gap between capture and call. "
+                    f"Curious if that's a problem at {company} too?\n\nHappy to share what we've seen work.\n\nAria"
+                )
+                subject = subject or f"The 30% leak most founders ignore"
+            elif body.attempt == 3:
+                text = (
+                    f"Hi {first_name} — one question: how many leads did {company} capture last month vs. how many you actually called? "
+                    f"Worth 15 mins if there's a gap.\n\nAria"
+                )
+                subject = subject or f"One question for {company}"
+            else:
+                text = (
+                    f"Hi {first_name},\n\nI came across {company} and wanted to reach out. "
+                    f"We help founders like you shorten the gap between captured leads and booked calls — "
+                    f"would a 15-minute chat this week be useful?\n\nBest,\nAria"
+                )
+                subject = subject or f"Quick idea for {company}"
         elif channel == "whatsapp":
-            text = (
-                f"Hi {first_name} — quick idea worth 15 mins for {company}. "
-                f"Open to a chat this week?"
-            )
+            if body.attempt == 2:
+                text = (
+                    f"Hey {first_name} — random thought: how many leads did {company} capture last month vs. how many you actually called back? "
+                    f"That gap is where most deals leak. Worth a 15-min chat?"
+                )
+            elif body.attempt == 3:
+                text = f"{first_name} — 15 mins this week on closing {company}'s lead-to-call gap?"
+            else:
+                text = (
+                    f"Hi {first_name} — quick idea worth 15 mins for {company}. "
+                    f"Open to a chat this week?"
+                )
         else:  # linkedin
-            text = (
-                f"Hi {first_name}, would love to connect. I work with founders on "
-                f"closing the gap between captured leads and booked calls — happy to share what's worked."
-            )
+            if body.attempt == 2:
+                text = (
+                    f"{first_name} — most founders I work with are quietly losing 30% of inbound leads to slow follow-up. "
+                    f"If that's a thing at {company} too, would love to compare notes."
+                )
+            elif body.attempt == 3:
+                text = (
+                    f"{first_name} — quick one: how big is the gap between leads captured and leads actually called at {company}? "
+                    f"Worth a chat if it's wider than you'd like."
+                )
+            else:
+                text = (
+                    f"Hi {first_name}, would love to connect. I work with founders on "
+                    f"closing the gap between captured leads and booked calls — happy to share what's worked."
+                )
 
     return {
         "channel": channel,
@@ -357,5 +415,7 @@ async def draft_reply(
         "subject": subject,
         "ai_powered": bool(composed.get("ai_powered")),
         "has_intel": bool(profile),
+        "attempt": body.attempt,
+        "max_attempts": 3,
         "error": composed.get("error"),
     }
