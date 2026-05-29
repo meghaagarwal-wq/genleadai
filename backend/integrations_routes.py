@@ -211,17 +211,49 @@ def attach_integrations_routes(app, get_current_user, db):
         return doc
 
     # ─── Status / settings ───────────────────────────────
+    from routes.tenants import get_active_tenant as _get_active_tenant
+
     @router.get("/status")
-    async def get_status(current_user: dict = Depends(get_current_user)):
+    async def get_status(
+        current_user: dict = Depends(get_current_user),
+        tenant: dict = Depends(_get_active_tenant),
+    ):
         s = _get_settings()
         sh_enc = (s.get("integrations") or {}).get("saleshandy_api_key")
         ll_enc = (s.get("integrations") or {}).get("lemlist_api_key")
         sh = _dec(sh_enc) if sh_enc else ""
         ll = _dec(ll_enc) if ll_enc else ""
-        return {
+        out: Dict[str, Any] = {
             "saleshandy": {"connected": bool(sh), "key_preview": _mask(sh)},
-            "lemlist": {"connected": bool(ll), "key_preview": _mask(ll)},
+            "lemlist":    {"connected": bool(ll), "key_preview": _mask(ll)},
         }
+        # iter125 — also surface every provider in the UNIVERSAL store
+        # (`integration_configs`) so /api/integrations/status is the single
+        # source of truth for the Instinct Feed pill, the topbar pull-bar,
+        # the Train ARIA banner, and any future caller.
+        try:
+            from deps import db as _db
+            rows = list(_db["integration_configs"].find(
+                {"tenant_id": tenant["id"]},
+                {"_id": 0, "integration_type": 1, "status": 1, "config": 1, "connected_at": 1, "last_tested_at": 1, "last_test_ok": 1},
+            ))
+            for row in rows:
+                kind = row.get("integration_type")
+                if not kind or kind in out:
+                    continue  # don't clobber legacy saleshandy/lemlist rows above
+                cfg = row.get("config") or {}
+                has_key = bool(cfg.get("api_key") or cfg.get("access_token"))
+                out[kind] = {
+                    "connected": (row.get("status") == "connected") and has_key,
+                    "key_preview": "•••••••" if has_key else None,
+                    "connected_at": row.get("connected_at"),
+                    "last_tested_at": row.get("last_tested_at"),
+                    "last_test_ok": row.get("last_test_ok"),
+                }
+        except Exception:  # noqa: BLE001
+            # Status is best-effort — never 500 the UI on this endpoint.
+            pass
+        return out
 
     @router.post("/keys")
     async def save_keys(payload: IntegrationKeysPayload, current_user: dict = Depends(get_current_user)):

@@ -29,79 +29,44 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const IntegrationsCard = ({ status, onSave }) => {
-  const [proxy, setProxy] = useState('');
-  const [news, setNews] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    if (!proxy && !news) {
-      toast.info('Paste a key first');
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {};
-      if (proxy) payload.proxycurl_api_key = proxy;
-      if (news)  payload.newsapi_key = news;
-      const { data } = await api.put('/api/pt/insights/integrations', payload);
-      toast.success('Saved');
-      setProxy('');
-      setNews('');
-      onSave?.(data);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Save failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
+// ── ConnectedSourcesPill ────────────────────────────────────────────────
+// iter125 — Replaces the legacy in-page Proxycurl / NewsAPI key inputs.
+// Reads enrichment provider status from the UNIVERSAL store
+// (`/api/integrations/status`), the same source Train ARIA / Intel Tab use,
+// so there is only ever one place to manage keys: /app/integrations.
+const ConnectedSourcesPill = ({ status }) => {
+  // We surface the three enrichment providers the crawler actually uses
+  // today: rapidapi (LinkedIn — replaces Proxycurl), serper (web + news),
+  // proxycurl (legacy fallback, kept so existing tenants don't break).
+  const providers = [
+    { id: 'rapidapi',  label: 'RapidAPI · LinkedIn' },
+    { id: 'serper',    label: 'Serper · Web/News'  },
+    { id: 'proxycurl', label: 'Proxycurl · legacy' },
+  ];
   return (
-    <div className="border border-slate-200 rounded-xl p-5 bg-white" data-testid="pt-insights-integrations-card">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Enrichment sources</div>
-        <div className="flex items-center gap-3 text-xs">
-          <span className={`flex items-center gap-1 ${status?.proxycurl?.connected ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${status?.proxycurl?.connected ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-            Proxycurl
-          </span>
-          <span className={`flex items-center gap-1 ${status?.newsapi?.connected ? 'text-emerald-600' : 'text-slate-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${status?.newsapi?.connected ? 'bg-emerald-500' : 'bg-slate-300'}`}/>
-            NewsAPI
-          </span>
-        </div>
+    <div className="border border-slate-200 rounded-xl p-4 bg-white flex flex-wrap items-center gap-4" data-testid="instinct-connected-sources">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Enrichment sources</div>
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        {providers.map((p) => {
+          const connected = !!status?.[p.id]?.connected;
+          return (
+            <span
+              key={p.id}
+              className={`flex items-center gap-1.5 ${connected ? 'text-emerald-600' : 'text-slate-400'}`}
+              data-testid={`instinct-source-${p.id}`}
+              title={connected ? 'Connected' : 'Not connected — open /app/integrations to add a key'}
+            >
+              <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              {p.label}
+            </span>
+          );
+        })}
       </div>
-      <p className="text-sm text-slate-600 mb-3">
-        Keys are stored encrypted (Fernet AES-128). Without them, Aria
-        classifies signals from prospect data only — most scans will
-        return no insights.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <input
-          data-testid="pt-insights-proxycurl-input"
-          type="password"
-          value={proxy}
-          onChange={(e) => setProxy(e.target.value)}
-          placeholder={status?.proxycurl?.connected ? '••• connected (paste to replace)' : 'Proxycurl API key'}
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-        />
-        <input
-          data-testid="pt-insights-newsapi-input"
-          type="password"
-          value={news}
-          onChange={(e) => setNews(e.target.value)}
-          placeholder={status?.newsapi?.connected ? '••• connected (paste to replace)' : 'NewsAPI key'}
-          className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-        />
-      </div>
-      <div className="flex justify-end mt-3">
-        <button
-          data-testid="pt-insights-save-keys-btn"
-          disabled={saving}
-          onClick={save}
-          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
-        >{saving ? 'Saving…' : 'Save keys'}</button>
-      </div>
+      <a
+        href="/app/integrations"
+        className="ml-auto text-xs font-semibold text-violet-600 hover:text-violet-700"
+        data-testid="instinct-manage-integrations-link"
+      >Manage keys →</a>
     </div>
   );
 };
@@ -300,7 +265,7 @@ const PtIntelligenceFeed = () => {
     try {
       const [feed, integ] = await Promise.all([
         api.get('/api/pt/insights/feed', { params: filter === 'all' ? {} : { status: filter } }),
-        api.get('/api/pt/insights/integrations'),
+        api.get('/api/integrations/status'),
       ]);
       setCards(feed.data.cards || []);
       setScanMeta({
@@ -308,7 +273,7 @@ const PtIntelligenceFeed = () => {
         last_scan_count: feed.data.last_scan_count || 0,
         status_counts: feed.data.status_counts || {},
       });
-      setIntegrationsStatus(integ.data);
+      setIntegrationsStatus(integ.data || {});
     } catch (e) {
       toast.error('Could not load Intelligence Feed');
     } finally {
@@ -391,7 +356,7 @@ const PtIntelligenceFeed = () => {
       </div>
 
       <div className="mb-6">
-        <IntegrationsCard status={integrationsStatus} onSave={(s) => setIntegrationsStatus(s)} />
+        <ConnectedSourcesPill status={integrationsStatus} />
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap" data-testid="instinct-filter-bar">
