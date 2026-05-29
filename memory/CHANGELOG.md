@@ -1,5 +1,28 @@
 # Changelog
 
+## iter128 — Conversation reply box + extended keyboard shortcuts (2026-02-29) ✅
+**Backend**
+- `POST /api/conversations/lead/{lead_id}/send` (`routes/conversations.py`) — routes through the existing `dispatch_outreach` chokepoint so outbound_log + reply tracking stay in sync.
+- Accepts `{channel: whatsapp|email|linkedin, body, subject?, send_as: aria|me}`.
+- Returns `{sent, logged_only, provider, provider_id, channel, send_as}`.
+- send_as=me ⇒ outbound_log.actor_user_id="owner"; send_as=aria ⇒ attributed to ARIA.
+
+**Frontend (`ConversationThread.js`)**
+- Reply box added below the thread: channel pill selector (WhatsApp / Email / LinkedIn), Send-as ARIA / Send-as me toggle, multi-line textarea, Send button with sending state.
+- Channel defaults to the last outbound channel used in the thread (auto-detected).
+- Successful send → toast + thread auto-refresh.
+- Logged-only mode (no provider creds) → info toast "Saved as draft — {channel} provider not connected yet".
+- New keyboard shortcuts:
+  - `r` → focus reply textarea
+  - `e` → toggle Send-as ARIA ⇄ me (with mini-toast)
+  - `⌘/Ctrl + Enter` (inside textarea) → send
+  - `Esc` → blur textarea / clear filter / drop active row (cascaded)
+- Shortcut hint footer updated to show all 6 shortcuts.
+
+**Tests** — `/app/backend/tests/test_iter128_reply_box.py` (4/4 passing).
+
+
+
 ## iter127 — Scan all hot leads batch action (2026-02-29) ✅
 - New `POST /api/intel/scan-hot` endpoint (`routes/intel.py`):
   - Covers both legacy `leads` and Pietential `pt_leads` collections.

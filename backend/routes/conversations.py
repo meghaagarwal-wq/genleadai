@@ -4,11 +4,13 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel, Field
 
 from deps import db
 from routes.tenants import get_active_tenant
 from security.helpers import safe_query_param  # iter80 — S9.5
+from services.outreach_dispatch import dispatch_outreach
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -194,3 +196,55 @@ async def thread_by_lead(
         },
     }
 
+
+
+# ─── POST /api/conversations/lead/{lead_id}/send ────────────────────────
+# Reply box used by Lead 360's Conversations tab. Honours the Send-as-ARIA
+# vs Send-as-me toggle so the conversation thread can attribute the
+# message correctly. Routes through the same `dispatch_outreach`
+# chokepoint that powers Intel-tab outreach + the touchpoint engine, so
+# outbound_log + reply tracking stay in sync.
+class SendReplyRequest(BaseModel):
+    channel: str = Field(..., description="whatsapp | email | linkedin")
+    body: str = Field(..., min_length=1, max_length=8000)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    send_as: str = Field(default="aria", description="'aria' or 'me' — controls outbound_log attribution.")
+
+
+@router.post("/lead/{lead_id}/send")
+async def send_reply(
+    lead_id: str,
+    body: SendReplyRequest,
+    tenant: dict = Depends(get_active_tenant),
+):
+    """Send a manual reply from the Lead 360 Conversations tab."""
+    if body.channel not in {"whatsapp", "email", "linkedin"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported channel: {body.channel}")
+
+    composed = {
+        "channel": body.channel,
+        "message": {"subject": body.subject, "body": body.body},
+        "ai_powered": False,  # Founder typed it manually.
+    }
+
+    # actor_user_id = None  → attributed to ARIA on the timeline.
+    # actor_user_id = "owner" → attributed to the founder.
+    result = await dispatch_outreach(
+        tenant_id=tenant["id"],
+        lead_id=lead_id,
+        channel=body.channel,
+        composed=composed,
+        actor_user_id=None if body.send_as == "aria" else "owner",
+    )
+
+    if not result.get("sent") and not result.get("logged_only"):
+        raise HTTPException(status_code=502, detail=result.get("error") or "Send failed")
+
+    return {
+        "sent": bool(result.get("sent")),
+        "logged_only": bool(result.get("logged_only")),
+        "provider": result.get("provider"),
+        "provider_id": result.get("provider_id"),
+        "channel": body.channel,
+        "send_as": body.send_as,
+    }

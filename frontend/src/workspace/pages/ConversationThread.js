@@ -4,18 +4,27 @@
  * Reads GET /api/conversations/lead/{leadId} which combines outbound_log,
  * inbound_messages, and activities into one chronological timeline.
  *
+ * Reply box (iter128)
+ *   POST /api/conversations/lead/{leadId}/send routes through the
+ *   shared dispatch_outreach chokepoint. The Send-as toggle controls
+ *   whether the outbound is attributed to ARIA or the founder.
+ *
  * Keyboard shortcuts (active when this tab is open):
  *   j / ArrowDown   → next message
  *   k / ArrowUp     → previous message
  *   Home            → first message
  *   End / G         → last message
  *   /               → focus filter input
- *   Esc             → clear filter / drop focus
+ *   r               → focus reply box                    (iter128)
+ *   e               → toggle Send-as ARIA ⇄ me           (iter128)
+ *   ⌘/Ctrl + Enter  → send reply                          (iter128)
+ *   Esc             → clear filter / blur inputs / drop active row
  */
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ChatCircleText, EnvelopeSimple, LinkedinLogo, ArrowsClockwise,
   Robot, User, Gear, MagnifyingGlass, CheckCircle, Warning, ArrowBendUpLeft, ArrowBendUpRight,
+  PaperPlaneTilt,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { ptApi } from '../shared';
@@ -43,6 +52,13 @@ const ConversationThread = ({ leadId }) => {
   const filterRef = useRef(null);
   const listRef = useRef(null);
 
+  // iter128 — Reply box state
+  const [replyChannel, setReplyChannel] = useState('email'); // 'whatsapp' | 'email' | 'linkedin'
+  const [replyBody, setReplyBody] = useState('');
+  const [sendAs, setSendAs] = useState('aria');             // 'aria' | 'me'
+  const [sending, setSending] = useState(false);
+  const replyRef = useRef(null);
+
   const fetchThread = useCallback(async () => {
     try {
       const r = await ptApi.get(`/api/conversations/lead/${leadId}`);
@@ -56,6 +72,41 @@ const ConversationThread = ({ leadId }) => {
   }, [leadId]);
 
   useEffect(() => { fetchThread(); }, [fetchThread]);
+
+  // iter128 — default reply channel to the last outbound channel used.
+  useEffect(() => {
+    if (!thread.length) return;
+    const lastOut = [...thread].reverse().find((t) => t.direction === 'outbound' && t.channel);
+    if (lastOut?.channel && ['whatsapp', 'email', 'linkedin'].includes(lastOut.channel)) {
+      setReplyChannel(lastOut.channel);
+    }
+  }, [thread]);
+
+  // iter128 — send the reply via the unified dispatch endpoint.
+  const sendReply = async () => {
+    const text = replyBody.trim();
+    if (!text) { toast.error('Type a message first'); return; }
+    setSending(true);
+    try {
+      const r = await ptApi.post(`/api/conversations/lead/${leadId}/send`, {
+        channel: replyChannel,
+        body: text,
+        send_as: sendAs,
+      });
+      if (r.data?.sent) {
+        toast.success(`Sent via ${r.data.provider || replyChannel}`);
+      } else if (r.data?.logged_only) {
+        toast.info(`Saved as draft — ${replyChannel} provider not connected yet`);
+      }
+      setReplyBody('');
+      // Refresh the thread so the new message appears at the bottom.
+      fetchThread();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Send failed');
+    } finally {
+      setSending(false);
+    }
+  };
 
   // Filter
   const filtered = useMemo(() => {
@@ -72,18 +123,48 @@ const ConversationThread = ({ leadId }) => {
   // ─── Keyboard shortcuts ──
   useEffect(() => {
     const handler = (e) => {
-      const isInputFocused = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+      const tag = document.activeElement?.tagName;
+      const isInputFocused = ['INPUT', 'TEXTAREA'].includes(tag);
+
+      // ⌘/Ctrl+Enter inside the reply textarea → send.
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && document.activeElement === replyRef.current) {
+        e.preventDefault();
+        sendReply();
+        return;
+      }
+      // "/" anywhere outside an input → focus filter.
       if (e.key === '/' && !isInputFocused) {
         e.preventDefault();
         filterRef.current?.focus();
         return;
       }
+      // Esc handles the deepest focus state first.
       if (e.key === 'Escape') {
-        if (filterFocused) { setFilter(''); filterRef.current?.blur(); }
-        else setActiveIdx(-1);
+        if (document.activeElement === replyRef.current) {
+          replyRef.current.blur();
+        } else if (filterFocused) {
+          setFilter(''); filterRef.current?.blur();
+        } else {
+          setActiveIdx(-1);
+        }
         return;
       }
+      // Below shortcuts only fire when no input owns focus.
       if (isInputFocused) return;
+
+      // r → focus reply box.
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        replyRef.current?.focus();
+        return;
+      }
+      // e → toggle Send-as ARIA ⇄ me.
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        setSendAs((v) => (v === 'aria' ? 'me' : 'aria'));
+        toast(`Send as ${sendAs === 'aria' ? 'me' : 'ARIA'}`, { duration: 1200 });
+        return;
+      }
       if (!filtered.length) return;
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
@@ -99,7 +180,7 @@ const ConversationThread = ({ leadId }) => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [filtered.length, filterFocused]);
+  }, [filtered.length, filterFocused, sendAs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll active into view
   useEffect(() => {
@@ -237,13 +318,90 @@ const ConversationThread = ({ leadId }) => {
         </div>
       )}
 
+      {/* iter128 — Reply box */}
+      <div className="px-4 py-3 border-t border-[#E2E8F0] bg-white" data-testid="thread-reply-box">
+        <div className="flex items-center gap-2 mb-2">
+          {/* Channel selector */}
+          <div className="inline-flex rounded-md border border-[#E2E8F0] overflow-hidden" data-testid="thread-reply-channel-group">
+            {[
+              { id: 'whatsapp', label: 'WhatsApp', Icon: ChatCircleText },
+              { id: 'email',    label: 'Email',    Icon: EnvelopeSimple },
+              { id: 'linkedin', label: 'LinkedIn', Icon: LinkedinLogo },
+            ].map((c) => {
+              const Icon = c.Icon;
+              const active = replyChannel === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setReplyChannel(c.id)}
+                  data-testid={`thread-reply-channel-${c.id}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold transition-colors"
+                  style={{
+                    background: active ? '#7C35DC' : '#FFFFFF',
+                    color: active ? '#FFFFFF' : '#475569',
+                  }}
+                >
+                  <Icon size={11} weight="duotone" /> {c.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Send-as toggle */}
+          <button
+            onClick={() => setSendAs((v) => (v === 'aria' ? 'me' : 'aria'))}
+            data-testid="thread-reply-send-as-toggle"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border"
+            style={{
+              borderColor: sendAs === 'aria' ? '#7C35DC' : '#94A3B8',
+              background: sendAs === 'aria' ? '#FAF7FF' : '#F8FAFC',
+              color: sendAs === 'aria' ? '#7C35DC' : '#475569',
+            }}
+            title="Press e to toggle"
+          >
+            {sendAs === 'aria' ? (
+              <><Robot size={11} weight="duotone" /> Send as ARIA</>
+            ) : (
+              <><User size={11} weight="duotone" /> Send as me</>
+            )}
+          </button>
+        </div>
+
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={replyRef}
+            value={replyBody}
+            onChange={(e) => setReplyBody(e.target.value)}
+            placeholder={`Type a message — ⌘/Ctrl + Enter to send (or press r to focus, e to toggle Send-as).`}
+            rows={2}
+            data-testid="thread-reply-textarea"
+            className="flex-1 px-3 py-2 text-sm border border-[#E2E8F0] rounded-md outline-none focus:border-[#7C35DC] resize-none"
+          />
+          <button
+            onClick={sendReply}
+            disabled={sending || !replyBody.trim()}
+            data-testid="thread-reply-send-btn"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold text-white disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
+          >
+            <PaperPlaneTilt size={12} weight="fill" /> {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+
       {/* Keyboard shortcuts hint */}
-      <div className="px-4 py-2 border-t border-[#E2E8F0] bg-[#FAFAFA] text-[10px] text-[#94A3B8] flex items-center gap-3">
+      <div className="px-4 py-2 border-t border-[#E2E8F0] bg-[#FAFAFA] text-[10px] text-[#94A3B8] flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="thread-shortcuts-hint">
         <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">j</kbd>/<kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">k</kbd> navigate
         <span>·</span>
         <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">/</kbd> filter
         <span>·</span>
-        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">G</kbd> end
+        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">r</kbd> reply
+        <span>·</span>
+        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">e</kbd> toggle send-as
+        <span>·</span>
+        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">⌘/Ctrl</kbd>+<kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">Enter</kbd> send
+        <span>·</span>
+        <kbd className="px-1.5 py-0.5 rounded border border-[#E2E8F0] bg-white font-mono">Esc</kbd> close
       </div>
     </div>
   );
