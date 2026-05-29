@@ -17,7 +17,7 @@
  * react via the WorkspaceContext / their own refetch hooks.
  */
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
@@ -252,6 +252,58 @@ const SidebarUser = ({ user, onLogout }) => (
 );
 
 
+// ── SidebarLeadStrip ────────────────────────────────────────────────────
+// Live tenant-aware lead count strip rendered directly below the ARIA
+// brand header. Click navigates to /app/leads. Stage chips: Qualified,
+// Nurturing, New, Cold.
+const SidebarLeadStrip = ({ leadCounts, onClick }) => {
+  const total = leadCounts?.total || 0;
+  const stages = leadCounts?.by_stage || {};
+  const hasLeads = total > 0;
+  return (
+    <Link
+      to="/app/leads"
+      onClick={onClick}
+      data-testid="sidebar-lead-strip"
+      className="block px-3 py-3 border-b border-[var(--sidebar-divider)] transition-colors hover:bg-[var(--sidebar-hover-bg)]"
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{
+            background: hasLeads ? '#16A34A' : '#64748B',
+            boxShadow: hasLeads ? '0 0 8px rgba(22,163,74,0.6)' : 'none',
+          }}
+          data-testid={`sidebar-lead-strip-dot-${hasLeads ? 'active' : 'empty'}`}
+        />
+        <span className="text-xs font-extrabold text-white tracking-wide" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+          {total.toLocaleString()} Lead{total === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {[
+          { key: 'qualified', label: 'Qualified', dot: '#16A34A' },
+          { key: 'nurturing', label: 'Nurturing', dot: '#F59E0B' },
+          { key: 'new',       label: 'New',       dot: '#3B82F6' },
+          { key: 'cold',      label: 'Cold',      dot: '#64748B' },
+        ].map((s) => (
+          <span
+            key={s.key}
+            data-testid={`sidebar-lead-chip-${s.key}`}
+            className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+            style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--sidebar-text)' }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.dot }} />
+            {s.label} <span className="text-white">{stages[s.key] || 0}</span>
+          </span>
+        ))}
+      </div>
+    </Link>
+  );
+};
+
+
 // ── AppLayout ───────────────────────────────────────────────────────────
 const AppLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -317,6 +369,25 @@ const AppLayout = ({ children }) => {
     return () => { cancelled = true; clearInterval(id); window.removeEventListener('aria:tenant-changed', onTenant); };
   }, []);
 
+  // iter126 — sidebar lead count strip (polled every 30s, tenant-aware)
+  const [leadCounts, setLeadCounts] = useState({ total: 0, by_stage: { qualified: 0, nurturing: 0, new: 0, cold: 0 } });
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLeads = async () => {
+      try {
+        const r = await api.get('/api/leads/counts');
+        if (!cancelled) setLeadCounts(r.data || { total: 0, by_stage: {} });
+      } catch {
+        if (!cancelled) setLeadCounts({ total: 0, by_stage: { qualified: 0, nurturing: 0, new: 0, cold: 0 } });
+      }
+    };
+    fetchLeads();
+    const id = setInterval(fetchLeads, 30000);
+    const onTenant = () => fetchLeads();
+    window.addEventListener('aria:tenant-changed', onTenant);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('aria:tenant-changed', onTenant); };
+  }, []);
+
   const Sidebar = ({ mobile = false }) => (
     <aside
       className={`${mobile ? 'w-72' : 'hidden md:flex w-60'} flex-col shrink-0`}
@@ -343,6 +414,9 @@ const AppLayout = ({ children }) => {
           </button>
         )}
       </div>
+
+      {/* iter126 — Lead count strip (live, polls every 30s, click to leads page) */}
+      <SidebarLeadStrip leadCounts={leadCounts} onClick={() => { if (mobile) setMobileOpen(false); }} />
 
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
         <div className="space-y-0.5">

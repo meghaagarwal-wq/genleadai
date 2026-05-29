@@ -154,12 +154,13 @@ const CommandCenter = () => {
   const [nextScan, setNextScan] = useState(null);
   const [health, setHealth] = useState(null);
   const [today, setToday] = useState(null);
+  const [pipelineSnapshot, setPipelineSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [wt, k, s, p, ns, hl, td] = await Promise.all([
+      const [wt, k, s, p, ns, hl, td, ps] = await Promise.all([
         api.get('/api/aria/workspace-type').catch(() => ({ data: { workspace_type: 'hybrid' } })),
         api.get('/api/aria/command-center/kpis').catch(() => ({ data: null })),
         api.get('/api/aria/command-center/signals').catch(() => ({ data: { signals: [], total_pending: 0 } })),
@@ -167,6 +168,7 @@ const CommandCenter = () => {
         api.get('/api/aria/command-center/next-scan').catch(() => ({ data: null })),
         ptApi.get('/api/pt/setup/health').catch(() => ({ data: null })),
         api.get('/api/aria/today').catch(() => ({ data: null })),
+        api.get('/api/leads/counts').catch(() => ({ data: null })),
       ]);
       setMode(wt.data?.workspace_type || 'hybrid');
       setKpi(k.data);
@@ -175,6 +177,7 @@ const CommandCenter = () => {
       setNextScan(ns.data);
       setHealth(hl.data);
       setToday(td.data);
+      setPipelineSnapshot(ps.data?.pipeline_snapshot || null);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -352,6 +355,9 @@ const CommandCenter = () => {
         </div>
       )}
 
+      {/* iter126 — Pipeline Snapshot row (live, clickable chips → /app/leads with filter) */}
+      {pipelineSnapshot && <PipelineSnapshotRow snapshot={pipelineSnapshot} />}
+
       {/* MODE-SPECIFIC LOWER CONTENT */}
       {mode === 'b2b' && (
         <B2BLowerBlock signals={signals} nextScan={nextScan} />
@@ -362,6 +368,44 @@ const CommandCenter = () => {
       {mode === 'hybrid' && (
         <HybridLowerBlock signals={signals} kpi={kpi} />
       )}
+    </div>
+  );
+};
+
+
+// ── PipelineSnapshotRow ─────────────────────────────────────────────────
+// Live snapshot strip below the KPI grid. Each chip navigates to
+// /app/leads with a pre-applied filter (encoded as ?tab= or ?status=).
+const PipelineSnapshotRow = ({ snapshot }) => {
+  const chips = [
+    { key: 'total',             label: 'Total leads',        value: snapshot.total,             to: '/app/leads',                    accent: '#1A0A2E' },
+    { key: 'qualified',         label: 'Qualified',          value: snapshot.qualified,         to: '/app/leads?tab=qualified',      accent: '#16A34A' },
+    { key: 'nurturing',         label: 'Nurturing',          value: snapshot.nurturing,         to: '/app/leads?tab=contacted',      accent: '#F59E0B' },
+    { key: 'needs_attention',   label: 'Needs attention',    value: snapshot.needs_attention,   to: '/app/leads?tab=high_intent',    accent: '#DC2626' },
+    { key: 'calls_booked_week', label: 'Calls this week',    value: snapshot.calls_booked_week, to: '/app/calls',                    accent: '#7C35DC' },
+  ];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5" data-testid="cmd-pipeline-snapshot">
+      {chips.map((c) => (
+        <Link
+          key={c.key}
+          to={c.to}
+          data-testid={`cmd-pipeline-snapshot-${c.key}`}
+          className="rounded-xl border px-4 py-3 transition-all hover:-translate-y-0.5"
+          style={{
+            background: 'var(--theme-surface)',
+            borderColor: 'var(--theme-border)',
+            boxShadow: '0 1px 0 rgba(0,0,0,0.02)',
+          }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--theme-text-muted)' }}>
+            {c.label}
+          </div>
+          <div className="mt-1 text-2xl font-extrabold numeric" style={{ color: c.accent, fontFamily: 'Space Grotesk, Inter' }}>
+            {(c.value ?? 0).toLocaleString()}
+          </div>
+        </Link>
+      ))}
     </div>
   );
 };

@@ -98,7 +98,7 @@ const LeadFeed = ({ embedded = false }) => {
               style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
               <Brain size={14} weight="duotone" /> {batchBusy ? 'Synthesising…' : 'Run Intel on hot leads'}
             </button>
-            <button onClick={() => setShowCsv(true)} data-testid="pt-leadfeed-upload-btn"
+            <button onClick={() => setShowCsv(true)} data-testid="import-csv-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
               <Upload size={14} weight="bold" /> Upload CSV
             </button>
@@ -198,7 +198,7 @@ const LeadFeed = ({ embedded = false }) => {
             </thead>
             <tbody>
               {leads.map(l => (
-                <tr key={l.id} onClick={() => navigate(`/pt/leads/${l.id}`)}
+                <tr key={l.id} onClick={() => navigate(`/app/leads/${l.id}`)}
                   data-testid={`lead-row-${l.id}`}
                   className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] cursor-pointer">
                   <td className="px-3 py-2.5">

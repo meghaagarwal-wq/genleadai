@@ -56,6 +56,7 @@ const LeadInbox = () => {
   const [filters, setFilters] = useState({ lead_type:'', status:'', source_channel:'', icp_tier:'' });
   const [showFilters, setShowFilters] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addModalInitialMode, setAddModalInitialMode] = useState('manual');
   const [showPushModal, setShowPushModal] = useState(false);
   const [page, setPage] = useState(0);
   const [engagementMap, setEngagementMap] = useState({});
@@ -173,7 +174,12 @@ const LeadInbox = () => {
             style={{ fontFamily:'Plus Jakarta Sans' }}>
             <PaperPlaneTilt size={16} weight="fill" /> Send to sequence
           </button>
-          <button onClick={() => setShowAddModal(true)} data-testid="add-lead-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }}>
+          <button onClick={() => { setAddModalInitialMode('csv'); setShowAddModal(true); }} data-testid="import-csv-btn"
+            className="flex items-center gap-2 bg-white border border-[#E8E0F5] hover:border-[#7C35DC]/40 text-[#5A4A7A] hover:text-[#7C35DC] px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+            style={{ fontFamily:'Plus Jakarta Sans' }}>
+            <FileCsv size={16} weight="fill" /> Import CSV
+          </button>
+          <button onClick={() => { setAddModalInitialMode('manual'); setShowAddModal(true); }} data-testid="add-lead-btn" className="flex items-center gap-2 btn-gradient px-4 py-2 rounded-lg text-sm font-semibold" style={{ fontFamily:'Plus Jakarta Sans' }}>
             <Plus size={16} weight="bold" /> Add Lead
           </button>
         </div>
@@ -423,7 +429,7 @@ const LeadInbox = () => {
         </div>
       </div>
 
-      {showAddModal && <AddLeadModal onClose={() => setShowAddModal(false)} onSuccess={() => { setShowAddModal(false); fetchLeads(); }} />}
+      {showAddModal && <AddLeadModal initialMode={addModalInitialMode} onClose={() => setShowAddModal(false)} onSuccess={() => { setShowAddModal(false); fetchLeads(); }} />}
       {showPushModal && <PushToSequenceModal leadIds={leads.map(l => l.id)} onClose={() => setShowPushModal(false)} onSuccess={() => { setShowPushModal(false); fetchLeads(); }} />}
       {bulkEnrollOpen && (
         <BulkEnrollModal
@@ -495,8 +501,8 @@ const BulkEnrollModal = ({ leadIds, campaigns, onClose, onSuccess }) => {
   );
 };
 
-const AddLeadModal = ({ onClose, onSuccess }) => {
-  const [mode, setMode] = useState('manual'); // 'manual' | 'csv'
+const AddLeadModal = ({ onClose, onSuccess, initialMode = 'manual' }) => {
+  const [mode, setMode] = useState(initialMode); // 'manual' | 'csv'
   return (
     <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4" data-testid="add-lead-modal">
       <div className="bg-white border border-[#E8E0F5] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" style={{ boxShadow:'var(--shadow-hover)' }}>

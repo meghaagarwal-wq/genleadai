@@ -1,5 +1,38 @@
 # Changelog
 
+## iter126 — Lead 360 + Sidebar Lead Count + Pipeline Snapshot + Insert-blank (2026-02-29) ✅
+**Lead 360 view (5-tab unified lead profile)**
+- New `/app/frontend/src/workspace/pages/Lead360.js` (≈540 lines) wired at route `/app/leads/:id`.
+- Sticky header: avatar · name + title + company · ICP badge · stage tag · source icon · time meta + 5 quick actions (Send Message, Run Intel Scan, Book Call, Change Stage ▾, Connect ▾).
+- Connect dropdown: Add to Touchpoint Journey, Enrol in Sequence, Book a Call, Send to Approval Queue, Suppress Lead.
+- 5 tabs:
+  1. **Overview** — contact/company/ICP-match/source cards (left) + notes auto-save / tags / assigned-to (right).
+  2. **Intel** — reuses existing `IntelTab` (research, signals, Outreach Playbook with channel switcher + Send-via-ARIA, V21–V24 already wired).
+  3. **Automation** — always-visible CTA row (Add to Journey · Enrol in Sequence) + Active Sequences / Journey state / Rules Fired sections.
+  4. **Conversations** — reuses existing `ConversationThread`.
+  5. **Activity** — full event timeline with channel icons + filter chips (All / Aria / Owner / Lead / System).
+- Graceful fallback: tries `/api/leads/:id` first, falls back to `/api/pt/leads/:id` for Pietential workspace leads.
+
+**Sidebar Lead Count strip**
+- New `SidebarLeadStrip` directly below the ARIA brand header. Live, tenant-aware, polls every 30s, re-fetches on workspace switch.
+- Shows: colored status dot (green = leads exist / grey = empty) + total count + inline stage chips (Qualified / Nurturing / New / Cold).
+- Click navigates to `/app/leads`.
+
+**Command Center — Pipeline Snapshot row**
+- New `PipelineSnapshotRow` below KPI grid: 5 clickable cards (Total / Qualified / Nurturing / Needs attention / Calls this week) — each navigates to `/app/leads` with the relevant filter pre-applied via `?tab=…`.
+
+**Backend**
+- New `routes/lead_counts.py` → `GET /api/leads/counts` aggregates by tenant in a single `$group` pipeline + computes needs_attention (hot/warm + idle ≥ 3 days) and calls_booked_week.
+- CSV import endpoint (`/api/leads/import-csv`) was already wired by iter103 — re-used as-is.
+
+**Journey UX polish**
+- Hover-only "Insert step" button between every pair of cards (purple pill, low visual noise) — calls a new `insertBlankAfter` handler that shifts numbers up + creates a blank touchpoint at the freed slot in two API calls.
+
+**Tests**
+- `/app/backend/tests/test_iter126_lead360_and_csv.py` — 4/4 passing (counts shape, CSV preview auto-mapping, journey insert-blank flow).
+
+
+
 ## iter125 — server.py refactor + Journey drag-and-drop (2026-02-29) ✅
 **server.py split (3,254 → 2,382 lines)**
 - Extracted Founder Command Center → `routes/founder_command_center.py`

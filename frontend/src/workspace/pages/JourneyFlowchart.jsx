@@ -105,10 +105,11 @@ const deriveAction = (tp) => {
 
 
 // ─── Component ──────────────────────────────────────────────────────────
-const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRegenerate, onReorder }) => {
+const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRegenerate, onReorder, onInsertAfter }) => {
   const [zoom, setZoom] = useState(1);
   const [dragId, setDragId] = useState(null);     // id of card being dragged
   const [dragOverId, setDragOverId] = useState(null); // id of card hovered
+  const [insertHoverIdx, setInsertHoverIdx] = useState(null); // gap (between cards) hovered for blank insert
   const containerRef = useRef(null);
 
   // Pre-compute per-touchpoint geometry so edges and minimap share coords.
@@ -332,7 +333,7 @@ const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRege
           </div>
 
           {/* Rows */}
-          {rows.map((r) => (
+          {rows.map((r, idx) => (
             <FlowRow
               key={r.tp.id}
               row={r}
@@ -348,6 +349,47 @@ const JourneyFlowchart = ({ tps, journeyStrength, onScoreWithAI, onPatch, onRege
               onDragEnd={handleDragEnd}
             />
           ))}
+
+          {/* Insert-blank buttons — one in each gap between cards (hover-only) */}
+          {onInsertAfter && rows.slice(0, -1).map((r, idx) => {
+            const nextY = rows[idx + 1].y;
+            const gapY = r.y + ROW_H + (nextY - (r.y + ROW_H)) / 2;
+            const hovered = insertHoverIdx === idx;
+            return (
+              <div
+                key={`insert-${r.tp.id}`}
+                onMouseEnter={() => setInsertHoverIdx(idx)}
+                onMouseLeave={() => setInsertHoverIdx(null)}
+                className="absolute z-10 flex items-center justify-center"
+                style={{
+                  top: gapY - 14,
+                  left: COL_X.step + COL_W.step / 2 - 60,
+                  width: 120,
+                  height: 28,
+                }}
+                data-testid={`flow-insert-gap-${r.tp.number}`}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onInsertAfter(r.tp.number); setInsertHoverIdx(null); }}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    opacity: hovered ? 1 : 0,
+                    pointerEvents: hovered ? 'auto' : 'none',
+                    background: 'var(--theme-surface)',
+                    borderColor: '#7C35DC',
+                    color: '#7C35DC',
+                    boxShadow: '0 4px 12px rgba(124,53,220,0.18)',
+                    fontFamily: 'Plus Jakarta Sans',
+                  }}
+                  data-testid={`flow-insert-after-${r.tp.number}`}
+                  aria-label={`Insert blank touchpoint after step ${r.tp.number}`}
+                >
+                  <Plus size={10} weight="bold" /> Insert step
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         {/* Mini-map */}

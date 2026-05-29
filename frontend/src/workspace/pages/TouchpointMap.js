@@ -32,6 +32,7 @@ import api from '../../config/api';
 import JourneyFlowchart from './JourneyFlowchart';
 
 const CHANNELS = ['whatsapp', 'email', 'linkedin', 'sms', 'call'];
+const MAX_TPS_PER_JOURNEY = 64;
 
 const CHANNEL_STYLE = {
   whatsapp: { color: '#25D366', Icon: WhatsappLogo,    label: 'WhatsApp' },
@@ -161,6 +162,34 @@ const TouchpointMap = () => {
     }
   };
 
+  // Insert a blank touchpoint at `afterNumber + 1` and push every later
+  // touchpoint's number up by one. Optimistic UI + single reorder POST.
+  const insertBlankAfter = async (afterNumber) => {
+    if (tps.length >= MAX_TPS_PER_JOURNEY) {
+      toast.error(`Max ${MAX_TPS_PER_JOURNEY} touchpoints`);
+      return;
+    }
+    try {
+      // Step 1 — shift everyone after the insertion point down.
+      const shifted = tps.map((t) => (t.number > afterNumber ? { ...t, number: t.number + 1 } : t));
+      if (shifted.some((t) => t.number > afterNumber)) {
+        await api.post('/api/journey/touchpoints/reorder', {
+          order: shifted.map((t) => ({ id: t.id, number: t.number })),
+        });
+      }
+      // Step 2 — create the blank touchpoint at the freed slot.
+      const number = afterNumber + 1;
+      const { data } = await api.post('/api/journey/touchpoints', {
+        number, channel: 'email', timing: `Day ${number}`, message_body: '', goal: '', conditional_logic: '',
+      });
+      setTps([...shifted, data].sort((a, b) => a.number - b.number));
+      toast.success(`Blank step inserted at #${number}`);
+    } catch (e) {
+      toast.error('Insert failed — reloading');
+      load();
+    }
+  };
+
   return (
     <div className="space-y-4" data-testid="touchpoint-journey-page" style={{ color: 'var(--theme-text)' }}>
       {/* Header */}
@@ -265,6 +294,7 @@ const TouchpointMap = () => {
           onPatch={patchTouchpoint}
           onRegenerate={regenerate}
           onReorder={reorderAll}
+          onInsertAfter={insertBlankAfter}
         />
       )}
       {!loading && tps.length > 0 && view === 'timeline' && (
