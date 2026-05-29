@@ -86,6 +86,25 @@ def _get_api_key(tenant_id: str, provider: str) -> Optional[str]:
         return None
 
 
+def _get_provider_config(tenant_id: str, provider: str) -> Dict[str, Any]:
+    """Return the FULL (decrypted) config dict for a tenant/provider, or {}.
+    Used by RapidAPI to read extra_config knobs like `host` / `endpoint`."""
+    doc = _configs_col.find_one(
+        {"tenant_id": tenant_id, "integration_type": provider},
+        {"_id": 0, "config": 1},
+    )
+    if not doc:
+        return {}
+    cfg = dict(doc.get("config") or {})
+    raw = cfg.pop("api_key", None)
+    if raw:
+        try:
+            cfg["api_key"] = decrypt(raw)
+        except Exception:
+            logger.exception("crawl_service: failed to decrypt %s key", provider)
+    return cfg
+
+
 # ─── Call-budget tracking ───────────────────────────────────────────────
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -161,6 +180,188 @@ async def fetch_linkedin_company(api_key: str, company_url: str) -> Dict[str, An
         "/proxycurl/api/linkedin/company",
         {"url": company_url},
     )
+
+
+# ─── RapidAPI LinkedIn primitives ───────────────────────────────────────
+# Drop-in replacement for the Proxycurl helpers above. Targets the
+# "Fresh LinkedIn Profile Data" host by default — overridable via the
+# tenant's integration_configs.rapidapi.config.host so a customer can
+# swap to a different RapidAPI LinkedIn scraper without a code change.
+#
+# All RapidAPI helpers normalise the response back to the SAME field
+# names the rest of the pipeline expects (first_name, last_name,
+# headline, occupation, summary, country, city, experiences[], etc.).
+# This means intel_service / claude synthesis stays untouched.
+RAPIDAPI_DEFAULT_HOST = "fresh-linkedin-profile-data.p.rapidapi.com"
+
+
+async def _rapidapi_get(
+    api_key: str,
+    host: str,
+    path: str,
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    headers = {
+        "X-RapidAPI-Key": api_key,
+        "X-RapidAPI-Host": host,
+        "Accept": "application/json",
+    }
+    base = f"https://{host}"
+    async with httpx.AsyncClient(base_url=base, headers=headers, timeout=DEFAULT_TIMEOUT) as client:
+        resp = await client.get(path, params=params)
+        if resp.status_code == 404:
+            return {}
+        if resp.status_code >= 400:
+            raise CrawlError(f"RapidAPI {host}{path} → {resp.status_code}: {resp.text[:200]}")
+        return resp.json() if resp.text else {}
+
+
+def _rapidapi_normalise_profile(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Map the RapidAPI response into the Proxycurl-shape our pipeline
+    already understands. The 'Fresh LinkedIn Profile Data' provider
+    nests its payload under {"data": {...}} on success — handle both
+    flat and nested shapes so other RapidAPI hosts also work."""
+    if not raw:
+        return {}
+    d = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+
+    experiences = d.get("experiences") or d.get("experience") or []
+    educations = d.get("educations") or d.get("education") or []
+
+    return {
+        "first_name":   d.get("first_name") or d.get("firstName"),
+        "last_name":    d.get("last_name")  or d.get("lastName"),
+        "full_name":    d.get("full_name")  or d.get("name"),
+        "headline":     d.get("headline")   or d.get("subtitle"),
+        "occupation":   d.get("occupation") or d.get("position") or d.get("headline"),
+        "summary":      d.get("summary")    or d.get("about"),
+        "country":      d.get("country")    or d.get("country_full_name") or d.get("location_country"),
+        "city":         d.get("city")       or d.get("location_city"),
+        "profile_pic_url": d.get("profile_pic_url") or d.get("profilePic") or d.get("profile_image_url"),
+        "linkedin_url":     d.get("linkedin_url") or d.get("profile_url") or d.get("input_url"),
+        "follower_count":   d.get("follower_count") or d.get("followers"),
+        "connection_count": d.get("connection_count") or d.get("connections"),
+        # Normalised list of past + current roles for Claude synthesis.
+        "experiences": [
+            {
+                "title":   e.get("title") or e.get("position"),
+                "company": e.get("company") or e.get("companyName") or (e.get("company_info") or {}).get("name"),
+                "location": e.get("location"),
+                "starts_at": e.get("starts_at") or e.get("start_date") or e.get("startDate"),
+                "ends_at":   e.get("ends_at")   or e.get("end_date")   or e.get("endDate"),
+                "description": e.get("description"),
+            }
+            for e in experiences if isinstance(e, dict)
+        ],
+        "education": [
+            {
+                "school": e.get("school") or e.get("schoolName"),
+                "degree_name": e.get("degree_name") or e.get("degree"),
+                "field_of_study": e.get("field_of_study") or e.get("fieldOfStudy"),
+                "starts_at": e.get("starts_at") or e.get("start_date"),
+                "ends_at":   e.get("ends_at")   or e.get("end_date"),
+            }
+            for e in educations if isinstance(e, dict)
+        ],
+        "_source": "rapidapi",
+        "_host": None,  # filled in by the calling helper
+    }
+
+
+def _rapidapi_normalise_company(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    d = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+    return {
+        "name":        d.get("name") or d.get("company_name"),
+        "description": d.get("description") or d.get("about"),
+        "industry":    d.get("industry"),
+        "company_size": d.get("company_size") or d.get("size") or d.get("employee_count"),
+        "headquarter": d.get("headquarter") or d.get("hq") or d.get("location"),
+        "founded_year": d.get("founded_year") or d.get("founded"),
+        "website":     d.get("website") or d.get("url"),
+        "linkedin_url": d.get("linkedin_url") or d.get("input_url"),
+        "follower_count": d.get("follower_count") or d.get("followers"),
+        "_source": "rapidapi",
+    }
+
+
+async def rapidapi_get_person_profile(
+    api_key: str, host: str, linkedin_url: str,
+) -> Dict[str, Any]:
+    """Fetch a normalised LinkedIn person profile via RapidAPI."""
+    raw = await _rapidapi_get(
+        api_key, host, "/get-linkedin-profile",
+        {"linkedin_url": linkedin_url, "include_skills": "false", "include_certifications": "false"},
+    )
+    normalised = _rapidapi_normalise_profile(raw)
+    if normalised:
+        normalised["_host"] = host
+    return normalised
+
+
+async def rapidapi_get_company_profile(
+    api_key: str, host: str, company_url: str,
+) -> Dict[str, Any]:
+    raw = await _rapidapi_get(
+        api_key, host, "/get-company-by-linkedinurl",
+        {"linkedin_url": company_url},
+    )
+    return _rapidapi_normalise_company(raw)
+
+
+async def rapidapi_get_person_posts(
+    api_key: str, host: str, linkedin_url: str, limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Recent posts by a person. Returns a list of {text, url, posted_at}.
+
+    This is the headline value-add over Proxycurl: real recent activity
+    feeds the intel synthesis with timely signals (deal announcements,
+    job changes, etc.)."""
+    raw = await _rapidapi_get(
+        api_key, host, "/get-profile-posts",
+        {"linkedin_url": linkedin_url, "limit": str(limit)},
+    )
+    if not raw:
+        return []
+    items = raw.get("data") or raw.get("posts") or raw.get("results") or []
+    if not isinstance(items, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for p in items[:limit]:
+        if not isinstance(p, dict):
+            continue
+        out.append({
+            "text":      p.get("text") or p.get("commentary") or p.get("content"),
+            "url":       p.get("url") or p.get("post_url") or p.get("share_url"),
+            "posted_at": p.get("posted_at") or p.get("date") or p.get("created_at"),
+            "reactions": p.get("reactions") or p.get("like_count") or p.get("total_reactions"),
+        })
+    return out
+
+
+async def rapidapi_resolve_linkedin_profile(
+    api_key: str, host: str, *, first_name: str, last_name: Optional[str], company_name: Optional[str],
+) -> Optional[str]:
+    """Best-effort handle resolver. The 'Fresh LinkedIn Profile Data'
+    host exposes /search-people; if the chosen host doesn't, this
+    returns None and the caller falls back to Serper-based discovery."""
+    if not first_name:
+        return None
+    q = " ".join(p for p in [first_name, last_name, company_name] if p).strip()
+    try:
+        data = await _rapidapi_get(
+            api_key, host, "/search-people",
+            {"keywords": q, "geo_codes": "", "company": company_name or "", "limit": "1"},
+        )
+    except CrawlError:
+        return None
+    items = data.get("data") or data.get("results") or []
+    if isinstance(items, list) and items:
+        first = items[0]
+        if isinstance(first, dict):
+            return first.get("linkedin_url") or first.get("profile_url") or first.get("url")
+    return None
 
 
 # ─── Serper primitives ──────────────────────────────────────────────────
@@ -243,6 +444,15 @@ async def crawl_prospect(
     """
     proxycurl_key = _get_api_key(tenant_id, "proxycurl")
     serper_key = _get_api_key(tenant_id, "serper")
+    # iter125 — RapidAPI replaces Proxycurl for LinkedIn. If a tenant has
+    # the `rapidapi` integration configured, it takes precedence over
+    # Proxycurl. The `host` extra_config knob lets a workspace pick a
+    # different RapidAPI LinkedIn scraper without a code change.
+    rapidapi_cfg = _get_provider_config(tenant_id, "rapidapi")
+    rapidapi_key = rapidapi_cfg.get("api_key")
+    rapidapi_host = (rapidapi_cfg.get("host") or RAPIDAPI_DEFAULT_HOST).strip()
+    use_rapidapi = bool(rapidapi_key)
+
     platforms = platforms or ["linkedin", "web", "news"]
     want_linkedin = "linkedin" in platforms
     want_web = "web" in platforms
@@ -253,6 +463,7 @@ async def crawl_prospect(
     out: Dict[str, Any] = {
         "linkedin_profile": None,
         "linkedin_company": None,
+        "linkedin_posts": [],
         "web_results": [],
         "news_results": [],
         "instagram_results": [],
@@ -265,7 +476,15 @@ async def crawl_prospect(
 
     # ── Plan calls (max 5; leave 3 in budget for future re-runs / playbook) ──
     planned = 0
-    if proxycurl_key and want_linkedin:
+    if use_rapidapi and want_linkedin:
+        out["sources_attempted"].append("rapidapi")
+        if not linkedin_url:
+            planned += 1  # resolve
+        planned += 1  # person profile
+        planned += 1  # recent posts
+        if linkedin_company_url or company_domain:
+            planned += 1  # company profile
+    elif proxycurl_key and want_linkedin:
         out["sources_attempted"].append("proxycurl")
         if not linkedin_url:
             planned += 1  # resolve
@@ -285,15 +504,69 @@ async def crawl_prospect(
 
     if planned == 0:
         raise MissingCredential(
-            "Neither Proxycurl nor Serper is configured for this workspace. "
-            "Connect them on /app/integrations to enable prospect intel."
+            "No LinkedIn provider (RapidAPI or Proxycurl) and no Serper key is "
+            "configured for this workspace. Connect them on /app/integrations "
+            "to enable prospect intel."
         )
 
     if not bypass_budget:
         _assert_budget(tenant_id, lead_id, planned)
 
-    # ── Proxycurl path ──
-    if proxycurl_key and want_linkedin:
+    # ── RapidAPI LinkedIn path (preferred over Proxycurl) ──
+    if use_rapidapi and want_linkedin:
+        try:
+            resolved_url = linkedin_url
+            if not resolved_url:
+                resolved_url = await rapidapi_resolve_linkedin_profile(
+                    rapidapi_key, rapidapi_host,
+                    first_name=first_name, last_name=last_name,
+                    company_name=company_name,
+                )
+                _bump_budget(tenant_id, lead_id, "rapidapi_resolve")
+                out["calls_made"] += 1
+
+            if resolved_url:
+                profile = await rapidapi_get_person_profile(rapidapi_key, rapidapi_host, resolved_url)
+                _bump_budget(tenant_id, lead_id, "rapidapi_profile")
+                out["calls_made"] += 1
+                if profile:
+                    profile["_resolved_url"] = resolved_url
+                    out["linkedin_profile"] = profile
+
+                # Recent posts — the headline value-add over Proxycurl.
+                try:
+                    posts = await rapidapi_get_person_posts(rapidapi_key, rapidapi_host, resolved_url, limit=10)
+                    _bump_budget(tenant_id, lead_id, "rapidapi_posts")
+                    out["calls_made"] += 1
+                    out["linkedin_posts"] = posts
+                except CrawlError as e:
+                    # Posts are optional; record the error but keep the profile.
+                    out["errors"].append({"source": "rapidapi_posts", "message": str(e)[:200]})
+
+            company_url = linkedin_company_url
+            if not company_url and out["linkedin_profile"]:
+                experiences = out["linkedin_profile"].get("experiences") or []
+                if experiences:
+                    company_url = (
+                        experiences[0].get("company_linkedin_profile_url")
+                        or experiences[0].get("company_url")
+                    )
+            if company_url:
+                company = await rapidapi_get_company_profile(rapidapi_key, rapidapi_host, company_url)
+                _bump_budget(tenant_id, lead_id, "rapidapi_company")
+                out["calls_made"] += 1
+                if company:
+                    out["linkedin_company"] = company
+
+            out["sources_succeeded"].append("rapidapi")
+        except CrawlError as e:
+            out["errors"].append({"source": "rapidapi", "message": str(e)[:200]})
+        except Exception as e:  # noqa: BLE001
+            logger.exception("crawl_service: rapidapi unexpected error")
+            out["errors"].append({"source": "rapidapi", "message": str(e)[:200]})
+
+    # ── Proxycurl path (legacy fallback when rapidapi not configured) ──
+    elif proxycurl_key and want_linkedin:
         try:
             resolved_url = linkedin_url
             if not resolved_url and company_domain:

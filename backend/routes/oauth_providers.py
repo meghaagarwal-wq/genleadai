@@ -522,6 +522,24 @@ async def _validate_api_key_live(provider: str, api_key: str, extra: Dict[str, A
                     params={"limit": 1},
                 )
                 return _result(r.status_code, "360dialog")
+            if provider == "rapidapi":
+                # RapidAPI LinkedIn scraper — uses X-RapidAPI-Key + X-RapidAPI-Host.
+                # The specific scraper host is set via extra_config.host;
+                # defaults to fresh-linkedin-profile-data.p.rapidapi.com.
+                host = (extra.get("host") or "fresh-linkedin-profile-data.p.rapidapi.com").strip()
+                # A cheap GET that every popular LinkedIn scraper host serves
+                # is /get-linkedin-profile with a public, well-known URL. 401
+                # means the key is wrong; anything else (200/403/422) means
+                # the key is at least accepted by RapidAPI.
+                try:
+                    r = await client.get(
+                        f"https://{host}/get-linkedin-profile",
+                        headers={"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host},
+                        params={"linkedin_url": "https://www.linkedin.com/in/williamhgates/"},
+                    )
+                except Exception:  # noqa: BLE001
+                    return {"valid": None, "message": f"RapidAPI host {host} unreachable — will retry on Save."}
+                return _result(r.status_code, f"RapidAPI ({host})")
     except Exception as e:  # noqa: BLE001
         return {"valid": None, "message": f"Validator unreachable ({str(e)[:80]}). Will retry on Save."}
     return {"valid": None, "message": "No live validator for this provider; will verify on Save."}
