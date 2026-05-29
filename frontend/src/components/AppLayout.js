@@ -50,9 +50,10 @@ const NAV_PRIMARY = [
 ];
 
 const NAV_ADVANCED = [
-  { to: '/app/touchpoints',    label: '32-Touchpoint Journey', icon: MapTrifold },
-  { to: '/app/call-booking',   label: 'Call Booking',          icon: CalendarBlank },
-  { to: '/app/ai-setup',       label: 'AI Setup Assistant',    icon: Robot },
+  { to: '/app/touchpoints',     label: '32-Touchpoint Journey', icon: MapTrifold },
+  { to: '/app/call-booking',    label: 'Call Booking',          icon: CalendarBlank },
+  { to: '/app/voice-training',  label: 'Voice Training',        icon: Sparkle },
+  { to: '/app/ai-setup',        label: 'AI Setup Assistant',    icon: Robot },
 ];
 
 

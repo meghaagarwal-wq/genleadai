@@ -55,6 +55,7 @@ import CommandCenter from './workspace/pages/CommandCenter';
 import LeadFeed from './workspace/pages/LeadFeed';
 import LeadDetail from './workspace/pages/LeadDetail';
 import Lead360 from './workspace/pages/Lead360';
+import VoiceTraining from './workspace/pages/VoiceTraining';
 import IntelligenceFeed from './workspace/pages/IntelligenceFeed';
 import Reports from './workspace/pages/Reports';
 import Integrations from './workspace/pages/Integrations';
@@ -259,6 +260,7 @@ function App() {
                             <Route path="/automations" element={<Navigate to="/app/automation" replace />} />
                             <Route path="/leads" element={<LeadFeed />} />
                             <Route path="/leads/:id" element={<Lead360 />} />
+                            <Route path="/voice-training" element={<VoiceTraining />} />
                             <Route path="/leads-legacy/:id" element={<LeadDetail />} />
                             <Route path="/conversations" element={<Conversations />} />
                             <Route path="/approvals" element={<Approvals />} />

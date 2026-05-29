@@ -323,11 +323,21 @@ async def compose_message(
         for s in (profile.get("signals") or [])[:6]
     ) or "(no signals)"
 
+    # iter131 — pull active founder-voice seeds (if any) and stitch them
+    # into the system prompt. Lazy-imported to avoid circular deps.
+    tone_block = ""
+    try:
+        from routes.voice_seeds import render_tone_block
+        tone_block = render_tone_block(tenant_id, channel=channel)
+    except Exception:
+        tone_block = ""
+
     system = (
         "You are ARIA, an AI sales agent drafting a single outbound message. "
         "Ground EVERY message in real signals from the intelligence profile. "
         "Never invent facts. Never use generic 'I came across your profile' openers. "
         + _CHANNEL_RULES[channel]
+        + (("\n\n" + tone_block) if tone_block else "")
     )
 
     response_format = "json" if channel == "email" else None

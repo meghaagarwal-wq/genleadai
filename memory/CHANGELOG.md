@@ -1,5 +1,27 @@
 # Changelog
 
+## iter131 — Voice Training (founder voice signature) (2026-02-29) ✅
+**Backend** — New `routes/voice_seeds.py`:
+- `GET /api/voice-seeds` · `POST /api/voice-seeds` · `PATCH /api/voice-seeds/{id}` · `DELETE /api/voice-seeds/{id}`
+- `GET /api/voice-seeds/preview?channel=…` returns the exact TONE EXAMPLES block ARIA sees
+- Tenant-scoped collection `voice_seeds` (max 10 per tenant). Each seed: `{channel: whatsapp|email|linkedin|any, text, label, active, ...}`
+- `intel_service.compose_message` now lazy-imports `render_tone_block(tenant_id, channel)` and stitches the active seeds into the system prompt as TONE EXAMPLES. `any`-channel seeds apply everywhere; channel-specific seeds apply only to their channel. Capped at 5 in-prompt to keep token cost sane.
+
+**Frontend** — New `/app/voice-training` page (`workspace/pages/VoiceTraining.js`):
+- Header counter: "X active · Y/10 saved"
+- Add form: channel pills (Any / WhatsApp / Email / LinkedIn) + optional label + 1,200-char textarea
+- Saved-sample cards with Active/Inactive toggle + delete
+- "Preview ARIA prompt" panel shows the literal tone block per channel — founders see exactly what ARIA reads
+- Sidebar entry added under **Advanced · ARIA Tools**
+
+**Voice signature verified end-to-end** — same prompt + same lead, different output:
+- **Without seed:** "Hi Priya, I noticed Beta Inc in my research, but I'm coming up short on finding the right context to reach out..."
+- **With minimalist seed:** "hey priya — saw beta inc but couldn't dig up much signal on your end. shooting blind here, but if inbound's getting lost in handoffs or follow-up's taking 2+ days, we've cut that to <4 hours for teams your size. worth 10 min to see if it fits? — aria"
+
+**Tests** — `/app/backend/tests/test_iter131_voice_training.py` — **7/7 passing** (CRUD, validation, channel filtering, max-10 cap, preview).
+
+
+
 ## iter130 — Draft variants ("Try another") on the Conversations reply box (2026-02-29) ✅
 **Backend**
 - `DraftRequest.attempt: int = Field(default=1, ge=1, le=3)` accepted by `POST /api/conversations/lead/{lead_id}/draft`.

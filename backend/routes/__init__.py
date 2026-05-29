@@ -188,6 +188,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter126 — Lead counts (sidebar strip + Command Center Pipeline Snapshot)
     from .lead_counts import router as lead_counts_router
 
+    # iter131 — Founder voice training
+    from .voice_seeds import router as voice_seeds_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -252,5 +255,6 @@ def register_all_routes(app: FastAPI) -> None:
         exports_audit_router,
         onboarding_legacy_router,
         lead_counts_router,
+        voice_seeds_router,
     ):
         app.include_router(router)
