@@ -65,7 +65,7 @@ const LeadFeed = ({ embedded = false }) => {
       });
       setBatchResult(r.data);
       if (r.data.aborted) {
-        toast.error('Connect Proxycurl or Serper on /app/integrations first');
+        toast.error('Connect RapidAPI or Serper on /app/integrations first');
       } else if (r.data.processed === 0) {
         toast.info('All hot leads already have intel.');
       } else {

@@ -83,7 +83,7 @@ const IntelTab = ({ leadId, lead }) => {
       const status = err.response?.status;
       const detail = err.response?.data?.detail || 'Research failed';
       if (status === 503) {
-        toast.error('Connect Proxycurl or Serper on /app/integrations first');
+        toast.error('Connect RapidAPI or Serper on /app/integrations first');
       } else if (status === 429) {
         toast.error('Crawl budget hit (8 calls / prospect)');
       } else {
