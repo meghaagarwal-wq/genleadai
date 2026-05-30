@@ -97,14 +97,14 @@ async def aria_brain(current_user: dict = Depends(get_current_user)):
     hot = leads_collection.count_documents({"icp_score": {"$gte": 80}})
     # Top source
     src_counts = {}
-    for l in leads_collection.find({}, {"_id": 0, "source_channel": 1}):
-        s = (l.get("source_channel") or "other").replace("_", " ").title()
+    for lead in leads_collection.find({}, {"_id": 0, "source_channel": 1}):
+        s = (lead.get("source_channel") or "other").replace("_", " ").title()
         src_counts[s] = src_counts.get(s, 0) + 1
     top_source = max(src_counts, key=src_counts.get) if src_counts else "—"
     # Top objection from lost_reason
     lost_reasons = {}
-    for l in leads_collection.find({"status": "lost"}, {"_id": 0, "lost_reason": 1}):
-        r = (l.get("lost_reason") or "unspecified").replace("_", " ").title()
+    for lead in leads_collection.find({"status": "lost"}, {"_id": 0, "lost_reason": 1}):
+        r = (lead.get("lost_reason") or "unspecified").replace("_", " ").title()
         lost_reasons[r] = lost_reasons.get(r, 0) + 1
     top_loss = max(lost_reasons, key=lost_reasons.get) if lost_reasons else "—"
 

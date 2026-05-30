@@ -319,7 +319,8 @@ async def _send_brief_email(*, tenant_id: str, recipient: str, html: str, subjec
         result = await asyncio.to_thread(resend.Emails.send, params)
         return {"sent": True, "provider_id": (result or {}).get("id") if isinstance(result, dict) else None}
     except Exception as e:  # noqa: BLE001
-        logger.exception("morning_brief: resend send failed")
+        # iter138 — quieter log line; full traceback only at DEBUG level.
+        logger.warning("morning_brief: resend send failed: %s", str(e)[:200])
         return {"sent": False, "error": str(e)[:200]}
     finally:
         resend.api_key = saved
@@ -430,7 +431,14 @@ async def send_now(current_user: dict = Depends(get_current_user)):
     recipient = cfg.get("send_to_email") or current_user.get("email")
     if not recipient:
         raise HTTPException(status_code=400, detail="Set a recipient email in the Morning Brief config first.")
-    return await run_morning_brief(tenant_id, recipient=recipient, manual=True)
+    res = await run_morning_brief(tenant_id, recipient=recipient, manual=True)
+    # iter138 — convert send failures into structured 503 (matches eod-wrap pattern).
+    # Skip-as-success (e.g. no_recipient handled above; future skip flags) is NOT an error.
+    if isinstance(res, dict) and res.get("sent") is False and not res.get("skipped"):
+        from services.notification_errors import classify_send_error
+        info = classify_send_error(res.get("error", ""))
+        raise HTTPException(status_code=info["status"], detail=info)
+    return res
 
 
 @router.get("/last")

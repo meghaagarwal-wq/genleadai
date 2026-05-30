@@ -77,8 +77,20 @@ const TouchpointMap = () => {
   const generateAll = async () => {
     if (tps.length > 0 && !window.confirm(`Generate a fresh ${genCount}-touchpoint journey? This will REPLACE the current ${tps.length} touchpoints.`)) return;
     setGenerating(true);
+
+    // iter138 — sticky progress toast (mirrors the Lead Inbox scan-hot pattern).
+    // Live phase updates so the founder never wonders "is it stuck?".
+    const tid = toast.loading(`Generating ${genCount} touchpoints with Claude…`, { duration: Infinity });
+    const PHASE_LABEL = {
+      queued: 'Queued',
+      building_prompt: 'Preparing the brief',
+      claude_generating: 'Claude is writing',
+      persisting: 'Saving touchpoints',
+      done: 'Done',
+      failed: 'Failed',
+    };
+
     try {
-      // iter136 — async-job pattern (was synchronous → 60s gateway timeout)
       const kickoff = await api.post('/api/journey/generate', { count: genCount, replace: true });
       const jobId = kickoff.data?.job_id;
       if (!jobId) throw new Error('No job_id returned');
@@ -91,10 +103,17 @@ const TouchpointMap = () => {
         await new Promise((r) => setTimeout(r, 2500));
         const poll = await api.get(`/api/journey/generate/job/${jobId}`);
         job = poll.data;
+        const phaseLabel = PHASE_LABEL[job?.phase] || job?.phase || 'Working';
+        const elapsed = job?.elapsed_seconds || 0;
+        toast.loading(
+          `${phaseLabel} · ${elapsed.toFixed(0)}s elapsed${job?.slow_warn ? ' (taking longer than usual)' : ''}`,
+          { id: tid, duration: Infinity },
+        );
         if (job?.status === 'done' || job?.status === 'failed') break;
         attempt += 1;
       }
 
+      toast.dismiss(tid);
       if (!job || job.status !== 'done') {
         throw new Error(job?.error || 'Generation timed out');
       }
@@ -102,6 +121,7 @@ const TouchpointMap = () => {
       setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
       toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
     } catch (e) {
+      toast.dismiss(tid);
       toast.error(e.response?.data?.detail || e.message || 'Generation failed');
     } finally { setGenerating(false); }
   };

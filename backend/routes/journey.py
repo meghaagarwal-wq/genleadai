@@ -28,7 +28,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -45,8 +45,10 @@ _touchpoints_col = db["journey_touchpoints"]
 _touchpoints_col.create_index([("tenant_id", 1), ("number", 1)])
 
 # iter136 — async job tracker for /generate so we never hit the 60s gateway ceiling.
+# iter138 — added expires_at TTL field (7 days) so jobs auto-purge.
 _generate_jobs_col = db["journey_generate_jobs"]
 _generate_jobs_col.create_index([("tenant_id", 1), ("created_at", -1)])
+_generate_jobs_col.create_index("expires_at", expireAfterSeconds=0)
 
 _ALLOWED_CHANNELS = {"whatsapp", "email", "linkedin", "sms", "call"}
 
@@ -200,6 +202,8 @@ async def generate_journey(payload: GenerateIn, tenant: dict = Depends(get_activ
         "replace": payload.replace,
         "created_at": now,
         "updated_at": now,
+        # iter138 — TTL field (BSON Date). Mongo auto-purges after 7d.
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
         "eta_seconds": eta,
         "result": None,
         "error": None,

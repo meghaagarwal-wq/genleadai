@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -23,33 +22,8 @@ import resend
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
-
-_RESEND_SANDBOX_RE = re.compile(
-    r"verify a domain at resend\.com/domains|testing emails to your own|sandbox|not verified",
-    re.I,
-)
-
-
-def _classify_send_error(err: str) -> dict:
-    """Classify a Resend (or generic) send error into a UI-friendly payload."""
-    if not err:
-        return {"code": "unknown", "user_message": "Send failed for an unknown reason.", "status": 503}
-    if _RESEND_SANDBOX_RE.search(err):
-        return {
-            "code": "resend_sandbox_or_unverified_domain",
-            "user_message": (
-                "Resend is in sandbox mode (free tier) or your sending domain isn't verified. "
-                "Verify a domain at resend.com/domains and set SENDER_EMAIL on that domain to send to any recipient."
-            ),
-            "status": 503,
-        }
-    if "no_resend_key" in err or "no_recipient" in err:
-        return {
-            "code": err,
-            "user_message": "Resend isn't connected for this workspace. Add your Resend API key under Integrations.",
-            "status": 503,
-        }
-    return {"code": "send_failed", "user_message": err[:200], "status": 503}
+# iter138 — shared classifier (was previously defined inline in this file)
+from services.notification_errors import classify_send_error as _classify_send_error
 
 from deps import (
     activities_collection,
@@ -304,7 +278,10 @@ async def _send_eod_wrap(recipient_email: str, tz_off_hours: float = 0.0, manual
         )
         return {"sent": True, "touches": t["total_touches"], "recipient": recipient_email}
     except Exception as e:
-        print(f"EOD wrap email failed: {e}")
+        # iter138 — silence traceback noise in logs; the 503 classifier
+        # gives the caller (and the UI) a structured friendly message.
+        import logging as _logging
+        _logging.getLogger("eod_wrap").warning("eod_wrap send failed: %s", str(e)[:200])
         return {"sent": False, "error": str(e)}
 
 
