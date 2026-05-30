@@ -1,3 +1,78 @@
+## Iter 137 — P1 Fixes from iter136 Audit (Mar 1, 2026)
+
+Surgical fix-batch for the 3 P1 bugs surfaced in the iter136 full backend
+audit. All verified live + by testing agent (12/12 iter137 PASS +
+36/36 sprint regression PASS).
+
+### Fixes
+1. **`POST /api/aria/eod-wrap/send-now`** — was leaking uncaught
+   `resend.exceptions.ResendError` as a 500 traceback. Added
+   `_classify_send_error()` helper in `routes/aria_eod_wrap.py` that
+   regex-matches Resend sandbox/unverified-domain errors and returns a
+   structured **503** with `{code, user_message, status}`. Belt-and-
+   suspenders outer try/except around `_send_eod_wrap` guards against
+   any rogue exception escaping the inner SDK call.
+2. **`GET /api/aria/eod-wrap/last`** — new endpoint added for UI parity
+   with `/api/aria/morning-brief/last` and `/api/aria/approval-digest/last`.
+   Returns `{last_sent_at, last_sent_date, last_sent_touches,
+   last_sent_manual}` from the eod_wrap_settings doc.
+3. **`POST /api/journey/generate`** — was timing out at the 60s ingress
+   ceiling on synchronous multi-step Claude calls. Converted to async
+   job pattern:
+   - Kickoff returns `{job_id, status:'queued', eta_seconds, hint}` in
+     <0.2s.
+   - `asyncio.create_task` runs `_run_generate_job` in background,
+     writing progress to a new `journey_generate_jobs` collection.
+   - New `GET /api/journey/generate/job/{job_id}` returns
+     `{status, phase, elapsed_seconds, slow_warn, result|error}` —
+     phases: `queued → building_prompt → claude_generating → persisting → done`.
+   - Tenant isolation enforced via compound `{job_id, tenant_id}` lookup.
+   - `frontend/src/workspace/pages/TouchpointMap.js` updated to poll
+     every 2.5s for up to 5 min.
+
+### Verification
+- Live curl: send-now → 503 with `code='resend_sandbox_or_unverified_domain'`;
+  /last → 200 with correct shape; /generate → 0.16s kickoff;
+  job completes in ~20s with 3 real Claude touchpoints.
+- testing_agent_v3_fork iteration_137: 12/12 PASS · 36/36 sprint
+  regression PASS · V10 guard exit 0 · frontend zero pageerrors.
+
+### Files changed
+- `/app/backend/routes/aria_eod_wrap.py` (helper + wrapped route + /last)
+- `/app/backend/routes/journey.py` (async-job rewrite of /generate +
+  new /generate/job/{job_id})
+- `/app/frontend/src/workspace/pages/TouchpointMap.js` (poll loop)
+- `/app/backend/tests/test_iter137_p1_fixes.py` (new)
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`.
+
+### Carry-over backlog (cosmetic, non-blocking)
+- Port `_classify_send_error` helper to `aria_morning_brief.py` +
+  `aria_approval_digest.py` so they don't spam tracebacks in
+  backend.err.log when Resend rejects sandbox sends.
+- Add TTL index on `journey_generate_jobs.created_at` (7d) so jobs
+  don't accumulate forever.
+
+---
+
+
+## Iter 136 — Full Backend Audit (Mar 1, 2026)
+
+User-triggered after hitting "Send failed" on production Morning Brief.
+Exhaustive audit on 130+ endpoints across 30 categories surfaced:
+- **3 P1 bugs** (fixed in iter137): eod-wrap/send-now 500 leak,
+  eod-wrap/last missing, journey/generate 60s timeout.
+- **6 OAuth providers** + **1 Intel research** degrade cleanly with 503
+  (missing keys — expected on preview).
+- **V10 guard PASS** · `_id` leak guard PASS · tenant isolation PASS.
+- Confirmed production root cause: Resend sandbox mode only allows
+  sending to the verified Resend owner email until a domain is verified
+  at resend.com/domains.
+
+---
+
+
 ## Iter 135 — Pre-Deploy Full Regression (Mar 1, 2026)
 
 **Trigger:** User asked: "Run the full regression first. Then deploy. Then I'll do the production walkthrough."
