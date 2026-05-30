@@ -52,7 +52,8 @@ const Login = () => {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials');
+      // iter140 — neutral error per spec V5 (no hint about which field is wrong).
+      setError('Invalid email or password');
     } finally { setLoading(false); }
   };
 
@@ -264,10 +265,11 @@ const Login = () => {
             </button>
           )}
 
+          {/* iter140 — invite-only. No public sign-up. Direct curious visitors to /apply. */}
           <div className="mt-6 text-center">
             <p className="text-[#5A4A7A] text-sm">
               Don't have an account?{' '}
-              <Link to="/register" className="text-[#7C35DC] hover:text-[#6B28C8] font-semibold" data-testid="register-link">Sign up</Link>
+              <Link to="/apply" className="text-[#7C35DC] hover:text-[#6B28C8] font-semibold" data-testid="apply-link">Apply to work with ARIA →</Link>
             </p>
           </div>
         </div>

@@ -85,14 +85,14 @@ function PillButton({ children, onClick, href = '#', variant = 'primary', classN
   return <a href={href} className={cls} data-testid={testId}>{children}</a>;
 }
 
-function Nav({ onSignup, onLogin }) {
+function Nav({ onDemo, onApply }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border/60 backdrop-blur-xl"
             style={{ backgroundColor: 'rgba(250, 250, 255, 0.8)' }}>
       <Container className="flex h-16 items-center justify-between">
         <Logo />
         <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
-          {['Features', 'How it works', 'Integrations', 'Pricing'].map((l) => (
+          {['Features', 'How it works', 'Integrations'].map((l) => (
             <a
               key={l}
               href={`#${l.toLowerCase().replace(/\s/g, '')}`}
@@ -107,14 +107,14 @@ function Nav({ onSignup, onLogin }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onLogin}
+            onClick={onDemo}
             className="rounded-full px-3 py-2 text-sm font-medium text-foreground hover:bg-muted sm:px-4"
-            data-testid="nav-login-btn"
+            data-testid="nav-see-demo-btn"
           >
-            Log in
+            See Demo
           </button>
-          <PillButton onClick={onSignup} testId="nav-signup-btn">
-            Start free <ArrowRight className="h-4 w-4" />
+          <PillButton onClick={onApply} testId="nav-apply-btn">
+            Apply <ArrowRight className="h-4 w-4" />
           </PillButton>
         </div>
       </Container>
@@ -161,95 +161,72 @@ function Field({ label, ...rest }) {
   );
 }
 
-function SignupCard({ onSubmit }) {
-  const [mode, setMode] = useState('b2b');
-  const [email, setEmail] = useState('');
-  const [pwd, setPwd] = useState('');
+function CtaCard({ onDemo, onApply }) {
   return (
     <div
-      id="signup"
+      id="apply"
       className="relative rounded-3xl border p-7 backdrop-blur md:p-8"
       style={{
         borderColor: 'rgba(255,255,255,0.4)',
         backgroundColor: 'rgba(255,255,255,0.95)',
         boxShadow: '0 25px 50px -12px rgba(88, 28, 135, 0.30)',
       }}
-      data-testid="hero-signup-card"
+      data-testid="hero-cta-card"
     >
       <div className="absolute -top-3 right-6 flex items-center gap-2 rounded-full pill-gradient px-3 py-1 text-[10px] font-bold tracking-wider text-white">
         <SignalBars className="text-white" />
         ARIA ONLINE
       </div>
-      <h3 className="text-2xl">Start your free workspace</h3>
-      <p className="mt-1 text-sm text-muted-foreground">No credit card. Ready in 5 minutes.</p>
+      <h3 className="text-2xl">Two ways to get started.</h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        ARIA is invite-only. Watch the live demo, then apply to work with us.
+      </p>
 
-      <form
-        className="mt-6 space-y-4"
-        onSubmit={(e) => { e.preventDefault(); onSubmit?.({ email, mode }); }}
-      >
-        <Field
-          label="Work email"
-          type="email"
-          required
-          placeholder="you@company.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          data-testid="hero-signup-email"
-        />
-        <Field
-          label="Password"
-          type="password"
-          required
-          minLength={8}
-          placeholder="Min. 8 characters"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          data-testid="hero-signup-password"
-        />
-
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Choose your mode
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <ModeTile
-              active={mode === 'b2b'}
-              onClick={() => setMode('b2b')}
-              title="B2B Instinct"
-              desc="10–100 high-value prospects"
-              testId="hero-mode-b2b"
-            />
-            <ModeTile
-              active={mode === 'b2c'}
-              onClick={() => setMode('b2c')}
-              title="B2C Automation"
-              desc="High-volume lead handling"
-              testId="hero-mode-b2c"
-            />
-          </div>
-        </div>
-
+      <div className="mt-6 space-y-3">
         <motion.button
-          type="submit"
+          type="button"
+          onClick={onDemo}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="w-full rounded-full pill-gradient pill-gradient-hover px-5 py-3.5 font-semibold text-white"
-          data-testid="hero-signup-submit"
+          className="w-full rounded-full pill-gradient pill-gradient-hover px-5 py-3.5 font-semibold text-white inline-flex items-center justify-center gap-2"
+          data-testid="hero-see-demo-btn"
         >
-          Create my ARIA workspace →
+          See ARIA in Action <ArrowRight className="h-4 w-4" />
         </motion.button>
+        <motion.button
+          type="button"
+          onClick={onApply}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full rounded-full px-5 py-3.5 font-semibold inline-flex items-center justify-center gap-2 transition-colors"
+          style={{
+            border: '1.5px solid var(--aria-primary)',
+            color: 'var(--aria-primary)',
+            background: 'transparent',
+          }}
+          data-testid="hero-apply-btn"
+        >
+          Apply to Work with ARIA <ArrowRight className="h-4 w-4" />
+        </motion.button>
+      </div>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Already have an account?{' '}
-          <a href="/login" className="font-medium text-primary underline">Log in</a>
-          {' '}· 14-day free trial
-        </p>
-      </form>
+      <div className="mt-6 grid grid-cols-3 gap-2 text-center">
+        {[
+          ['Live software', 'not a mockup'],
+          ['Real Claude AI', 'not canned demos'],
+          ['Founder-led', '48hr response'],
+        ].map(([t, s]) => (
+          <div key={t}>
+            <div className="text-[11px] font-bold text-foreground">{t}</div>
+            <div className="text-[10px] text-muted-foreground">{s}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Hero({ onSignup }) {
+function Hero({ onDemo, onApply }) {
   return (
     <section className="relative overflow-hidden brand-gradient">
       <div className="pointer-events-none absolute inset-0 grid-bg" />
@@ -369,7 +346,7 @@ function Hero({ onSignup }) {
               transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
               className="relative"
             >
-              <SignupCard onSubmit={onSignup} />
+              <CtaCard onDemo={onDemo} onApply={onApply} />
             </motion.div>
           </div>
         </div>
@@ -781,10 +758,9 @@ function FAQ() {
   );
 }
 
-function CTABand({ onSignup }) {
-  const [email, setEmail] = useState('');
+function CTABand({ onApply }) {
   return (
-    <section id="pricing" className="py-12">
+    <section id="apply-cta" className="py-12">
       <Container>
         <div className="relative overflow-hidden rounded-3xl brand-gradient p-10 md:p-16">
           <div className="pointer-events-none absolute inset-0 grid-bg" />
@@ -800,40 +776,34 @@ function CTABand({ onSignup }) {
           </div>
           <div className="relative text-white">
             <h2 className="text-4xl text-white md:text-6xl">
-              Start for free.<br />Deploy today.
+              Ready to put ARIA<br />on your pipeline?
             </h2>
             <p className="mt-5 max-w-xl text-lg" style={{ color: 'rgba(255,255,255,0.85)' }}>
-              No credit card. No sales call. Your ARIA workspace is live in 5 minutes.
+              ARIA is invite-only. We onboard 3–4 new workspaces a month and review every application
+              personally. If we see a fit, you'll hear from us within 48 hours.
             </p>
-            <form
-              onSubmit={(e) => { e.preventDefault(); onSignup?.({ email }); }}
-              className="mt-8 flex max-w-xl flex-col gap-3 sm:flex-row"
-            >
-              <input
-                type="email"
-                placeholder="Your work email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 rounded-full border px-5 py-3.5 text-sm text-white outline-none backdrop-blur"
-                style={{
-                  borderColor: 'rgba(255,255,255,0.30)',
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                }}
-                data-testid="cta-email"
-              />
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                className="rounded-full bg-white px-6 py-3.5 font-semibold"
+                onClick={onApply}
+                className="rounded-full bg-white px-7 py-3.5 font-semibold inline-flex items-center justify-center gap-2"
                 style={{ color: 'var(--aria-primary)' }}
-                type="submit"
-                data-testid="cta-submit"
+                type="button"
+                data-testid="cta-apply-btn"
               >
-                Get started →
+                Apply to Work with ARIA <ArrowRight className="h-4 w-4" />
               </motion.button>
-            </form>
+              <a
+                href="/demo"
+                className="rounded-full border-2 border-white/40 px-7 py-3.5 font-semibold text-white inline-flex items-center justify-center gap-2 transition-colors hover:bg-white/10"
+                data-testid="cta-demo-btn"
+              >
+                See ARIA in Action
+              </a>
+            </div>
             <p className="mt-4 text-xs" style={{ color: 'rgba(255,255,255,0.70)' }}>
-              14-day free trial · Cancel anytime
+              No credit card collected at apply · Personal 48-hour reply · No mass automation
             </p>
           </div>
         </div>
@@ -923,9 +893,14 @@ function Footer() {
               <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
                 <li><a href="#features" className="inline-flex items-center gap-2 transition-colors hover:text-primary">ARIA AI Sales PA</a></li>
                 <li>
-                  <a href="#signup" className="inline-flex items-center gap-2 transition-colors hover:text-primary">
-                    Launch ARIA
-                    <span className="rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-primary">BETA</span>
+                  <a href="/apply" className="inline-flex items-center gap-2 transition-colors hover:text-primary" data-testid="footer-apply-link">
+                    Apply to Work with ARIA
+                    <span className="rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-primary">INVITE-ONLY</span>
+                  </a>
+                </li>
+                <li>
+                  <a href="/login" className="text-muted-foreground hover:text-primary transition-colors" data-testid="footer-client-login-link">
+                    Client Login →
                   </a>
                 </li>
               </ul>
@@ -998,7 +973,7 @@ function Footer() {
   );
 }
 
-function FloatingBot({ onSignup }) {
+function FloatingBot({ onApply }) {
   const [open, setOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [vw, setVw] = useState(1200);
@@ -1060,7 +1035,7 @@ function FloatingBot({ onSignup }) {
           </p>
           <button
             type="button"
-            onClick={() => onSignup?.()}
+            onClick={() => onApply?.()}
             className="mt-3 inline-flex items-center gap-1 rounded-full pill-gradient px-3 py-1.5 text-xs font-semibold text-white"
           >
             Try it free <ArrowRight className="h-3 w-3" />
@@ -1092,16 +1067,8 @@ function FloatingBot({ onSignup }) {
 
 export default function AriaLanding() {
   const navigate = useNavigate();
-  const goSignup = (payload) => {
-    // Push the form values into the existing /signup flow via query params so we
-    // can pre-fill once that page supports it. Today they're harmless extras.
-    const params = new URLSearchParams();
-    if (payload?.email) params.set('email', payload.email);
-    if (payload?.mode) params.set('mode', payload.mode);
-    const qs = params.toString();
-    navigate(`/signup${qs ? `?${qs}` : ''}`);
-  };
-  const goLogin = () => navigate('/login');
+  const goApply = () => navigate('/apply');
+  const goDemo = () => navigate('/demo');
 
   // SEO meta
   useEffect(() => {
@@ -1123,8 +1090,8 @@ export default function AriaLanding() {
 
   return (
     <div className="aria-landing min-h-screen" data-testid="aria-landing-root">
-      <Nav onSignup={() => goSignup()} onLogin={goLogin} />
-      <Hero onSignup={goSignup} />
+      <Nav onDemo={goDemo} onApply={goApply} />
+      <Hero onDemo={goDemo} onApply={goApply} />
       <Marquee />
       <TwoModes />
       <HowItWorks />
@@ -1133,9 +1100,9 @@ export default function AriaLanding() {
       <Testimonials />
       <Integrations />
       <FAQ />
-      <CTABand onSignup={goSignup} />
+      <CTABand onApply={goApply} />
       <Footer />
-      <FloatingBot onSignup={() => goSignup()} />
+      <FloatingBot onApply={goApply} />
     </div>
   );
 }

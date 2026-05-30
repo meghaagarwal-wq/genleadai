@@ -30,6 +30,7 @@ def register_all_routes(app: FastAPI) -> None:
     from .ai import router as ai_router
     from .analytics import router as analytics_router
     from .beta_feedback import router as beta_feedback_router
+    from .applications import router as applications_router  # iter140 — public /apply intake
 
     # Tenant + workspace
     from .pietential import router as pietential_router
@@ -196,7 +197,7 @@ def register_all_routes(app: FastAPI) -> None:
         auth_router, auth_extras_router,
         contact_router, contact_admin_router,
         user_profile_router, meta_router,
-        campaigns_router, ai_router, analytics_router, beta_feedback_router,
+        campaigns_router, ai_router, analytics_router, beta_feedback_router, applications_router,
         pietential_router, tenants_router,
         billing_router, stripe_webhook_router,
         touchpoints_router, touchpoint_preview_router, touchpoint_engine_router,

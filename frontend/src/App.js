@@ -45,6 +45,8 @@ import OnboardingWizard from './pages/OnboardingWizard';
 import OnboardingWizardV3 from './pages/OnboardingWizardV3';
 import InteractiveDemo from './pages/InteractiveDemo';
 import DemoSandbox from './pages/DemoSandbox';
+import Apply from './pages/Apply';
+import ApplyThankYou from './pages/ApplyThankYou';
 
 // Admin
 import AdminLayout from './admin/AdminLayout';
@@ -174,6 +176,8 @@ function App() {
                   <Route path="/signup" element={<Signup />} />
                   <Route path="/demo" element={<InteractiveDemo />} />
                   <Route path="/demo-sandbox" element={<DemoSandbox />} />
+                  <Route path="/apply" element={<Apply />} />
+                  <Route path="/apply/thank-you" element={<ApplyThankYou />} />
                   <Route path="/invite/:token" element={<InviteAccept />} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />

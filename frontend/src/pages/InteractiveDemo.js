@@ -21,7 +21,7 @@ const C = {
 };
 
 const SHARE_URL = 'https://app.genleadai.com/demo';
-const SIGNUP_URL = 'https://app.genleadai.com/';
+const APPLY_URL = '/apply';
 
 // ──────────────────────────────────────────────────────────────────────────
 // Conversation scripts
@@ -887,13 +887,13 @@ const Scene5 = () => (
 
     <div className="rounded-2xl p-6 md:p-8 text-center" style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #6a5acd 100%)` }} data-testid="scene5-cta">
       <h2 className="text-2xl md:text-3xl font-extrabold mb-2" style={{ color: '#fff', fontFamily: 'Plus Jakarta Sans' }}>Ready to see this for your business?</h2>
-      <p className="text-sm md:text-base mb-5" style={{ color: '#dde6ff' }}>Start your 14-day free trial. Set up in under 4 hours.</p>
+      <p className="text-sm md:text-base mb-5" style={{ color: '#dde6ff' }}>ARIA is invite-only. Apply now — if we see a fit, you'll hear from us within 48 hours.</p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        <a href={SIGNUP_URL} data-testid="cta-start-trial" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:scale-105" style={{ background: '#fff', color: '#1a1a2e', fontFamily: 'Plus Jakarta Sans' }}>Start Free Trial</a>
-        <a href="mailto:meghaagarwal@genleadai.com?subject=Book%20a%20demo%20call" data-testid="cta-book-call" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:bg-white/10" style={{ background: 'transparent', color: '#fff', border: '1.5px solid #fff' }}>Book a Demo Call</a>
+        <a href={APPLY_URL} data-testid="cta-apply-now" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:scale-105" style={{ background: '#fff', color: '#1a1a2e', fontFamily: 'Plus Jakarta Sans' }}>Apply to Work with ARIA →</a>
+        <a href="mailto:meghaagarwal@genleadai.com?subject=Question%20about%20ARIA" data-testid="cta-book-call" className="inline-block px-6 py-3 rounded-lg text-sm font-extrabold transition-all hover:bg-white/10" style={{ background: 'transparent', color: '#fff', border: '1.5px solid #fff' }}>Ask a Question</a>
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs" style={{ color: '#dde6ff' }}>
-        <span>🔒 Secure</span><span>⚡ Live in 4 hrs</span><span>💬 WhatsApp-Native</span><span>🧠 Claude AI</span>
+        <span>🔒 Invite-only</span><span>⚡ Live software, not a mockup</span><span>💬 WhatsApp-Native</span><span>🧠 Claude AI</span>
       </div>
     </div>
   </div>
@@ -1070,6 +1070,27 @@ const InteractiveDemo = () => {
         .demo-stage { animation: aria-fade-in 300ms ease-out; }
       `}</style>
 
+      {/* iter140 — sticky live-demo banner per V2 of UX flow standardisation. */}
+      <div
+        className="sticky top-0 z-[60] w-full px-4 py-2 flex items-center justify-center gap-3 text-xs md:text-sm font-bold"
+        style={{
+          background: `linear-gradient(90deg, ${C.primary} 0%, ${C.primaryAlt} 100%)`,
+          color: '#fff',
+        }}
+        data-testid="demo-live-banner"
+      >
+        <span className="hidden sm:inline">✦</span>
+        <span>You're viewing a live ARIA demo. Real software, not a mockup.</span>
+        <a
+          href={APPLY_URL}
+          className="ml-2 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold whitespace-nowrap transition-all hover:scale-105"
+          style={{ background: C.gold, color: '#000' }}
+          data-testid="demo-banner-apply"
+        >
+          Apply to Work with ARIA →
+        </a>
+      </div>
+
       {/* Header */}
       <header className="sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between gap-4 backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.92)', borderBottom: `1px solid ${C.border}` }}>
         <div className="flex items-center gap-3">
@@ -1092,7 +1113,7 @@ const InteractiveDemo = () => {
           </button>
           <button onClick={prev} disabled={idx === 0} data-testid="prev-scene" className="hidden sm:inline-flex text-xs px-3 py-1.5 rounded font-bold disabled:opacity-30" style={{ color: C.textDim, border: `1px solid ${C.border}` }}>← Previous</button>
           <button onClick={next} disabled={idx === SCENES.length - 1} data-testid="next-scene" className="hidden sm:inline-flex text-xs px-3 py-1.5 rounded font-bold disabled:opacity-30" style={{ background: C.primary, color: '#fff' }}>Next →</button>
-          <a href={SIGNUP_URL} data-testid="header-trial" className="text-xs font-extrabold px-3 py-1.5 rounded-full whitespace-nowrap" style={{ background: C.gold, color: '#000' }}>Start Free Trial</a>
+          <a href={APPLY_URL} data-testid="header-apply" className="text-xs font-extrabold px-3 py-1.5 rounded-full whitespace-nowrap" style={{ background: C.gold, color: '#000' }}>Apply →</a>
         </div>
       </header>
 
@@ -1154,6 +1175,30 @@ const InteractiveDemo = () => {
           </div>
         </main>
       </div>
+
+      {/* iter140 — V2 spec: full-width bottom CTA section. */}
+      <section
+        className="px-4 md:px-6 py-12 md:py-16"
+        style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #6a5acd 60%, ${C.primaryAlt} 100%)` }}
+        data-testid="demo-bottom-cta"
+      >
+        <div className="max-w-3xl mx-auto text-center text-white">
+          <h2 className="text-3xl md:text-5xl font-extrabold mb-3" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+            Ready to apply?
+          </h2>
+          <p className="text-base md:text-lg mb-7" style={{ color: 'rgba(255,255,255,0.85)' }}>
+            ARIA is invite-only. If we see a fit, you'll hear from us within 48 hours — personally.
+          </p>
+          <a
+            href={APPLY_URL}
+            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-sm md:text-base font-extrabold transition-all hover:scale-105"
+            style={{ background: C.gold, color: '#000', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 12px 28px rgba(0,0,0,0.2)' }}
+            data-testid="demo-bottom-apply-btn"
+          >
+            Apply to Work with ARIA →
+          </a>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="px-4 md:px-6 py-6 text-center text-xs" style={{ color: C.textDim, borderTop: `1px solid ${C.border}` }}>
