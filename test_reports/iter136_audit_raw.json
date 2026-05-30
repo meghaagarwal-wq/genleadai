@@ -1,0 +1,1189 @@
+{
+  "id_leaks": [],
+  "by_cat": {
+    "health": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "auth": {
+      "healthy": 2,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 3
+    },
+    "tenants": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 2
+    },
+    "leads": {
+      "healthy": 9,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 1
+    },
+    "activities": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 1
+    },
+    "conversations": {
+      "healthy": 4,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "intel": {
+      "healthy": 4,
+      "degraded": 1,
+      "broken": 0,
+      "4xx": 3
+    },
+    "voice_seeds": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 1
+    },
+    "journey": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 1,
+      "4xx": 1
+    },
+    "approvals": {
+      "healthy": 3,
+      "degraded": 0,
+      "broken": 1,
+      "4xx": 0
+    },
+    "morning_brief": {
+      "healthy": 4,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "approval_digest": {
+      "healthy": 4,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "eod_wrap": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 2,
+      "4xx": 1
+    },
+    "notifications": {
+      "healthy": 2,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "aria_today": {
+      "healthy": 3,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "integrations": {
+      "healthy": 10,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 1
+    },
+    "oauth": {
+      "healthy": 0,
+      "degraded": 6,
+      "broken": 0,
+      "4xx": 0
+    },
+    "webhooks": {
+      "healthy": 5,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "icps": {
+      "healthy": 0,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 2
+    },
+    "reports": {
+      "healthy": 2,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 1
+    },
+    "train_aria": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 1,
+      "4xx": 0
+    },
+    "admin_v3": {
+      "healthy": 4,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "billing": {
+      "healthy": 3,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "pt_setup": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "assets": {
+      "healthy": 3,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "ai": {
+      "healthy": 0,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 4
+    },
+    "auto_map": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 0
+    },
+    "master_admin": {
+      "healthy": 0,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 5
+    },
+    "isolation": {
+      "healthy": 1,
+      "degraded": 0,
+      "broken": 0,
+      "4xx": 2
+    }
+  },
+  "results": [
+    {
+      "category": "health",
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "body": "{\"status\":\"healthy\",\"service\":\"GenLeadAI LMS API\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "auth",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 200,
+      "body": "{\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkBkZW1vLmNvbSIsImV4cCI6MTc4MDc1NjM4NX0.0Tqka-ug5RFY3w3uz0YmN9P5vkcEjZiSjCnAg_KuVsE\",\"user\":{\"email\":\"admin@demo.com\",\"full_name\":\"Megha ",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "auth",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "status": 401,
+      "body": "{\"detail\":\"Invalid email or password\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "invalid-creds"
+    },
+    {
+      "category": "auth",
+      "method": "GET",
+      "path": "/api/auth/me",
+      "status": 200,
+      "body": "{\"id\":null,\"email\":\"admin@demo.com\",\"full_name\":\"Megha Agarwal\",\"role\":\"master_admin\",\"avatar_url\":\"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPE",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "auth",
+      "method": "POST",
+      "path": "/api/auth/signup",
+      "status": 422,
+      "body": "{\"detail\":\"full_name: Field required; workspace_name: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "fresh signup"
+    },
+    {
+      "category": "auth",
+      "method": "POST",
+      "path": "/api/auth/change-password",
+      "status": 401,
+      "body": "{\"detail\":\"Current password is incorrect\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "wrong-current expected 400"
+    },
+    {
+      "category": "tenants",
+      "method": "GET",
+      "path": "/api/tenants/me",
+      "status": 200,
+      "body": "{\"tenants\":[{\"id\":\"ten_demo\",\"created_at\":\"2026-05-27T07:57:04.883655+00:00\",\"name\":\"GenLeadAI Demo\",\"onboarding_completed\":true,\"owner_email\":\"admin@demo.com\",\"plan\":\"pro\",\"settings\":{\"workspace_type",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "tenants",
+      "method": "POST",
+      "path": "/api/tenants",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "tenants",
+      "method": "GET",
+      "path": "/api/tenants/ten_demo",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads",
+      "status": 200,
+      "body": "{\"leads\":[{\"id\":\"6a05f2122d52cc7525362bc8\",\"tenant_id\":\"ten_demo\",\"first_name\":\"Priya\",\"last_name\":\"\",\"email\":\"test-lemlist@example.com\",\"phone\":null,\"company_name\":\"Beta Inc\",\"notes\":\"Lemlist event \u00b7",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads",
+      "status": 200,
+      "body": "{\"leads\":[{\"id\":\"6a05f2122d52cc7525362bc8\",\"tenant_id\":\"ten_demo\",\"first_name\":\"Priya\",\"last_name\":\"\",\"email\":\"test-lemlist@example.com\",\"phone\":null,\"company_name\":\"Beta Inc\",\"notes\":\"Lemlist event \u00b7",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads",
+      "status": 200,
+      "body": "{\"leads\":[{\"id\":\"6a05f2122d52cc7525362bc8\",\"tenant_id\":\"ten_demo\",\"first_name\":\"Priya\",\"last_name\":\"\",\"email\":\"test-lemlist@example.com\",\"phone\":null,\"company_name\":\"Beta Inc\",\"notes\":\"Lemlist event \u00b7",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads/counts",
+      "status": 200,
+      "body": "{\"total\":137,\"by_stage\":{\"qualified\":3,\"nurturing\":0,\"new\":24,\"cold\":0},\"by_status_raw\":{\"Closed Won\":7,\"Closed Lost\":1,\"closed_won\":1,\"qualified\":3,\"new\":24,\"closed_lost\":101},\"pipeline_snapshot\":{\"t",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads/your-five-today",
+      "status": 200,
+      "body": "{\"leads\":[{\"first_name\":\"Test\",\"last_name\":\"Lead\",\"email\":\"test.lead.105734@example.com\",\"phone\":\"+1234567890\",\"company_name\":\"Test Company\",\"source_channel\":\"website_form\",\"status\":\"closed_lost\",\"tag",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads/sleeping",
+      "status": 200,
+      "body": "{\"leads\":[{\"lead_type\":\"B2B\",\"first_name\":\"Finley\",\"last_name\":\"Mitchell\",\"email\":\"finley.mitchell@gmail.com\",\"phone\":\"+12640933184\",\"company_name\":\"DigitalNest\",\"job_title\":\"CMO\",\"industry\":\"Consulti",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "POST",
+      "path": "/api/leads",
+      "status": 422,
+      "body": "{\"detail\":\"lead_type: Field required; first_name: Field required; last_name: Field required; source_channel: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "GET",
+      "path": "/api/leads/6a05f2122d52cc7525362bc8",
+      "status": 200,
+      "body": "{\"id\":\"6a05f2122d52cc7525362bc8\",\"tenant_id\":\"ten_demo\",\"first_name\":\"Priya\",\"last_name\":\"\",\"email\":\"test-lemlist@example.com\",\"phone\":null,\"company_name\":\"Beta Inc\",\"notes\":\"Lemlist event \u00b7 campaign:",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "PATCH",
+      "path": "/api/leads/6a05f2122d52cc7525362bc8",
+      "status": 200,
+      "body": "{\"id\":\"6a05f2122d52cc7525362bc8\",\"tenant_id\":\"ten_demo\",\"first_name\":\"Priya\",\"last_name\":\"\",\"email\":\"test-lemlist@example.com\",\"phone\":null,\"company_name\":\"Beta Inc\",\"notes\":\"iter136 audit\",\"status\":\"",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "leads",
+      "method": "POST",
+      "path": "/api/leads/import",
+      "status": 200,
+      "body": "{\"message\":\"Successfully imported 1 leads\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "activities",
+      "method": "GET",
+      "path": "/api/leads/6a05f2122d52cc7525362bc8/activities",
+      "status": 200,
+      "body": "{\"activities\":[]}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "activities",
+      "method": "POST",
+      "path": "/api/activities",
+      "status": 422,
+      "body": "{\"detail\":\"activity_type: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "conversations",
+      "method": "GET",
+      "path": "/api/conversations/lead/6a05f2122d52cc7525362bc8",
+      "status": 200,
+      "body": "{\"thread\":[{\"id\":\"ob_2026-05-29T17:24:48.841962+00:00\",\"ts\":\"2026-05-29T17:24:48.841962+00:00\",\"direction\":\"outbound\",\"channel\":\"email\",\"actor\":\"owner\",\"title\":\"Sent via resend\",\"body\":\"Test reply fro",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "conversations",
+      "method": "POST",
+      "path": "/api/conversations/lead/6a05f2122d52cc7525362bc8/draft",
+      "status": 200,
+      "body": "{\"channel\":\"email\",\"draft\":\"Hi Priya,\\n\\nI'm reaching out because I don't have much context on Beta Inc's current priorities, and I wanted to be direct about that.\\n\\nRather than make assumptions, I'm",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "conversations",
+      "method": "POST",
+      "path": "/api/conversations/lead/6a05f2122d52cc7525362bc8/draft",
+      "status": 200,
+      "body": "{\"channel\":\"email\",\"draft\":\"Hi Priya,\\n\\nMost founders I talk to are losing 30%+ of inbound leads to slow follow-up \u2014 not because their reps are bad, but because no one's watching the gap between capt",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "conversations",
+      "method": "POST",
+      "path": "/api/conversations/lead/6a05f2122d52cc7525362bc8/draft",
+      "status": 200,
+      "body": "{\"channel\":\"email\",\"draft\":\"Hi Priya \u2014 one question: how many leads did Beta Inc capture last month vs. how many you actually called? Worth 15 mins if there's a gap.\\n\\nAria\",\"subject\":\"Quick question",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "GET",
+      "path": "/api/intel/6a05f2122d52cc7525362bc8/profile",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "POST",
+      "path": "/api/intel/6a05f2122d52cc7525362bc8/research",
+      "status": 503,
+      "body": "{\"detail\":\"No LinkedIn provider (RapidAPI or Proxycurl) and no Serper key is configured for this workspace. Connect them on /app/integrations to enable prospect intel.\"}",
+      "classification": "DEGRADED",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "POST",
+      "path": "/api/intel/6a05f2122d52cc7525362bc8/playbook",
+      "status": 400,
+      "body": "{\"detail\":\"No intel profile yet \u2014 call POST /api/intel/{lead_id}/research first.\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "POST",
+      "path": "/api/intel/6a05f2122d52cc7525362bc8/compose",
+      "status": 400,
+      "body": "{\"detail\":\"No intel profile yet \u2014 call POST /api/intel/{lead_id}/research first.\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "GET",
+      "path": "/api/intel/6a05f2122d52cc7525362bc8/budget",
+      "status": 200,
+      "body": "{\"calls_used\":0,\"calls_remaining\":8,\"cap\":8,\"by_source\":{},\"last_updated\":null}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "POST",
+      "path": "/api/intel/scan-hot",
+      "status": 200,
+      "body": "{\"queued\":28,\"leads\":[{\"lead_id\":\"69df5f8410ff1b6e41ead21c\",\"name\":\"Finley Mitchell\",\"icp_score\":95,\"icp_tier\":\"hot\",\"source\":\"legacy\"},{\"lead_id\":\"69f2051e47eadcfc49c01ad9\",\"name\":\"Sasha Ivanov\",\"icp",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "GET",
+      "path": "/api/intel/scan-progress",
+      "status": 200,
+      "body": "{\"profile\":null,\"exists\":false}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "intel",
+      "method": "POST",
+      "path": "/api/intel/batch/hot-leads",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"processed\":0,\"succeeded\":0,\"failed\":0,\"skipped_existing\":true,\"results\":[],\"message\":\"No hot leads needed enrichment.\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "voice_seeds",
+      "method": "GET",
+      "path": "/api/voice-seeds",
+      "status": 200,
+      "body": "{\"seeds\":[],\"max_seeds\":10}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "voice_seeds",
+      "method": "POST",
+      "path": "/api/voice-seeds",
+      "status": 422,
+      "body": "{\"detail\":\"text: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "journey",
+      "method": "GET",
+      "path": "/api/journey/touchpoints",
+      "status": 200,
+      "body": "{\"touchpoints\":[{\"id\":\"tp_92ce45cf90e9\",\"tenant_id\":\"ten_demo\",\"number\":1,\"channel\":\"linkedin\",\"timing\":\"Day 1\",\"message_body\":\"Hey {{first_name}},\\n\\nI noticed you're leading a Series A SaaS company ",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "journey",
+      "method": "POST",
+      "path": "/api/journey/touchpoints",
+      "status": 422,
+      "body": "{\"detail\":\"number: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "journey",
+      "method": "POST",
+      "path": "/api/journey/generate",
+      "status": 502,
+      "body": "The preview environment is not responding. It may be starting up.\n",
+      "classification": "BROKEN",
+      "note": ""
+    },
+    {
+      "category": "approvals",
+      "method": "GET",
+      "path": "/api/approvals",
+      "status": 0,
+      "body": "EXCEPTION: HTTPSConnectionPool(host='pipeline-pro-96.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+      "classification": "BROKEN",
+      "note": ""
+    },
+    {
+      "category": "approvals",
+      "method": "GET",
+      "path": "/api/approvals/count",
+      "status": 200,
+      "body": "{\"count\":0}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "approvals",
+      "method": "POST",
+      "path": "/api/approvals/bulk-approve",
+      "status": 200,
+      "body": "{\"ok\":true,\"processed\":0,\"succeeded\":0,\"failed\":0,\"results\":[]}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "approvals",
+      "method": "POST",
+      "path": "/api/approvals/bulk-reject",
+      "status": 200,
+      "body": "{\"ok\":true,\"rejected\":0}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "morning_brief",
+      "method": "GET",
+      "path": "/api/aria/morning-brief/config",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"created_at\":\"2026-05-28T15:27:21.725847+00:00\",\"enabled\":false,\"max_new_intel\":20,\"send_hour_local\":8,\"send_to_email\":\"admin@demo.com\",\"timezone_offset_hours\":5.5,\"updated_at\"",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "morning_brief",
+      "method": "POST",
+      "path": "/api/aria/morning-brief/config",
+      "status": 200,
+      "body": "{\"saved\":true,\"config\":{\"enabled\":true,\"send_to_email\":\"\",\"send_hour_local\":8,\"timezone_offset_hours\":0.0,\"weekdays_only\":true,\"max_new_intel\":20,\"tenant_id\":\"ten_demo\",\"updated_at\":\"2026-05-30T14:35:",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "morning_brief",
+      "method": "POST",
+      "path": "/api/aria/morning-brief/send-now",
+      "status": 200,
+      "body": "{\"sent\":false,\"subject\":\"Your ARIA Morning Brief \u2014 Sat, May 30\",\"enriched_count\":0,\"draft_count\":0,\"provider_id\":null,\"error\":\"You can only send testing emails to your own email address (meghaagarwalj",
+      "classification": "HEALTHY",
+      "note": "needs Resend key on preview"
+    },
+    {
+      "category": "morning_brief",
+      "method": "GET",
+      "path": "/api/aria/morning-brief/last",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"recipient\":\"admin@demo.com\",\"subject\":\"Your ARIA Morning Brief \u2014 Sat, May 30\",\"manual\":true,\"enriched_count\":0,\"draft_count\":0,\"sent\":false,\"provider_id\":null,\"error\":\"You can",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "approval_digest",
+      "method": "GET",
+      "path": "/api/aria/approval-digest/config",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"created_at\":\"2026-05-28T15:27:21.725847+00:00\",\"enabled\":false,\"send_hour_local\":20,\"send_to_email\":\"admin@demo.com\",\"timezone_offset_hours\":5.5,\"updated_at\":\"2026-05-28T15:47",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "approval_digest",
+      "method": "POST",
+      "path": "/api/aria/approval-digest/config",
+      "status": 200,
+      "body": "{\"saved\":true,\"config\":{\"enabled\":true,\"send_to_email\":\"\",\"send_hour_local\":20,\"timezone_offset_hours\":0.0,\"weekdays_only\":false,\"tenant_id\":\"ten_demo\",\"updated_at\":\"2026-05-30T14:35:15.944659+00:00\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "approval_digest",
+      "method": "POST",
+      "path": "/api/aria/approval-digest/send-now",
+      "status": 200,
+      "body": "{\"sent\":false,\"skipped\":true,\"reason\":\"queue_empty\",\"draft_count\":0}",
+      "classification": "HEALTHY",
+      "note": "needs Resend key on preview"
+    },
+    {
+      "category": "approval_digest",
+      "method": "GET",
+      "path": "/api/aria/approval-digest/last",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"recipient\":\"admin@demo.com\",\"subject\":null,\"skipped\":true,\"reason\":\"queue_empty\",\"draft_count\":0,\"created_at\":\"2026-05-30T14:35:16.059224+00:00\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "eod_wrap",
+      "method": "GET",
+      "path": "/api/aria/eod-wrap/config",
+      "status": 200,
+      "body": "{\"enabled\":true,\"send_hour_local\":19,\"send_to_email\":\"eod-tester@example.com\",\"timezone_offset_hours\":5.5,\"updated_at\":\"2026-04-29T14:17:19.619835+00:00\",\"updated_by\":\"admin@demo.com\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "eod_wrap",
+      "method": "POST",
+      "path": "/api/aria/eod-wrap/config",
+      "status": 405,
+      "body": "{\"detail\":\"Method Not Allowed\"}",
+      "classification": "BROKEN",
+      "note": ""
+    },
+    {
+      "category": "eod_wrap",
+      "method": "POST",
+      "path": "/api/aria/eod-wrap/send-now",
+      "status": 500,
+      "body": "{\"detail\":\"Failed to send: You can only send testing emails to your own email address (meghaagarwaljain2015@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains",
+      "classification": "BROKEN",
+      "note": "needs Resend key on preview"
+    },
+    {
+      "category": "eod_wrap",
+      "method": "GET",
+      "path": "/api/aria/eod-wrap/last",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "notifications",
+      "method": "GET",
+      "path": "/api/aria/settings/notifications",
+      "status": 200,
+      "body": "{\"morning_brief\":{\"tenant_id\":\"ten_demo\",\"created_at\":\"2026-05-28T15:27:21.725847+00:00\",\"enabled\":true,\"max_new_intel\":20,\"send_hour_local\":8,\"send_to_email\":\"\",\"timezone_offset_hours\":0.0,\"updated_a",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "notifications",
+      "method": "POST",
+      "path": "/api/aria/settings/notifications",
+      "status": 200,
+      "body": "{\"saved\":true,\"morning_brief\":{\"enabled\":true,\"send_to_email\":\"\",\"send_hour_local\":8,\"timezone_offset_hours\":0.0,\"weekdays_only\":true,\"max_new_intel\":20,\"tenant_id\":\"ten_demo\",\"updated_at\":\"2026-05-30",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "aria_today",
+      "method": "GET",
+      "path": "/api/aria/today",
+      "status": 200,
+      "body": "{\"date_label\":\"Saturday, May 30\",\"momentum\":\"quiet\",\"headline\":\"No outreach logged yet today\",\"totals\":{\"calls\":0,\"emails\":0,\"whatsapps\":0,\"notes\":0,\"meetings_booked\":0,\"status_changes\":0,\"total_touch",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "aria_today",
+      "method": "GET",
+      "path": "/api/aria/feed",
+      "status": 200,
+      "body": "{\"feed\":[{\"lead_id\":\"69df9e33ce471fe6bafaba37\",\"lead_name\":\"John TestLead\",\"lead_email\":\"john.testlead@example.com\",\"company\":\"Test Corp\",\"aria_state\":\"CONVERSATION_ACTIVE\",\"icp_tier\":\"cold\",\"icp_scor",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "aria_today",
+      "method": "GET",
+      "path": "/api/aria/command-center/ai-summary",
+      "status": 200,
+      "body": "{\"tenant_id\":\"ten_demo\",\"summary\":\"**What happened.**\\n\\nThe pipeline came to a standstill this week with zero new leads entering the funnel and no active conversations in progress. Three leads were q",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "integrations",
+      "method": "GET",
+      "path": "/api/integrations/providers/list",
+      "status": 200,
+      "body": "{\"providers\":[{\"id\":\"google\",\"label\":\"Google\",\"scopes\":[\"https://www.googleapis.com/auth/gmail.readonly\",\"https://www.googleapis.com/auth/gmail.send\",\"https://www.googleapis.com/auth/calendar.events\",",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "integrations",
+      "method": "GET",
+      "path": "/api/pt/integrations",
+      "status": 200,
+      "body": "{\"primary\":[{\"name\":\"saleshandy\",\"status\":\"connected\",\"webhook_url\":null,\"webhook_secret_set\":false,\"api_key_masked\":\"\u2022\u2022\u2022\u2022ase3\",\"last_sync_at\":\"2026-05-28T13:24:26.322076+00:00\",\"error_log\":\"Saleshand",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "integrations",
+      "method": "GET",
+      "path": "/api/integrations/validate-key/status",
+      "status": 200,
+      "body": "{\"provider\":\"validate-key\",\"status\":\"not_connected\",\"configured\":false,\"connected\":false,\"scopes\":[],\"last_sync_at\":null,\"connected_at\":null,\"connected_by_name\":null,\"error_message\":null}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "integrations",
+      "method": "GET",
+      "path": "/api/integrations/validate-key/history",
+      "status": 200,
+      "body": "{\"count\":0,\"items\":[]}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"Saleshandy rejected this key. Copy the FULL key from Saleshandy \u2192 Settings \u2192 API.\",\"provider\":\"saleshandy\",\"elapsed_ms\":452}",
+      "classification": "HEALTHY",
+      "note": "garbage key for saleshandy"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"Proxycurl/NinjaPear rejected this key. Generate a new one at nubela.co \u2192 Account \u2192 API.\",\"provider\":\"proxycurl\",\"elapsed_ms\":821}",
+      "classification": "HEALTHY",
+      "note": "garbage key for proxycurl"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"Serper rejected this key. Re-copy from serper.dev \u2192 API.\",\"provider\":\"serper\",\"elapsed_ms\":79}",
+      "classification": "HEALTHY",
+      "note": "garbage key for serper"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"Apollo rejected this key. Re-copy from Apollo \u2192 Settings \u2192 API.\",\"provider\":\"apollo\",\"elapsed_ms\":264}",
+      "classification": "HEALTHY",
+      "note": "garbage key for apollo"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"Resend rejected this key. Re-copy from resend.com \u2192 API Keys.\",\"provider\":\"resend\",\"elapsed_ms\":118}",
+      "classification": "HEALTHY",
+      "note": "garbage key for resend"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 200,
+      "body": "{\"valid\":false,\"message\":\"360dialog rejected this key. Confirm it's a Cloud API key (not legacy).\",\"provider\":\"360dialog\",\"elapsed_ms\":425}",
+      "classification": "HEALTHY",
+      "note": "garbage key for 360dialog"
+    },
+    {
+      "category": "integrations",
+      "method": "POST",
+      "path": "/api/integrations/validate-key",
+      "status": 404,
+      "body": "{\"detail\":\"No validator for provider: lemlist. Known: ['360dialog', 'apollo', 'proxycurl', 'resend', 'saleshandy', 'serper']\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "garbage key for lemlist"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/calendly/connect",
+      "status": 503,
+      "body": "{\"detail\":\"calendly OAuth not configured. Set CALENDLY_CLIENT_ID and CALENDLY_CLIENT_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "calendly oauth"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/gmail/connect",
+      "status": 503,
+      "body": "{\"detail\":\"gmail OAuth not configured. Set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "gmail oauth"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/outlook/connect",
+      "status": 503,
+      "body": "{\"detail\":\"outlook OAuth not configured. Set MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "outlook oauth"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/meta/connect",
+      "status": 503,
+      "body": "{\"detail\":\"meta OAuth not configured. Set META_APP_ID and META_APP_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "meta oauth"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/linkedin/connect",
+      "status": 503,
+      "body": "{\"detail\":\"linkedin OAuth not configured. Set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "linkedin oauth"
+    },
+    {
+      "category": "oauth",
+      "method": "GET",
+      "path": "/api/integrations/googleads/connect",
+      "status": 503,
+      "body": "{\"detail\":\"googleads OAuth not configured. Set GOOGLE_ADS_CLIENT_ID and GOOGLE_ADS_CLIENT_SECRET in backend/.env, restart, and retry.\"}",
+      "classification": "DEGRADED",
+      "note": "googleads oauth"
+    },
+    {
+      "category": "webhooks",
+      "method": "GET",
+      "path": "/api/webhooks/health",
+      "status": 200,
+      "body": "{\"ok\":true,\"providers\":[\"resend\",\"360dialog\",\"linkedin_polling\"]}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "webhooks",
+      "method": "POST",
+      "path": "/api/webhooks/resend",
+      "status": 200,
+      "body": "{\"ok\":true,\"ignored\":\"email.delivered\"}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "webhooks",
+      "method": "POST",
+      "path": "/api/webhooks/360dialog",
+      "status": 200,
+      "body": "{\"ok\":true,\"ignored\":true}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "webhooks",
+      "method": "POST",
+      "path": "/api/webhooks/calendly",
+      "status": 200,
+      "body": "{\"received\":true}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "webhooks",
+      "method": "POST",
+      "path": "/api/webhooks/meta-leads",
+      "status": 200,
+      "body": "{\"received\":true,\"leads_created\":0}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "icps",
+      "method": "GET",
+      "path": "/api/icps",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "icps",
+      "method": "POST",
+      "path": "/api/icps",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "reports",
+      "method": "GET",
+      "path": "/api/reports/icp-channel-matrix",
+      "status": 200,
+      "body": "{\"rows\":[\"hot\",\"warm\",\"cold\"],\"cols\":[\"manual\",\"website_widget\",\"web\",\"website_form\",\"linkedin\"],\"cells\":{\"hot\":{},\"warm\":{\"website_widget\":{\"leads\":14,\"qualified\":0,\"won\":0,\"conversion_pct\":0.0}},\"co",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "reports",
+      "method": "GET",
+      "path": "/api/reports/funnel",
+      "status": 200,
+      "body": "{\"stages\":[{\"stage\":\"Leads Entered\",\"value\":51,\"drop_off\":0.0},{\"stage\":\"Contacted\",\"value\":19,\"drop_off\":62.7},{\"stage\":\"Replied\",\"value\":19,\"drop_off\":0.0},{\"stage\":\"Qualified\",\"value\":4,\"drop_off\":",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "reports",
+      "method": "GET",
+      "path": "/api/reports/channel-performance",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "train_aria",
+      "method": "GET",
+      "path": "/api/aria/training-profile",
+      "status": 200,
+      "body": "{\"data\":{\"what_you_sell\":\"AI sales agents\",\"who_you_sell_to\":\"SMB CEOs\",\"problem_you_solve\":\"Cold-pipeline anxiety\",\"differentiator\":\"24x7 instinct-led outreach\",\"services_or_products\":[\"AI customer-s",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "train_aria",
+      "method": "POST",
+      "path": "/api/aria/training-profile",
+      "status": 405,
+      "body": "{\"detail\":\"Method Not Allowed\"}",
+      "classification": "BROKEN",
+      "note": ""
+    },
+    {
+      "category": "admin_v3",
+      "method": "GET",
+      "path": "/api/admin/v3/overview",
+      "status": 200,
+      "body": "{\"workspaces\":{\"total\":38,\"active\":38,\"inactive\":0},\"tenants_total\":38,\"leads_today\":1,\"active_conversations\":0,\"insights_today\":0,\"api_cost_today_usd\":0.0,\"errors_24h\":0}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "admin_v3",
+      "method": "GET",
+      "path": "/api/admin/v3/workspaces",
+      "status": 200,
+      "body": "{\"workspaces\":[{\"id\":\"ten_demo\",\"name\":\"GenLeadAI Demo\",\"mode\":\"hybrid\",\"owner_email\":\"admin@demo.com\",\"tenant_count\":1,\"lead_volume\":137,\"created_at\":\"2026-05-27T07:57:04.883655+00:00\",\"is_active\":tr",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "admin_v3",
+      "method": "GET",
+      "path": "/api/admin/v3/usage",
+      "status": 200,
+      "body": "{\"month_start\":\"2026-05-01T00:00:00+00:00\",\"rows\":[{\"workspace_id\":\"ten_demo\",\"workspace_name\":\"GenLeadAI Demo\",\"plan\":\"starter\",\"providers\":{},\"total_cost_usd_month\":0},{\"workspace_id\":\"ten_pietentia",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "admin_v3",
+      "method": "GET",
+      "path": "/api/admin/v3/system-health",
+      "status": 200,
+      "body": "{\"job_status\":{},\"loops\":{\"b2b_insight_scan\":{\"running\":true,\"count_24h\":0,\"latest_at\":null},\"outreach_engine\":{\"running\":true,\"count_24h\":0,\"latest_at\":null},\"crm_sync\":{\"running\":true,\"count_24h\":0,",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "billing",
+      "method": "GET",
+      "path": "/api/billing/plans",
+      "status": 200,
+      "body": "{\"plans\":[{\"id\":\"starter\",\"name\":\"ARIA Starter\",\"amount\":49.0,\"leads\":500,\"ai_credits\":100,\"tagline\":\"For small teams that need basic lead control\",\"headline_features\":[\"Manual lead entry & dashboard\"",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "billing",
+      "method": "GET",
+      "path": "/api/billing/current-plan",
+      "status": 200,
+      "body": "{\"plan_id\":\"starter\",\"name\":\"ARIA Starter\",\"amount\":49.0,\"tagline\":\"For small teams that need basic lead control\",\"contact_sales\":false,\"features\":{\"lead_inbox\":true,\"lead_profile\":true,\"manual_lead_e",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "billing",
+      "method": "GET",
+      "path": "/api/billing/transactions",
+      "status": 200,
+      "body": "{\"transactions\":[{\"id\":\"tx_d2b8ec02e20549\",\"tenant_id\":\"ten_demo\",\"user_email\":\"admin@demo.com\",\"session_id\":\"cs_test_a1W3lPSMmeH5nvrx7UgRFvHNgyu5Uhjyi0dHKPSxpGXetn6gDza8PCWQUr\",\"package_id\":\"diy_to_d",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "pt_setup",
+      "method": "GET",
+      "path": "/api/pt/setup/health",
+      "status": 200,
+      "body": "{\"items\":[{\"id\":\"email\",\"label\":\"Email sender\",\"status\":\"ok\",\"detail\":\"Using platform default. Add a workspace Resend key for branded sender.\",\"cta\":\"Settings \u2192 Email Sender\",\"cta_path\":\"/pt/settings\"",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "assets",
+      "method": "GET",
+      "path": "/api/assets",
+      "status": 200,
+      "body": "{\"assets\":[]}",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "assets",
+      "method": "POST",
+      "path": "/api/assets/upload",
+      "status": 200,
+      "body": "{\"asset_type\":\"brand_deck\",\"name\":\"iter136.txt\",\"storage_path\":\"genleadai/assets/3fa47a46-99fd-4f0b-85de-b671845701df.txt\",\"original_filename\":\"iter136.txt\",\"file_size_kb\":0.01,\"mime_type\":\"text/plain",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "assets",
+      "method": "GET",
+      "path": "/api/assets/download/6a1af5b5ced5e03d67704def",
+      "status": 200,
+      "body": "hello iter136",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "ai",
+      "method": "POST",
+      "path": "/api/ai/score",
+      "status": 422,
+      "body": "{\"detail\":\"lead_id: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "ai",
+      "method": "POST",
+      "path": "/api/ai/email-generate",
+      "status": 422,
+      "body": "{\"detail\":\"lead_id: Field required; goal: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "ai",
+      "method": "POST",
+      "path": "/api/ai/chat",
+      "status": 422,
+      "body": "{\"detail\":\"Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "ai",
+      "method": "POST",
+      "path": "/api/ai/summarize",
+      "status": 422,
+      "body": "{\"detail\":\"lead_id: Field required\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "auto_map",
+      "method": "POST",
+      "path": "/api/aria/auto-map/improve",
+      "status": 200,
+      "body": "{\"suggestions\":[{\"type\":\"missing_channel\",\"message\":\"No lead sources configured. Workflow has zero inbound or outbound channels defined.\",\"fix_hint\":\"Add lead_sources array with at least 3 channels: L",
+      "classification": "HEALTHY",
+      "note": ""
+    },
+    {
+      "category": "master_admin",
+      "method": "GET",
+      "path": "/api/master-admin/overview",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "master_admin",
+      "method": "GET",
+      "path": "/api/master-admin/workspaces",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "master_admin",
+      "method": "GET",
+      "path": "/api/master-admin/users",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "master_admin",
+      "method": "GET",
+      "path": "/api/master-admin/deployments",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "master_admin",
+      "method": "GET",
+      "path": "/api/master-admin/system-health",
+      "status": 404,
+      "body": "{\"detail\":\"Not Found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": ""
+    },
+    {
+      "category": "isolation",
+      "method": "GET",
+      "path": "/api/voice-seeds",
+      "status": 403,
+      "body": "{\"detail\":\"Not a member of requested tenant\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "sales@demo trying ten_pietential \u2014 must NOT leak"
+    },
+    {
+      "category": "isolation",
+      "method": "GET",
+      "path": "/api/leads/6a184205cae64114e6ebe742",
+      "status": 404,
+      "body": "{\"detail\":\"Lead not found\"}",
+      "classification": "HEALTHY-4xx",
+      "note": "sales@demo using ten_demo header to read ten_pietential lead \u2014 must 404"
+    },
+    {
+      "category": "isolation",
+      "method": "GET",
+      "path": "/api/conversations/lead/6a184205cae64114e6ebe742",
+      "status": 200,
+      "body": "{\"thread\":[],\"lead_snapshot\":{\"name\":\"Prospect\",\"first_name\":null,\"email\":null,\"company\":null,\"stage\":null,\"score\":null},\"counts\":{\"outbound\":0,\"inbound\":0,\"activity\":0,\"total\":0}}",
+      "classification": "HEALTHY",
+      "note": "cross-tenant conversation \u2014 must 404"
+    }
+  ]
+}
