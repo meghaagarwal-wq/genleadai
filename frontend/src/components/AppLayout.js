@@ -34,20 +34,25 @@ import AiSummaryDrawer from './AiSummaryDrawer';
 import api from '../config/api';
 
 // ── Nav definition ──────────────────────────────────────────────────────
-// `modes` (optional): when present, the item is only shown when the active
-// workspace's mode is in the list. Same rule for every workspace.
+// iter141 — Reordered per UX spec V6:
+//   Command Center → Instinct → Automation → Conversations → ICPs →
+//   Train ARIA → Integrations → Reports → Settings
+// Approvals is rendered SEPARATELY (V11) — only shown when pending > 0.
 const NAV_PRIMARY = [
   { to: '/app',                label: 'Command Center', icon: House },
   { to: '/app/instinct',       label: 'Instinct Feed',  icon: Brain,        modes: ['b2b', 'hybrid'] },
   { to: '/app/automation',     label: 'Automation',     icon: Lightning,    modes: ['b2c', 'hybrid'] },
   { to: '/app/conversations',  label: 'Conversations',  icon: ChatCircle },
-  { to: '/app/approvals',      label: 'Approvals',       icon: CheckCircle, badge: 'approvals' },
   { to: '/app/icps',           label: 'ICPs',           icon: Target },
   { to: '/app/train-aria',     label: 'Train ARIA',     icon: GraduationCap },
   { to: '/app/integrations',   label: 'Integrations',   icon: Plug },
   { to: '/app/reports',        label: 'Reports',        icon: ChartLineUp },
   { to: '/app/settings',       label: 'Settings',       icon: GearSix },
 ];
+
+// Approvals — V11: only render in sidebar when pending count > 0. Always reachable
+// via the bell, but the sidebar entry stays hidden when there's nothing to do.
+const NAV_APPROVALS = { to: '/app/approvals', label: 'Approvals', icon: CheckCircle, badge: 'approvals' };
 
 const NAV_ADVANCED = [
   { to: '/app/touchpoints',     label: '32-Touchpoint Journey', icon: MapTrifold },
@@ -349,10 +354,20 @@ const AppLayout = ({ children }) => {
     window.dispatchEvent(new Event('aria:tenant-changed-route'));
   };
 
-  const visibleNav = NAV_PRIMARY.filter((item) => !item.modes || item.modes.includes(workspaceType));
-
   // iter119 — pending approval count for the sidebar badge (polled every 60s)
   const [approvalsCount, setApprovalsCount] = useState(0);
+
+  // iter141 — V6/V11: Approvals nav item only injected when pending > 0.
+  // Inserted right after Conversations (index 3 in the spec order).
+  const visibleNav = (() => {
+    const base = NAV_PRIMARY.filter((item) => !item.modes || item.modes.includes(workspaceType));
+    if (approvalsCount > 0) {
+      const idx = base.findIndex((n) => n.to === '/app/conversations');
+      const insertAt = idx >= 0 ? idx + 1 : 4;
+      return [...base.slice(0, insertAt), NAV_APPROVALS, ...base.slice(insertAt)];
+    }
+    return base;
+  })();
   useEffect(() => {
     let cancelled = false;
     const fetchCount = async () => {

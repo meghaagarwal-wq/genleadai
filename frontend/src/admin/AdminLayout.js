@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 const NAV = [
   { to: '/admin', label: 'Overview' },
+  { to: '/admin/applications', label: 'Applications' },  // iter141 — V19 Batch 4
   { to: '/admin/workspaces', label: 'Workspaces' },
   { to: '/admin/usage', label: 'Usage & Billing' },
   { to: '/admin/system', label: 'System Health' },
@@ -522,6 +523,383 @@ const AdminKeyValidation = () => {
   );
 };
 
+// iter141 — V19 Batch 4: /admin/applications review surface.
+// Lists submissions from POST /api/applications with status filter tabs,
+// row click opens a side-drawer detail panel, primary action "Create
+// Workspace" provisions a tenant + invite token.
+const STATUS_LABEL = {
+  new: { label: 'New', cls: 'bg-blue-100 text-blue-700' },
+  reviewing: { label: 'Reviewing', cls: 'bg-amber-100 text-amber-700' },
+  qualified: { label: 'Qualified', cls: 'bg-emerald-100 text-emerald-700' },
+  not_fit: { label: 'Not a Fit', cls: 'bg-rose-100 text-rose-700' },
+  onboarded: { label: 'Onboarded', cls: 'bg-violet-100 text-violet-700' },
+};
+const STATUS_TABS = ['all', 'new', 'reviewing', 'qualified', 'not_fit', 'onboarded'];
+const STATUS_TAB_LABEL = { all: 'All', new: 'New', reviewing: 'Reviewing', qualified: 'Qualified', not_fit: 'Not a Fit', onboarded: 'Onboarded' };
+const TIMELINE_LABEL = { now: 'Yesterday — let\'s go', '1-3_months': '1–3 months', '3-6_months': '3–6 months', exploring: 'Exploring' };
+const BUDGET_LABEL = { under_10k: '<$10K', '10k_50k': '$10K–$50K', '50k_500k': '$50K–$500K', '500k_plus': '$500K+' };
+
+const StatusPill = ({ status }) => {
+  const meta = STATUS_LABEL[status] || { label: status, cls: 'bg-slate-100 text-slate-700' };
+  return <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${meta.cls}`}>{meta.label}</span>;
+};
+
+const AdminApplications = () => {
+  const [items, setItems] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('new');
+  const [selected, setSelected] = useState(null);  // full app doc
+  const [selectedLoading, setSelectedLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const refresh = useCallback(async (status = filter) => {
+    setLoading(true);
+    try {
+      const r = await api.get(`/api/applications?status=${status}&limit=200`);
+      setItems(r.data.items || []);
+      setCounts(r.data.counts || {});
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Could not load applications');
+    } finally { setLoading(false); }
+  }, [filter]);
+  useEffect(() => { refresh(filter); }, [filter, refresh]);
+
+  // Esc to close drawer (V13)
+  useEffect(() => {
+    if (!selected) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setSelected(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected]);
+
+  const openDrawer = async (app) => {
+    setSelected(app);  // optimistic
+    setSelectedLoading(true);
+    try {
+      const r = await api.get(`/api/applications/${app.id}`);
+      setSelected(r.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Could not load application');
+    } finally { setSelectedLoading(false); }
+  };
+
+  const setStatus = async (app_id, status, note = null) => {
+    try {
+      const r = await api.patch(`/api/applications/${app_id}/status`, { status, note });
+      toast.success(`Marked as ${STATUS_LABEL[status]?.label || status}`);
+      setSelected(r.data);
+      refresh(filter);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Update failed');
+    }
+  };
+
+  return (
+    <div data-testid="admin-applications-page">
+      <div className="flex items-end justify-between mb-1">
+        <h1 className="text-2xl font-bold text-slate-900">Applications</h1>
+        <button
+          onClick={() => refresh(filter)}
+          data-testid="admin-applications-refresh"
+          className="text-xs font-semibold text-violet-700 hover:underline"
+        >Refresh</button>
+      </div>
+      <p className="text-sm text-slate-600 mb-5">Public /apply submissions from the marketing funnel.</p>
+
+      {/* Status filter tabs (V19 spec) */}
+      <div className="flex gap-1 mb-5 border-b border-slate-200" data-testid="admin-applications-tabs">
+        {STATUS_TABS.map((s) => {
+          const active = filter === s;
+          const cnt = s === 'all' ? counts.all : counts[s];
+          return (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              data-testid={`admin-applications-tab-${s}`}
+              className={`px-3 py-2 text-sm font-semibold border-b-2 transition-colors ${active ? 'border-violet-600 text-violet-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              {STATUS_TAB_LABEL[s]}
+              {typeof cnt === 'number' && cnt > 0 && (
+                <span className={`ml-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded-full ${active ? 'bg-violet-100 text-violet-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {cnt}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+        {loading ? (
+          <div className="p-8 text-slate-500 text-sm" data-testid="admin-applications-loading">Loading…</div>
+        ) : items.length === 0 ? (
+          <div className="p-12 text-center" data-testid="admin-applications-empty">
+            <p className="text-sm text-slate-500">No applications in this view.</p>
+            <p className="text-xs text-slate-400 mt-1">Submissions from <code>/apply</code> appear here.</p>
+          </div>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3">Applicant</th>
+                <th className="px-4 py-3">Company</th>
+                <th className="px-4 py-3">Timeline</th>
+                <th className="px-4 py-3">Budget</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((row) => (
+                <tr
+                  key={row.id}
+                  className="border-b border-slate-100 hover:bg-violet-50/30 cursor-pointer transition-colors"
+                  onClick={() => openDrawer(row)}
+                  data-testid={`admin-application-row-${row.id}`}
+                >
+                  <td className="px-4 py-3 align-top">
+                    {row.status === 'new' && <span className="inline-block w-2 h-2 rounded-full bg-blue-500" title="New" data-testid={`admin-application-new-dot-${row.id}`} />}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-semibold text-slate-900">{row.full_name}</div>
+                    <div className="text-xs text-slate-500">{row.work_email}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-800">{row.company_name}</div>
+                    <div className="text-xs text-slate-500">{row.industry} · {row.country}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-700">{TIMELINE_LABEL[row.timeline] || row.timeline}</td>
+                  <td className="px-4 py-3 text-xs text-slate-700">{BUDGET_LABEL[row.budget_band] || row.budget_band}</td>
+                  <td className="px-4 py-3"><StatusPill status={row.status} /></td>
+                  <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{row.created_at?.slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Detail drawer */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex justify-end"
+          data-testid="admin-application-drawer"
+          onClick={() => setSelected(null)}
+        >
+          <aside
+            className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Application</div>
+                <h2 className="text-lg font-bold text-slate-900">{selected.full_name}</h2>
+                <div className="text-xs text-slate-500 mt-0.5">{selected.work_email}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusPill status={selected.status} />
+                <button onClick={() => setSelected(null)} className="text-slate-400 hover:text-slate-700 text-xl leading-none px-2" data-testid="admin-application-close">×</button>
+              </div>
+            </header>
+
+            <div className="p-6 space-y-5 text-sm">
+              {selectedLoading && <div className="text-xs text-slate-400">Loading full record…</div>}
+
+              <Section title="About">
+                <Row k="Role">{selected.role}</Row>
+                <Row k="Country">{selected.country}</Row>
+              </Section>
+
+              <Section title="Company">
+                <Row k="Name">{selected.company_name}</Row>
+                {selected.company_url && <Row k="URL"><a href={selected.company_url} target="_blank" rel="noreferrer" className="text-violet-700 underline">{selected.company_url}</a></Row>}
+                <Row k="Industry">{selected.industry}</Row>
+                <Row k="Team">{selected.employees}</Row>
+                {selected.revenue && <Row k="Revenue">{selected.revenue}</Row>}
+              </Section>
+
+              <Section title="Current setup">
+                <p className="text-slate-700 whitespace-pre-wrap">{selected.current_setup}</p>
+                {selected.channels?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {selected.channels.map((c) => <span key={c} className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">{c}</span>)}
+                  </div>
+                )}
+                <Row k="Volume">{selected.current_volume}</Row>
+              </Section>
+
+              <Section title="Pain & goal">
+                <Row k="Biggest pain"><div className="text-slate-700 whitespace-pre-wrap">{selected.biggest_pain}</div></Row>
+                <Row k="Goal"><div className="text-slate-700 whitespace-pre-wrap">{selected.goal}</div></Row>
+                <Row k="Timeline">{TIMELINE_LABEL[selected.timeline] || selected.timeline}</Row>
+                <Row k="Budget">{BUDGET_LABEL[selected.budget_band] || selected.budget_band}</Row>
+                <Row k="Decision-maker ready">{selected.ready_to_start ? 'Yes' : 'No'}</Row>
+              </Section>
+
+              {selected.last_reviewed_by && (
+                <div className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-3">
+                  Last reviewed by {selected.last_reviewed_by} · {selected.last_review_note || 'no note'}
+                </div>
+              )}
+            </div>
+
+            {/* Sticky action bar */}
+            <footer className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-3 flex flex-wrap items-center gap-2 z-10">
+              <button
+                onClick={() => setCreateOpen(true)}
+                disabled={selected.status === 'onboarded'}
+                data-testid="admin-application-create-workspace"
+                className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded"
+              >
+                {selected.status === 'onboarded' ? '✓ Workspace created' : 'Create Workspace →'}
+              </button>
+              <button
+                onClick={() => setStatus(selected.id, 'qualified')}
+                data-testid="admin-application-mark-qualified"
+                className="px-3 py-1.5 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-bold rounded"
+              >Mark Qualified</button>
+              <button
+                onClick={() => setStatus(selected.id, 'reviewing')}
+                data-testid="admin-application-mark-reviewing"
+                className="px-3 py-1.5 border border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-bold rounded"
+              >Reviewing</button>
+              <button
+                onClick={() => {
+                  const note = window.prompt('Optional — why not a fit?');
+                  setStatus(selected.id, 'not_fit', note);
+                }}
+                data-testid="admin-application-mark-not-fit"
+                className="px-3 py-1.5 border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-bold rounded"
+              >Not a Fit</button>
+            </footer>
+          </aside>
+        </div>
+      )}
+
+      {/* Create Workspace modal */}
+      {createOpen && selected && (
+        <CreateWorkspaceModal
+          application={selected}
+          onClose={() => setCreateOpen(false)}
+          onCreated={(data) => {
+            setCreateOpen(false);
+            setSelected({ ...selected, status: 'onboarded' });
+            refresh(filter);
+            toast.success(`Workspace created · ${data.workspace_name}${data.invited_email_sent ? ' · invite emailed' : ''}`);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+const Section = ({ title, children }) => (
+  <div>
+    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1.5">{title}</div>
+    <div className="space-y-1.5">{children}</div>
+  </div>
+);
+const Row = ({ k, children }) => (
+  <div className="text-xs">
+    <span className="text-slate-500">{k}: </span>
+    <span className="text-slate-800 font-medium">{children}</span>
+  </div>
+);
+
+const CreateWorkspaceModal = ({ application, onClose, onCreated }) => {
+  const [name, setName] = useState(application?.company_name || '');
+  const [mode, setMode] = useState('hybrid');
+  const [inviteEmail, setInviteEmail] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  const submit = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/api/applications/${application.id}/create-workspace`, {
+        workspace_name: name.trim(),
+        mode,
+        invite_email: inviteEmail,
+      });
+      onCreated(r.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Workspace creation failed');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      data-testid="create-workspace-modal"
+      onClick={() => !busy && onClose()}
+    >
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-slate-900 mb-1">Create workspace for {application.company_name}</h3>
+        <p className="text-xs text-slate-600 mb-4">Provisions a tenant + sends an invite to <strong>{application.work_email}</strong>.</p>
+
+        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Workspace name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={busy}
+          data-testid="create-workspace-name"
+          className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm mb-3"
+        />
+
+        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Mode</label>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {['b2b', 'b2c', 'hybrid'].map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              disabled={busy}
+              data-testid={`create-workspace-mode-${m}`}
+              className={`px-2 py-1.5 rounded border text-xs font-bold ${mode === m ? 'bg-violet-600 text-white border-violet-600' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+            >{m.toUpperCase()}</button>
+          ))}
+        </div>
+
+        <label className="flex items-start gap-2 text-xs text-slate-700 mb-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.checked)}
+            disabled={busy}
+            data-testid="create-workspace-invite-email"
+            className="mt-0.5"
+          />
+          <span>Send invite email to {application.work_email}</span>
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="px-3 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded"
+          >Cancel</button>
+          <button
+            onClick={submit}
+            disabled={busy || !name.trim()}
+            data-testid="create-workspace-submit"
+            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-bold rounded"
+          >{busy ? 'Creating…' : 'Create & invite →'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const AdminLayout = () => {
   const navigate = useNavigate();
   return (
@@ -558,6 +936,7 @@ const AdminLayout = () => {
         <main className="p-6 lg:p-10">
           <Routes>
             <Route path="/" element={<AdminOverview />} />
+            <Route path="/applications" element={<AdminApplications />} />
             <Route path="/workspaces" element={<AdminWorkspaces />} />
             <Route path="/usage" element={<AdminUsage />} />
             <Route path="/system" element={<AdminSystem />} />

@@ -22,7 +22,7 @@
  *   /api/intel/:id/*                 — IntelTab handles its own calls
  */
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Brain, Calendar, Lightning, PaperPlaneTilt, CaretDown, Sparkle,
   Robot, CheckCircle, Clock, EnvelopeSimple, ChatCircleText, LinkedinLogo, Phone,
@@ -102,10 +102,28 @@ const relativeTime = (iso) => {
 const Lead360 = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  // iter141 — V7: tab state lives in the URL (?tab=intel) so browser
+  // back/forward correctly steps through tabs. Default is 'overview'.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ALLOWED_TABS = ['overview', 'intel', 'automation', 'conversations', 'activity'];
+  const initialTab = ALLOWED_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'overview';
+  const [activeTab, setActiveTabState] = useState(initialTab);
+  const setActiveTab = (t) => {
+    setActiveTabState(t);
+    const next = new URLSearchParams(searchParams);
+    if (t === 'overview') next.delete('tab'); else next.set('tab', t);
+    setSearchParams(next, { replace: false });
+  };
+  // Sync state if the URL changes externally (back/forward).
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    const want = ALLOWED_TABS.includes(t) ? t : 'overview';
+    if (want !== activeTab) setActiveTabState(want);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [lead, setLead] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
   const [connectOpen, setConnectOpen] = useState(false);
 
   const load = useCallback(async () => {

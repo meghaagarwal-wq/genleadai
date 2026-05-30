@@ -16,7 +16,7 @@ export default function NotFound() {
           Aria couldn't find that
         </p>
         <h1 className="text-3xl font-semibold text-slate-900 mb-3">
-          This page isn't part of your workspace
+          This page doesn't exist
         </h1>
         <p className="text-slate-600 text-sm leading-relaxed mb-8">
           The link you followed may be outdated or the page may have moved.
@@ -24,12 +24,12 @@ export default function NotFound() {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
-            to="/"
-            data-testid="not-found-home-btn"
+            to="/app"
+            data-testid="not-found-command-center-btn"
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 transition-colors"
           >
             <House size={18} weight="bold" />
-            Back to dashboard
+            Go to Command Center →
           </Link>
           <button
             type="button"
