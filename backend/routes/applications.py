@@ -401,13 +401,21 @@ async def update_application_status(app_id: str, payload: StatusPatch, current_u
 
 @router.post("/{app_id}/create-workspace", response_model=CreateWorkspaceOut)
 async def create_workspace_from_application(app_id: str, payload: CreateWorkspaceIn, current_user: dict = Depends(_require_master_admin)):
+    """V19 + iter142 — provision the tenant AND write into the canonical
+    `invitations` collection so the existing public flow
+    (`GET /api/public/invitations/{token}` + `POST /api/public/invitations/accept`)
+    works for the applicant. The pre-existing frontend page at /invite/:token
+    handles the actual accept UX (renders workspace name, asks for password,
+    creates the user + membership)."""
     app_doc = _apps.find_one({"id": app_id}, {"_id": 0})
     if not app_doc:
         raise HTTPException(404, "Application not found")
 
     workspace_id = f"ws_{uuid.uuid4().hex[:14]}"
     invite_token = secrets.token_urlsafe(28)
-    now = _now()
+    now_iso = _now()
+    from datetime import timedelta as _td
+    expires_at_iso = (datetime.now(timezone.utc) + _td(days=7)).isoformat()
 
     tenants_col = db["tenants"]
     tenants_col.insert_one({
@@ -416,25 +424,35 @@ async def create_workspace_from_application(app_id: str, payload: CreateWorkspac
         "mode": payload.mode,
         "owner_email": app_doc["work_email"],
         "is_active": True,
-        "created_at": now,
-        "updated_at": now,
+        "created_at": now_iso,
+        "updated_at": now_iso,
         "created_from_application": app_id,
         "created_by_admin": current_user.get("email"),
     })
 
-    invites_col = db["workspace_invites"]
-    invites_col.insert_one({
+    # Write into the canonical `invitations` collection (used by
+    # routes/tenants.get_invite_public + accept_invite). Schema matches
+    # what create_invitation writes — keeps a single source of truth.
+    invitations_col = db["invitations"]
+    invitations_col.insert_one({
+        "id": f"inv_{uuid.uuid4().hex[:14]}",
+        "tenant_id": workspace_id,
+        "tenant_name": payload.workspace_name,
         "token": invite_token,
-        "workspace_id": workspace_id,
-        "workspace_name": payload.workspace_name,
-        "mode": payload.mode,
         "email": app_doc["work_email"],
-        "full_name": app_doc.get("full_name"),
-        "application_id": app_id,
-        "created_at": now,
-        "created_by": current_user.get("email"),
+        "role": "owner",
+        "invited_by": current_user.get("email"),
+        "invited_by_name": current_user.get("full_name") or current_user.get("email"),
+        "expires_at": expires_at_iso,
+        "accepted": False,
+        "accepted_by": None,
         "accepted_at": None,
-        "expires_at": (datetime.now(timezone.utc).timestamp() + 7 * 86400),
+        "revoked": False,
+        "email_sent": False,
+        "email_last_sent_at": None,
+        "email_send_count": 0,
+        "application_id": app_id,
+        "created_at": now_iso,
     })
 
     invite_url = f"https://app.genleadai.com/invite/{invite_token}"
@@ -443,7 +461,7 @@ async def create_workspace_from_application(app_id: str, payload: CreateWorkspac
         {"id": app_id},
         {"$set": {
             "status": "onboarded",
-            "updated_at": now,
+            "updated_at": now_iso,
             "onboarded_workspace_id": workspace_id,
             "onboarded_by_admin": current_user.get("email"),
         }},
@@ -457,6 +475,15 @@ async def create_workspace_from_application(app_id: str, payload: CreateWorkspac
             invite_url=invite_url,
             workspace_name=payload.workspace_name,
         )
+        if invited_email_sent:
+            invitations_col.update_one(
+                {"token": invite_token},
+                {"$set": {
+                    "email_sent": True,
+                    "email_last_sent_at": now_iso,
+                    "email_send_count": 1,
+                }},
+            )
 
     return CreateWorkspaceOut(
         workspace_id=workspace_id,

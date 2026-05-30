@@ -1,3 +1,55 @@
+## Iter 142 — `/invite/{token}` Accept Flow Closed (Mar 1, 2026)
+
+User trigger: "A. Wire the invite accept page. Then D — deploy and wait."
+
+### What shipped
+Closed the onboarding loop: applicants who get invited via the iter141
+admin Create-Workspace modal can now actually click the link and end up
+inside their new workspace.
+
+### The decision
+On audit, an existing `InviteAccept.js` page + canonical
+`/api/public/invitations/{token}` + `/accept` endpoints already existed
+(originally for tenant-owner-initiated invites). Rather than build a
+parallel `/api/invites/*` route, I **refactored
+`/api/applications/{id}/create-workspace`** to write into the SAME
+`invitations` collection with the SAME schema as
+`routes/tenants.create_invitation`. Single source of truth for invites
+across both flows (admin-onboarding + owner-team-add).
+
+### Files changed
+- `/app/backend/routes/applications.py` — create-workspace now inserts
+  into `db.invitations` with the canonical schema (id, tenant_id,
+  tenant_name, token, email, role='owner', invited_by, invited_by_name,
+  expires_at, accepted, revoked, email_sent, application_id,
+  created_at). Sets `email_sent=true` + counts after successful Resend.
+- `/app/backend/routes/__init__.py` — registered + then un-registered
+  invites_router (turned out unnecessary).
+
+No frontend changes — existing `InviteAccept.js` + `/invite/:token` route
+already pointed at the right endpoints.
+
+### Verification (full end-to-end on preview)
+1. POST `/api/applications` (public) → app_id ✓
+2. POST `/api/applications/{id}/create-workspace` (admin) → workspace_id +
+   invite_token + invite_url ✓
+3. GET `/api/public/invitations/{token}` (public) returns 200 with
+   `{tenant_name, role, invited_by_name, expires_at, email_hint}` ✓
+4. POST `/api/public/invitations/accept` (public) returns 200 with
+   `{token, user, tenant}` ✓
+5. Replay → **409 Invite has already been accepted** (single-use enforced) ✓
+6. Application `status` flipped to `onboarded` ✓
+7. Frontend `/invite/{token}` renders correctly: "Join E2EInviteCo ·
+   Megha Agarwal invited you as a owner" with name + email-display +
+   password fields + sticky "Join E2EInviteCo" CTA ✓
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`. Public funnel + admin review
++ workspace provisioning + invite accept all wired end-to-end.
+
+---
+
+
 ## Iter 141 — UX Flow Standardisation BATCH 2+3+4 + Slack/WhatsApp pings (Mar 1, 2026)
 
 User trigger: "all" — execute Batches 2, 3, 4 and the Slack/WhatsApp ping
