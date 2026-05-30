@@ -78,9 +78,8 @@ const TouchpointMap = () => {
     if (tps.length > 0 && !window.confirm(`Generate a fresh ${genCount}-touchpoint journey? This will REPLACE the current ${tps.length} touchpoints.`)) return;
     setGenerating(true);
 
-    // iter138 — sticky progress toast (mirrors the Lead Inbox scan-hot pattern).
-    // Live phase updates so the founder never wonders "is it stuck?".
-    const tid = toast.loading(`Generating ${genCount} touchpoints with Claude…`, { duration: Infinity });
+    // iter138 — sticky progress toast using the proven recursive-setTimeout
+    // pattern from LeadFeed.js scan-hot (more reliable than while+await).
     const PHASE_LABEL = {
       queued: 'Queued',
       building_prompt: 'Preparing the brief',
@@ -89,41 +88,75 @@ const TouchpointMap = () => {
       done: 'Done',
       failed: 'Failed',
     };
+    const baseTitle = `Generating ${genCount} touchpoints with Claude`;
+    const tid = toast.loading(baseTitle, { description: 'Starting…', duration: Infinity });
 
     try {
       const kickoff = await api.post('/api/journey/generate', { count: genCount, replace: true });
       const jobId = kickoff.data?.job_id;
-      if (!jobId) throw new Error('No job_id returned');
-
-      // Poll every 2.5s for up to 5 min
-      const maxAttempts = 120;
-      let attempt = 0;
-      let job = null;
-      while (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 2500));
-        const poll = await api.get(`/api/journey/generate/job/${jobId}`);
-        job = poll.data;
-        const phaseLabel = PHASE_LABEL[job?.phase] || job?.phase || 'Working';
-        const elapsed = job?.elapsed_seconds || 0;
-        toast.loading(
-          `${phaseLabel} · ${elapsed.toFixed(0)}s elapsed${job?.slow_warn ? ' (taking longer than usual)' : ''}`,
-          { id: tid, duration: Infinity },
-        );
-        if (job?.status === 'done' || job?.status === 'failed') break;
-        attempt += 1;
+      if (!jobId) {
+        toast.dismiss(tid);
+        toast.error('Could not start generation — no job id returned');
+        setGenerating(false);
+        return;
       }
 
-      toast.dismiss(tid);
-      if (!job || job.status !== 'done') {
-        throw new Error(job?.error || 'Generation timed out');
-      }
-      const result = job.result || {};
-      setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
-      toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
+      let attempts = 0;
+      const maxAttempts = 120; // 120 * 2.5s = 5 min
+      const poll = async () => {
+        try {
+          const { data: job } = await api.get(`/api/journey/generate/job/${jobId}`);
+          const phaseLabel = PHASE_LABEL[job?.phase] || job?.phase || 'Working';
+          const elapsed = Number(job?.elapsed_seconds || 0);
+          const slowWarn = job?.slow_warn ? ' · taking longer than usual' : '';
+          const msg = `${phaseLabel} · ${Math.round(elapsed)}s elapsed${slowWarn}`;
+
+          if (job?.status === 'done') {
+            toast.dismiss(tid);
+            const result = job.result || {};
+            setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
+            toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
+            setGenerating(false);
+            return;
+          }
+          if (job?.status === 'failed') {
+            toast.dismiss(tid);
+            toast.error(`Generation failed: ${job.error || 'unknown error'}`);
+            setGenerating(false);
+            return;
+          }
+
+          // Update sticky toast — sonner re-renders the `description` field
+          // reliably when toast.loading() is called with the same id.
+          toast.loading(baseTitle, { id: tid, description: msg, duration: Infinity });
+
+          attempts += 1;
+          if (attempts >= maxAttempts) {
+            toast.dismiss(tid);
+            toast.error('Generation timed out after 5 minutes.');
+            setGenerating(false);
+            return;
+          }
+          setTimeout(poll, 2500);
+        } catch (err) {
+          // Transient error — keep polling for a few tries before giving up.
+          attempts += 1;
+          if (attempts >= 5) {
+            toast.dismiss(tid);
+            toast.error('Lost connection to the generate job.');
+            setGenerating(false);
+            return;
+          }
+          setTimeout(poll, 3000);
+        }
+      };
+      // First poll runs after 2s so the user sees the initial spinner.
+      setTimeout(poll, 2000);
     } catch (e) {
       toast.dismiss(tid);
       toast.error(e.response?.data?.detail || e.message || 'Generation failed');
-    } finally { setGenerating(false); }
+      setGenerating(false);
+    }
   };
 
   const addBlank = async () => {
