@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="10" failures="15" skipped="0" tests="36" time="3.869" timestamp="2026-05-30T13:39:24.711615+00:00" hostname="agent-env-0ba9a290-1bd1-435d-b5fb-f5291b2cace4"><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_command_center_moved_route_still_mounted" time="1.107" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_ttv_milestones_moved_route" time="0.254" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_api_keys_moved_routes_round_trip" time="0.259" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_audit_log_moved_route_admin_only" time="0.263" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_export_leads_csv_moved_route" time="0.251" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_form_submit_public_route" time="0.002" /><testcase classname="backend.tests.test_iter125_refactor_and_drag" name="test_journey_drag_reorder_full_payload" time="0.263" /><testcase classname="backend.tests.test_iter126_lead360_and_csv" name="test_lead_counts_shape" time="0.252" /><testcase classname="backend.tests.test_iter126_lead360_and_csv" name="test_lead_counts_tenant_isolated" time="0.251" /><testcase classname="backend.tests.test_iter126_lead360_and_csv" name="test_csv_import_preview_returns_mapping" time="0.253" /><testcase classname="backend.tests.test_iter126_lead360_and_csv" name="test_journey_insert_blank_after_step" time="0.272" /><testcase classname="backend.tests.test_iter127_scan_hot" name="test_scan_hot_returns_queued_count" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter127_scan_hot.py:38: in test_scan_hot_returns_queued_count
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter127_scan_hot.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter127_scan_hot" name="test_scan_hot_high_threshold_returns_zero" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter127_scan_hot.py:52: in test_scan_hot_high_threshold_returns_zero
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter127_scan_hot.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter127_scan_hot" name="test_scan_hot_validates_input" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter127_scan_hot.py:64: in test_scan_hot_validates_input
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter127_scan_hot.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter128_reply_box" name="test_send_validation_empty_body" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter128_reply_box.py:47: in test_send_validation_empty_body
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter128_reply_box.py:29: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter128_reply_box" name="test_send_validation_unsupported_channel" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter128_reply_box.py:53: in test_send_validation_unsupported_channel
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter128_reply_box.py:29: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter128_reply_box" name="test_send_whatsapp_logged_only_when_no_provider" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter128_reply_box.py:64: in test_send_whatsapp_logged_only_when_no_provider
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter128_reply_box.py:29: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter128_reply_box" name="test_send_as_aria_default" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter128_reply_box.py:84: in test_send_as_aria_default
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter128_reply_box.py:29: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter129_draft_with_aria" name="test_draft_bad_channel" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter129_draft_with_aria.py:46: in test_draft_bad_channel
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter129_draft_with_aria.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter129_draft_with_aria" name="test_draft_unknown_lead" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter129_draft_with_aria.py:53: in test_draft_unknown_lead
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter129_draft_with_aria.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter129_draft_with_aria" name="test_draft_returns_text_for_each_channel" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter129_draft_with_aria.py:59: in test_draft_returns_text_for_each_channel
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter129_draft_with_aria.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter129_draft_with_aria" name="test_draft_honours_user_steer" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter129_draft_with_aria.py:83: in test_draft_honours_user_steer
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter129_draft_with_aria.py:28: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter130_draft_variants" name="test_attempt_field_echoed" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter130_draft_variants.py:43: in test_attempt_field_echoed
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter130_draft_variants.py:25: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter130_draft_variants" name="test_attempt_out_of_range" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter130_draft_variants.py:53: in test_attempt_out_of_range
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter130_draft_variants.py:25: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter130_draft_variants" name="test_variants_are_distinct_when_no_intel" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter130_draft_variants.py:64: in test_variants_are_distinct_when_no_intel
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter130_draft_variants.py:25: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter130_draft_variants" name="test_default_attempt_is_one" time="0.002"><failure message="AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code">backend/tests/test_iter130_draft_variants.py:82: in test_default_attempt_is_one
+    token = _login(client)
+            ^^^^^^^^^^^^^^
+backend/tests/test_iter130_draft_variants.py:25: in _login
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_create_list_delete_roundtrip" time="0.002"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_rejects_short_text" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_rejects_bad_channel" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_patch_toggles_active" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_preview_returns_tone_block" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_channel_filtering" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter131_voice_training" name="test_cap_enforced" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter131_voice_training.py:22: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter134_scan_progress" name="test_scan_hot_returns_batch_id" time="0.002"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter134_scan_progress.py:23: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter134_scan_progress" name="test_scan_status_returns_shape" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter134_scan_progress.py:23: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase><testcase classname="backend.tests.test_iter134_scan_progress" name="test_scan_status_404_unknown_batch" time="0.000"><error message="failed on setup with &quot;AssertionError: {&quot;error&quot;:&quot;Rate limit exceeded: 10 per 1 minute&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code&quot;">backend/tests/test_iter134_scan_progress.py:23: in token
+    assert r.status_code == 200, r.text
+E   AssertionError: {"error":"Rate limit exceeded: 10 per 1 minute"}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429 Too Many Requests]&gt;.status_code</error></testcase></testsuite></testsuites>
