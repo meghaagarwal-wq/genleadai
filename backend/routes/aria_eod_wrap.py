@@ -1,18 +1,11 @@
 """iter108 — ACTION 3 (continued): EOD-wrap module extracted from server.py.
 
-Six endpoints + background loop that emails the founder a 6pm summary of
-the day's outbound activity. Self-contained except for two helpers that
-still live in server.py:
-  - `_compute_call_priority` (used to render tomorrow's top-3 calls)
-  - `_fmt_inr`               (currency formatter)
-Both are imported lazily inside the compute function to avoid a circular
-import at module load.
-
 Endpoints:
   - GET    /api/aria/eod-wrap/config
   - PUT    /api/aria/eod-wrap/config
   - POST   /api/aria/eod-wrap/send-now
   - GET    /api/aria/eod-wrap/preview
+  - GET    /api/aria/eod-wrap/last        (iter136 — added for UI parity)
   - GET    /api/aria/today                (light snapshot for dashboard)
 
 Background loop `eod_wrap_loop` runs every 60s; fires once per local-day
@@ -22,12 +15,41 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import resend
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
+
+
+_RESEND_SANDBOX_RE = re.compile(
+    r"verify a domain at resend\.com/domains|testing emails to your own|sandbox|not verified",
+    re.I,
+)
+
+
+def _classify_send_error(err: str) -> dict:
+    """Classify a Resend (or generic) send error into a UI-friendly payload."""
+    if not err:
+        return {"code": "unknown", "user_message": "Send failed for an unknown reason.", "status": 503}
+    if _RESEND_SANDBOX_RE.search(err):
+        return {
+            "code": "resend_sandbox_or_unverified_domain",
+            "user_message": (
+                "Resend is in sandbox mode (free tier) or your sending domain isn't verified. "
+                "Verify a domain at resend.com/domains and set SENDER_EMAIL on that domain to send to any recipient."
+            ),
+            "status": 503,
+        }
+    if "no_resend_key" in err or "no_recipient" in err:
+        return {
+            "code": err,
+            "user_message": "Resend isn't connected for this workspace. Add your Resend API key under Integrations.",
+            "status": 503,
+        }
+    return {"code": "send_failed", "user_message": err[:200], "status": 503}
 
 from deps import (
     activities_collection,
@@ -321,10 +343,32 @@ async def send_eod_wrap_now(current_user: dict = Depends(get_current_user)):
     tz_off = float((cfg or {}).get("timezone_offset_hours") or 0.0)
     if not recipient:
         raise HTTPException(status_code=400, detail="No recipient email configured. Set it in Settings → ARIA → End-of-Day Wrap.")
-    res = await _send_eod_wrap(recipient, tz_off_hours=tz_off, manual=True)
+    try:
+        res = await _send_eod_wrap(recipient, tz_off_hours=tz_off, manual=True)
+    except Exception as e:  # noqa: BLE001
+        # Defensive: _send_eod_wrap already catches; this is belt-and-suspenders
+        # so a rogue exception (e.g. resend.exceptions.ResendError outside the
+        # SDK send call) cannot leak a 500 traceback to the client.
+        info = _classify_send_error(str(e))
+        raise HTTPException(status_code=info["status"], detail=info)
     if not res.get("sent"):
-        raise HTTPException(status_code=500, detail=f"Failed to send: {res.get('error')}")
+        info = _classify_send_error(res.get("error", ""))
+        raise HTTPException(status_code=info["status"], detail=info)
     return res
+
+
+@router.get("/api/aria/eod-wrap/last")
+async def eod_wrap_last(current_user: dict = Depends(get_current_user)):
+    """iter136 — UI-parity endpoint matching sibling features
+    (/api/aria/morning-brief/last, /api/aria/approval-digest/last).
+    Returns the most recent send metadata persisted by `_send_eod_wrap`."""
+    cfg = _get_eod_wrap_config() or {}
+    return {
+        "last_sent_at": cfg.get("last_sent_at"),
+        "last_sent_date": cfg.get("last_sent_date"),
+        "last_sent_touches": cfg.get("last_sent_touches", 0),
+        "last_sent_manual": cfg.get("last_sent_manual", False),
+    }
 
 
 @router.get("/api/aria/eod-wrap/preview")

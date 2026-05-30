@@ -11,7 +11,8 @@ Endpoints (all tenant-scoped via `get_active_tenant`)
   PATCH  /api/journey/touchpoints/{id}            — edit fields
   DELETE /api/journey/touchpoints/{id}            — remove
   POST   /api/journey/touchpoints/reorder         — bulk reorder
-  POST   /api/journey/generate                    — generate all 32 via Claude
+  POST   /api/journey/generate                    — kick off async job, returns {job_id}
+  GET    /api/journey/generate/job/{job_id}       — poll job status (iter136 — added)
   POST   /api/journey/touchpoints/{id}/regenerate — regen a single touchpoint
 
 Document shape
@@ -23,6 +24,7 @@ Document shape
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -41,6 +43,10 @@ router = APIRouter(prefix="/api/journey", tags=["journey"])
 
 _touchpoints_col = db["journey_touchpoints"]
 _touchpoints_col.create_index([("tenant_id", 1), ("number", 1)])
+
+# iter136 — async job tracker for /generate so we never hit the 60s gateway ceiling.
+_generate_jobs_col = db["journey_generate_jobs"]
+_generate_jobs_col.create_index([("tenant_id", 1), ("created_at", -1)])
 
 _ALLOWED_CHANNELS = {"whatsapp", "email", "linkedin", "sms", "call"}
 
@@ -171,76 +177,151 @@ def _profile_summary(tenant_id: str) -> str:
 
 @router.post("/generate")
 async def generate_journey(payload: GenerateIn, tenant: dict = Depends(get_active_tenant)):
-    """Claude-sonnet-4-5 generates a full N-touchpoint sequence in the
-    workspace brand voice. Replaces existing touchpoints by default."""
+    """iter136 — Convert to async-job pattern.
+
+    Returns {job_id, eta_seconds} immediately. The actual Claude call runs
+    in a background asyncio task and writes results to journey_generate_jobs.
+    Client polls GET /api/journey/generate/job/{job_id} until status='done'
+    or 'failed'.
+    """
     if payload.count < 1 or payload.count > 64:
         raise HTTPException(400, "count must be between 1 and 64")
-    profile = _profile_summary(tenant["id"])
 
-    system = (
-        "You are ARIA, an expert B2B/B2C outreach sequence designer. Output STRICT JSON only — "
-        "no preamble, no markdown fences. Schema: "
-        '{"touchpoints":[{"number":int,"channel":"whatsapp|email|linkedin|sms|call",'
-        '"timing":"Day N" OR "Day N if no reply" OR "Day N if opened but not replied",'
-        '"message_body":"<150 words in the workspace brand voice>",'
-        '"goal":"<1-line goal>","conditional_logic":"<plain English: if X → action>"}]}\n'
-        "Rules: every touchpoint number is unique and sequential 1..N. Mix channels — "
-        "weight whatsapp/email/linkedin highest, allow occasional sms/call. Every "
-        "message_body is under 150 words, addressed to {{first_name}}, references the "
-        "buyer's problem, and ends with one specific question or CTA. conditional_logic "
-        "must include at least one branch (skip/end/loop) for the sequence to feel adaptive."
+    job_id = f"jgj_{uuid.uuid4().hex[:14]}"
+    now = _now()
+    eta = max(15, payload.count * 2)  # roughly 2s/touchpoint
+
+    _generate_jobs_col.insert_one({
+        "job_id": job_id,
+        "tenant_id": tenant["id"],
+        "status": "queued",
+        "phase": "queued",
+        "count_requested": payload.count,
+        "replace": payload.replace,
+        "created_at": now,
+        "updated_at": now,
+        "eta_seconds": eta,
+        "result": None,
+        "error": None,
+    })
+
+    asyncio.create_task(_run_generate_job(job_id, tenant["id"], payload.count, payload.replace))
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "eta_seconds": eta,
+        "hint": f"Generating {payload.count} touchpoints via Claude — poll /api/journey/generate/job/{job_id} every 2-3s.",
+    }
+
+
+@router.get("/generate/job/{job_id}")
+async def get_generate_job(job_id: str, tenant: dict = Depends(get_active_tenant)):
+    job = _generate_jobs_col.find_one(
+        {"job_id": job_id, "tenant_id": tenant["id"]},
+        {"_id": 0},
     )
-    prompt = (
-        f"Generate a {payload.count}-step outbound journey for this workspace.\n\n"
-        f"WORKSPACE PROFILE:\n{profile}\n\n"
-        f"Return exactly {payload.count} touchpoints, numbered 1..{payload.count}."
-    )
+    if not job:
+        raise HTTPException(404, "Job not found")
+    # Compute elapsed for the UI progress bar.
+    try:
+        created = datetime.fromisoformat(job["created_at"])
+        elapsed = (datetime.now(timezone.utc) - created).total_seconds()
+        job["elapsed_seconds"] = round(elapsed, 1)
+        job["slow_warn"] = elapsed > 90 and job["status"] not in ("done", "failed")
+    except Exception:
+        job["elapsed_seconds"] = 0
+        job["slow_warn"] = False
+    return job
+
+
+async def _run_generate_job(job_id: str, tenant_id: str, count: int, replace: bool):
+    """Background worker — does the actual Claude call + Mongo writes."""
+    def _patch(**kw):
+        kw["updated_at"] = _now()
+        _generate_jobs_col.update_one({"job_id": job_id}, {"$set": kw})
 
     try:
-        data = await claude_call(
-            task_type=TaskType.TOUCHPOINT_GENERATION,
-            system=system,
-            prompt=prompt,
-            tenant_id=tenant["id"],
-            session_id=f"journey-gen-{tenant['id']}",
-            response_format="json",
-            sanitize_user_input=True,
+        _patch(status="running", phase="building_prompt")
+        profile = _profile_summary(tenant_id)
+
+        system = (
+            "You are ARIA, an expert B2B/B2C outreach sequence designer. Output STRICT JSON only — "
+            "no preamble, no markdown fences. Schema: "
+            '{"touchpoints":[{"number":int,"channel":"whatsapp|email|linkedin|sms|call",'
+            '"timing":"Day N" OR "Day N if no reply" OR "Day N if opened but not replied",'
+            '"message_body":"<150 words in the workspace brand voice>",'
+            '"goal":"<1-line goal>","conditional_logic":"<plain English: if X → action>"}]}\n'
+            "Rules: every touchpoint number is unique and sequential 1..N. Mix channels — "
+            "weight whatsapp/email/linkedin highest, allow occasional sms/call. Every "
+            "message_body is under 150 words, addressed to {{first_name}}, references the "
+            "buyer's problem, and ends with one specific question or CTA. conditional_logic "
+            "must include at least one branch (skip/end/loop) for the sequence to feel adaptive."
         )
-    except ClaudeServiceError as e:
-        raise HTTPException(502, f"Journey generation failed: {str(e)[:160]}")
+        prompt = (
+            f"Generate a {count}-step outbound journey for this workspace.\n\n"
+            f"WORKSPACE PROFILE:\n{profile}\n\n"
+            f"Return exactly {count} touchpoints, numbered 1..{count}."
+        )
 
-    raw = data.get("touchpoints") if isinstance(data, dict) else data
-    if not isinstance(raw, list) or not raw:
-        raise HTTPException(502, "Claude returned no touchpoints")
+        _patch(phase="claude_generating")
 
-    if payload.replace:
-        _touchpoints_col.delete_many({"tenant_id": tenant["id"]})
+        try:
+            data = await claude_call(
+                task_type=TaskType.TOUCHPOINT_GENERATION,
+                system=system,
+                prompt=prompt,
+                tenant_id=tenant_id,
+                session_id=f"journey-gen-{tenant_id}",
+                response_format="json",
+                sanitize_user_input=True,
+            )
+        except ClaudeServiceError as e:
+            _patch(status="failed", phase="failed", error=f"Claude call failed: {str(e)[:200]}")
+            return
 
-    inserted: List[dict] = []
-    now = _now()
-    for i, t in enumerate(raw[: payload.count], start=1):
-        ch = str(t.get("channel") or "email").lower().strip()
-        if ch not in _ALLOWED_CHANNELS:
-            ch = "email"
-        doc = {
-            "id": f"tp_{uuid.uuid4().hex[:12]}",
-            "tenant_id": tenant["id"],
-            "number": int(t.get("number") or i),
-            "channel": ch,
-            "timing": str(t.get("timing") or f"Day {i}")[:120],
-            "message_body": str(t.get("message_body") or "")[:2000],
-            "goal": str(t.get("goal") or "")[:240],
-            "conditional_logic": str(t.get("conditional_logic") or "")[:400],
-            "created_at": now,
-            "updated_at": now,
-            "generated_by": "claude",
-        }
-        _touchpoints_col.insert_one(dict(doc))
-        doc.pop("_id", None)
-        inserted.append(doc)
+        raw = data.get("touchpoints") if isinstance(data, dict) else data
+        if not isinstance(raw, list) or not raw:
+            _patch(status="failed", phase="failed", error="Claude returned no touchpoints")
+            return
 
-    inserted.sort(key=lambda x: x["number"])
-    return {"touchpoints": inserted, "count": len(inserted), "generated_by": "claude"}
+        _patch(phase="persisting")
+
+        if replace:
+            _touchpoints_col.delete_many({"tenant_id": tenant_id})
+
+        inserted: List[dict] = []
+        now = _now()
+        for i, t in enumerate(raw[:count], start=1):
+            ch = str(t.get("channel") or "email").lower().strip()
+            if ch not in _ALLOWED_CHANNELS:
+                ch = "email"
+            doc = {
+                "id": f"tp_{uuid.uuid4().hex[:12]}",
+                "tenant_id": tenant_id,
+                "number": int(t.get("number") or i),
+                "channel": ch,
+                "timing": str(t.get("timing") or f"Day {i}")[:120],
+                "message_body": str(t.get("message_body") or "")[:2000],
+                "goal": str(t.get("goal") or "")[:240],
+                "conditional_logic": str(t.get("conditional_logic") or "")[:400],
+                "created_at": now,
+                "updated_at": now,
+                "generated_by": "claude",
+            }
+            _touchpoints_col.insert_one(dict(doc))
+            doc.pop("_id", None)
+            inserted.append(doc)
+
+        inserted.sort(key=lambda x: x["number"])
+        _patch(
+            status="done",
+            phase="done",
+            result={"touchpoints": inserted, "count": len(inserted), "generated_by": "claude"},
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("journey/generate background job failed")
+        _patch(status="failed", phase="failed", error=str(e)[:200])
 
 
 @router.post("/touchpoints/{tp_id}/regenerate")

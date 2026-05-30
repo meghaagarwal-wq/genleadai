@@ -78,11 +78,31 @@ const TouchpointMap = () => {
     if (tps.length > 0 && !window.confirm(`Generate a fresh ${genCount}-touchpoint journey? This will REPLACE the current ${tps.length} touchpoints.`)) return;
     setGenerating(true);
     try {
-      const { data } = await api.post('/api/journey/generate', { count: genCount, replace: true });
-      setTps((data.touchpoints || []).sort((a, b) => a.number - b.number));
-      toast.success(`Generated ${data.count} touchpoints with Claude`);
+      // iter136 — async-job pattern (was synchronous → 60s gateway timeout)
+      const kickoff = await api.post('/api/journey/generate', { count: genCount, replace: true });
+      const jobId = kickoff.data?.job_id;
+      if (!jobId) throw new Error('No job_id returned');
+
+      // Poll every 2.5s for up to 5 min
+      const maxAttempts = 120;
+      let attempt = 0;
+      let job = null;
+      while (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const poll = await api.get(`/api/journey/generate/job/${jobId}`);
+        job = poll.data;
+        if (job?.status === 'done' || job?.status === 'failed') break;
+        attempt += 1;
+      }
+
+      if (!job || job.status !== 'done') {
+        throw new Error(job?.error || 'Generation timed out');
+      }
+      const result = job.result || {};
+      setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
+      toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Generation failed');
+      toast.error(e.response?.data?.detail || e.message || 'Generation failed');
     } finally { setGenerating(false); }
   };
 
