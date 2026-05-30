@@ -56,6 +56,9 @@ const TouchpointMap = () => {
   const [view, setView] = useState('flowchart');
   const [generating, setGenerating] = useState(false);
   const [genCount, setGenCount] = useState(32);
+  // iter139 — state-driven progress banner (was: sonner toast, which froze
+  // on update due to sonner v2's loading-toast deduplication).
+  const [genProgress, setGenProgress] = useState(null); // {phase, elapsed, slowWarn}
 
   const load = async () => {
     setLoading(true);
@@ -77,85 +80,79 @@ const TouchpointMap = () => {
   const generateAll = async () => {
     if (tps.length > 0 && !window.confirm(`Generate a fresh ${genCount}-touchpoint journey? This will REPLACE the current ${tps.length} touchpoints.`)) return;
     setGenerating(true);
+    // Estimated time: ~5s per touchpoint (Claude generates the full sequence in one call,
+    // so total time is dominated by output size).
+    const estimatedSec = Math.max(15, genCount * 5);
+    setGenProgress({ elapsedClient: 0, estimatedSec, slowWarn: false });
 
-    // iter138 — sticky progress toast using the proven recursive-setTimeout
-    // pattern from LeadFeed.js scan-hot (more reliable than while+await).
-    const PHASE_LABEL = {
-      queued: 'Queued',
-      building_prompt: 'Preparing the brief',
-      claude_generating: 'Claude is writing',
-      persisting: 'Saving touchpoints',
-      done: 'Done',
-      failed: 'Failed',
-    };
-    const baseTitle = `Generating ${genCount} touchpoints with Claude`;
-    const tid = toast.loading(baseTitle, { description: 'Starting…', duration: Infinity });
+    // iter139 — Track elapsed time client-side via setInterval. Backend
+    // GET /generate/job/{id} doesn't reliably respond during Claude generation
+    // (the Claude call blocks FastAPI's event loop), so we don't depend on it
+    // for live updates — we use it only to detect completion.
+    const startedAt = Date.now();
+    const tickInterval = setInterval(() => {
+      const elapsedClient = Math.round((Date.now() - startedAt) / 1000);
+      setGenProgress({
+        elapsedClient,
+        estimatedSec,
+        slowWarn: elapsedClient > estimatedSec + 30,
+      });
+    }, 1000);
 
     try {
       const kickoff = await api.post('/api/journey/generate', { count: genCount, replace: true });
       const jobId = kickoff.data?.job_id;
       if (!jobId) {
-        toast.dismiss(tid);
+        clearInterval(tickInterval);
         toast.error('Could not start generation — no job id returned');
         setGenerating(false);
+        setGenProgress(null);
         return;
       }
 
       let attempts = 0;
-      const maxAttempts = 120; // 120 * 2.5s = 5 min
+      const maxAttempts = 150;
+      let pollInterval = null;
+
+      const finish = (cb) => {
+        clearInterval(tickInterval);
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        cb();
+        setGenerating(false);
+        setGenProgress(null);
+      };
+
       const poll = async () => {
+        attempts += 1;
         try {
           const { data: job } = await api.get(`/api/journey/generate/job/${jobId}`);
-          const phaseLabel = PHASE_LABEL[job?.phase] || job?.phase || 'Working';
-          const elapsed = Number(job?.elapsed_seconds || 0);
-          const slowWarn = job?.slow_warn ? ' · taking longer than usual' : '';
-          const msg = `${phaseLabel} · ${Math.round(elapsed)}s elapsed${slowWarn}`;
-
           if (job?.status === 'done') {
-            toast.dismiss(tid);
-            const result = job.result || {};
-            setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
-            toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
-            setGenerating(false);
+            finish(() => {
+              const result = job.result || {};
+              setTps((result.touchpoints || []).sort((a, b) => a.number - b.number));
+              toast.success(`Generated ${result.count || 0} touchpoints with Claude`);
+            });
             return;
           }
           if (job?.status === 'failed') {
-            toast.dismiss(tid);
-            toast.error(`Generation failed: ${job.error || 'unknown error'}`);
-            setGenerating(false);
+            finish(() => toast.error(`Generation failed: ${job.error || 'unknown error'}`));
             return;
           }
-
-          // Update sticky toast — sonner re-renders the `description` field
-          // reliably when toast.loading() is called with the same id.
-          toast.loading(baseTitle, { id: tid, description: msg, duration: Infinity });
-
-          attempts += 1;
           if (attempts >= maxAttempts) {
-            toast.dismiss(tid);
-            toast.error('Generation timed out after 5 minutes.');
-            setGenerating(false);
-            return;
+            finish(() => toast.error('Generation timed out after 5 minutes.'));
           }
-          setTimeout(poll, 2500);
         } catch (err) {
-          // Transient error — keep polling for a few tries before giving up.
-          attempts += 1;
-          if (attempts >= 5) {
-            toast.dismiss(tid);
-            toast.error('Lost connection to the generate job.');
-            setGenerating(false);
-            return;
-          }
-          setTimeout(poll, 3000);
+          if (attempts >= 8) finish(() => toast.error('Lost connection to the generate job.'));
         }
       };
-      // First poll runs after 2s so the user sees the initial spinner.
-      setTimeout(poll, 2000);
+
+      pollInterval = setInterval(poll, 2000);
+      poll();
     } catch (e) {
-      toast.dismiss(tid);
+      clearInterval(tickInterval);
       toast.error(e.response?.data?.detail || e.message || 'Generation failed');
       setGenerating(false);
+      setGenProgress(null);
     }
   };
 
@@ -303,6 +300,35 @@ const TouchpointMap = () => {
           </button>
         </div>
       </div>
+
+      {/* iter139 — Live progress banner (client-side elapsed counter since
+          backend GET /job/{id} doesn't reliably respond during Claude generation). */}
+      {generating && genProgress && (
+        <div
+          data-testid="journey-gen-progress"
+          className="rounded-lg border px-4 py-3 flex items-center gap-3"
+          style={{
+            background: 'linear-gradient(135deg, rgba(124,53,220,0.08) 0%, rgba(192,68,224,0.06) 100%)',
+            borderColor: genProgress.slowWarn ? '#D97706' : '#7C35DC',
+            color: 'var(--theme-text)',
+          }}
+        >
+          <CircleNotch size={18} className="animate-spin" style={{ color: '#7C35DC' }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold">
+              Generating {genCount} touchpoints with Claude
+              <span className="ml-2 text-xs font-semibold" style={{ color: '#7C35DC' }}>
+                · {genProgress.elapsedClient}s / ~{genProgress.estimatedSec}s
+              </span>
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+              {genProgress.slowWarn
+                ? 'Taking longer than usual — feel free to keep working, this page will update when done.'
+                : 'Claude is composing your outreach sequence. Stay on this page or come back in a minute.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View tabs */}
       <div className="flex flex-wrap gap-1.5" data-testid="journey-view-tabs">

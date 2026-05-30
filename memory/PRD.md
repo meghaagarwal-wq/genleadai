@@ -1,3 +1,78 @@
+## Iter 138-139 — Backlog Cleanup + Journey Progress Banner (Mar 1, 2026)
+
+User-triggered C: do both P2/P3 cleanup AND add the journey progress UX.
+
+### What shipped
+
+**A. Shared notification error classifier**
+- Extracted `_classify_send_error` from `routes/aria_eod_wrap.py` into new
+  `services/notification_errors.py` so morning_brief + approval_digest +
+  eod_wrap all share the same regex-driven classifier.
+- All 3 ARIA notification senders now return structured **503** with
+  `{code, user_message, status}` on Resend sandbox failures instead of
+  500 traceback OR silent 200-with-error-field.
+- `approval_digest` correctly preserves the **`skipped:true` → HTTP 200**
+  path (queue_empty is NOT an error).
+- Downgraded `logger.exception` → `logger.warning(str(e)[:200])` in all 3
+  senders to silence backend.err.log noise on expected Resend sandbox errors.
+
+**B. TTL index on `journey_generate_jobs`**
+- Added `expires_at` BSON Date field (7 days from creation) +
+  `create_index("expires_at", expireAfterSeconds=0)` so MongoDB auto-purges
+  old async job records.
+
+**C. Flake8 cleanup**
+- Fixed 2 E741 errors in `/app/backend/aria_agent_routes/brain.py`
+  (`l` → `lead`). File now passes `ruff check` clean.
+
+**D. Journey progress banner**
+- Added in-page progress banner on `/app/touchpoints` showing live
+  generation status. Renders above the view tabs (purple gradient
+  card with spinner, count, elapsed/estimated, and helpful copy).
+- Client-side `setInterval(1000)` drives the elapsed counter so updates
+  are guaranteed even while the backend FastAPI event loop is blocked
+  on the synchronous Claude SDK call.
+- Backend `setInterval(2000)` polls `GET /api/journey/generate/job/{id}`
+  to detect completion → swaps banner for sonner success toast +
+  populated touchpoints.
+- Slow-warn flips after 30s past estimate.
+- **Discovered along the way**: sonner@2.0.3 freezes loading-type toasts
+  on id-reuse (neither title nor description update reliably). Solution
+  was to drop the toast-update approach entirely in favor of a
+  state-driven banner React component. Sonner is still used for the
+  initial/final success/error toasts only.
+
+### Verification
+- Live click-through on /app/touchpoints — banner renders with elapsed
+  counter ticking 2s → 4s → 6s → 8s … → 20s (10 unique snapshots over
+  20s window).
+- Backend regression: 36 sprint pytests + 12 iter137 tests → **48/48 PASS**.
+- V10 architectural guard: exit 0.
+- Live curl: eod-wrap/morning-brief/approval-digest send-now all return
+  classified 503 with `detail.code='resend_sandbox_or_unverified_domain'`;
+  approval-digest queue-empty preserved as HTTP 200 skipped:true.
+
+### Files changed
+- NEW `/app/backend/services/notification_errors.py`
+- `/app/backend/routes/aria_eod_wrap.py`
+- `/app/backend/routes/aria_morning_brief.py`
+- `/app/backend/routes/aria_approval_digest.py`
+- `/app/backend/routes/journey.py` (TTL index + expires_at field)
+- `/app/backend/aria_agent_routes/brain.py` (lint)
+- `/app/frontend/src/workspace/pages/TouchpointMap.js` (banner + state)
+
+### Backlog still open (P3, non-blocking)
+- Address `claude_call` blocking FastAPI event loop during generation
+  (the reason backend can't serve poll responses live during the Claude
+  call). Move `_run_generate_job` work onto a worker thread or use
+  `asyncio.to_thread` around the LLM SDK call.
+- Embedding-based RAG (waiting on embeddings access in Emergent LLM key)
+- LinkedIn Sales Navigator
+- 14 F401 unused-import warnings in `aria_agent_routes/brain.py`
+
+---
+
+
 ## Iter 137 — P1 Fixes from iter136 Audit (Mar 1, 2026)
 
 Surgical fix-batch for the 3 P1 bugs surfaced in the iter136 full backend
