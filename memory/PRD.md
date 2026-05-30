@@ -1,3 +1,91 @@
+## Iter 141 — UX Flow Standardisation BATCH 2+3+4 + Slack/WhatsApp pings (Mar 1, 2026)
+
+User trigger: "all" — execute Batches 2, 3, 4 and the Slack/WhatsApp ping
+backlog in one continuous run. Testing report: **fully green, no issues.**
+
+### V-point coverage (this iter)
+- **V6** — Sidebar reorder per spec: Command Center → Instinct → Automation
+  → Conversations → ICPs → Train ARIA → Integrations → Reports → Settings.
+  NAV_ADVANCED below: 32-Touchpoint Journey · Call Booking · Voice Training
+  · AI Setup Assistant.
+- **V11** — Approvals nav item is now CONDITIONAL — only shows in the
+  sidebar when `approvalsCount > 0` (inserted after Conversations). Always
+  reachable via the bell.
+- **V17** — `NotFound.js` heading now reads "This page doesn't exist" and
+  the primary CTA reads "Go to Command Center →" pointing to `/app`
+  (data-testid `not-found-command-center-btn`).
+- **V7** — Lead 360 tabs persist in URL via `useSearchParams`:
+  `/app/leads/{id}?tab=intel|automation|conversations|activity`. Overview
+  is the default (no query param). Direct URL access loads the correct
+  tab.
+- **V18** — Browser back works correctly across the tab history because
+  every tab click is a real `setSearchParams` push. Verified back stack:
+  `?tab=conversations → ?tab=intel → /app/leads/{id} → /app`.
+- **V19** — Full `/admin/applications` review surface:
+  - Backend admin endpoints in `routes/applications.py`:
+    `GET /api/applications`, `GET /api/applications/{id}`,
+    `PATCH /api/applications/{id}/status`,
+    `POST /api/applications/{id}/create-workspace`.
+  - All require master_admin (sales_rep returns 403, unauth returns 401/403).
+  - Status filter tabs (all/new/reviewing/qualified/not_fit/onboarded)
+    with live counts in the response payload.
+  - Frontend in `admin/AdminLayout.js`: `AdminApplications` component
+    with status tabs, row list with blue-dot indicator for new,
+    side-drawer detail panel, sticky action footer (Create Workspace,
+    Mark Qualified, Reviewing, Not a Fit), Esc-to-close on both drawer
+    and modal.
+  - `CreateWorkspaceModal` provisions a `tenants` doc, generates a
+    `secrets.token_urlsafe(28)` invite token, writes a `workspace_invites`
+    record, flips application.status='onboarded', and optionally sends
+    the invitation email via Resend.
+
+### Slack + WhatsApp notification pings
+- Added `_notify_slack(payload)` — fires a block-kit message to
+  `SLACK_WEBHOOK_URL` if set. Silent no-op when unconfigured.
+- Added `_notify_whatsapp(payload)` — fires a 360dialog message to
+  `APPLICATION_NOTIFY_WHATSAPP` (E.164) if `WHATSAPP_360_API_KEY` is set.
+  Silent no-op when unconfigured.
+- Both wired into `POST /api/applications` alongside the existing Resend
+  email. All three notifications fire-and-forget with try/except — the
+  submit always returns 201 regardless of any notification outcome.
+
+### New ENV vars (production-only, optional)
+- `SLACK_WEBHOOK_URL` — Slack incoming-webhook URL (Slack app → Manage
+  → Incoming Webhooks)
+- `APPLICATION_NOTIFY_WHATSAPP` — E.164 phone number (e.g. `+919876543210`)
+- `WHATSAPP_360_API_KEY` — 360dialog API key (already required for
+  outbound; can reuse)
+
+### Verification
+- testing_agent_v3_fork iter141: **backend 19/19 PASS · iter140 regression
+  8/8 PASS · V10 guard exit 0 · frontend V6/V7/V11/V17/V18/V19 all match
+  spec · zero JS pageerrors.**
+- Live curl: list/get/patch-status/create-workspace all working; no `_id`
+  leak; role guards holding (403 for sales_rep on /api/applications).
+
+### Files changed
+- `/app/backend/routes/applications.py` — admin endpoints + Slack/WhatsApp
+- `/app/frontend/src/admin/AdminLayout.js` — AdminApplications +
+  CreateWorkspaceModal + nav item + route
+- `/app/frontend/src/components/AppLayout.js` — V6 reorder + V11 conditional
+- `/app/frontend/src/workspace/pages/Lead360.js` — V7 + V18 URL tab state
+- `/app/frontend/src/pages/NotFound.js` — V17 polish
+- **NEW** `/app/backend/tests/test_iter141_admin_applications.py` (19 tests)
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`.
+
+### Carry-over (left for future batch)
+- V8/V9/V10/V12/V13-V16/V20 — Most likely already pass via existing
+  shadcn Dialog / sonner defaults. Sweep them in a focused audit pass
+  if Joyston walkthrough flags anything specific.
+- Test cleanup: TEST_*-prefixed applications + ws_* tenants accumulate
+  in MongoDB on every iter140/141 test run. Add teardown fixture (P3).
+- P3 still open: claude_call event-loop blocking, server.py thinning.
+
+---
+
+
 ## Iter 140 — UX Flow Standardisation BATCH 1: Public Funnel (Mar 1, 2026)
 
 User trigger: "A. Batch 1 only. Go." — public funnel first because every
