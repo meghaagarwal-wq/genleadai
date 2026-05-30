@@ -35,7 +35,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // iter140 — guard the hard-redirect so it doesn't fire on:
+    //   (a) the login request itself (Login.js shows its own error toast/inline)
+    //   (b) when the user is already on /login (would wipe React error state)
+    //   (c) public endpoints that may transiently 401 during onboarding
+    const url = error.config?.url || '';
+    const onLogin = typeof window !== 'undefined' && window.location.pathname === '/login';
+    const isLoginCall = url.endsWith('/api/auth/login') || url.includes('/api/auth/email-code/') || url.includes('/api/auth/password/');
+    if (error.response?.status === 401 && !isLoginCall && !onLogin) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

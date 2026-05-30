@@ -1,3 +1,113 @@
+## Iter 140 — UX Flow Standardisation BATCH 1: Public Funnel (Mar 1, 2026)
+
+User trigger: "A. Batch 1 only. Go." — public funnel first because every
+potential client + Joyston sees / → /demo → /apply before anything internal.
+
+### V1-V5 verification — all PASS
+
+**V1 — `/` Landing**
+- Stripped the entire `SignupCard` (work-email/password/B2B-B2C-mode toggle/submit)
+  and replaced with `CtaCard`: "Two ways to get started" + two big buttons:
+  "See ARIA in Action" → /demo, "Apply to Work with ARIA" → /apply.
+- `Nav` no longer shows "Log in" or "Start free" buttons. Replaced with
+  `nav-see-demo-btn` + `nav-apply-btn`. "Pricing" link removed from header.
+- `CTABand` rewritten: "Ready to put ARIA on your pipeline?" with primary
+  "Apply to Work with ARIA" + secondary "See ARIA in Action".
+- Footer now includes `footer-apply-link` (Apply, points to /apply) +
+  subtle `footer-client-login-link` (Client Login →, points to /login).
+- All hero-signup-*/nav-signup-* test-ids removed.
+
+**V2 — `/demo`**
+- New sticky top banner: "You're viewing a live ARIA demo. Real software,
+  not a mockup." + inline Apply CTA (`demo-live-banner` +
+  `demo-banner-apply`). Banner stays put across all scenes.
+- New full-width bottom CTA section: "Ready to apply?" + big Apply button
+  (`demo-bottom-cta` + `demo-bottom-apply-btn`).
+- Header right button changed from `header-trial` ("Start Free Trial") to
+  `header-apply` ("Apply →").
+- Scene 5 CTA rewritten to "Apply to Work with ARIA" (was: "Start Free Trial").
+- All 5 main scenes + 2 bonus scenes still render correctly.
+
+**V3 — `/apply` (NEW)**
+- 4-section qualification form at `/apply`:
+  1. About You (full_name, work_email, role, country)
+  2. Your Business (company_name, company_url?, industry, employees, revenue?)
+  3. Your Current Setup (current_setup, channel pills, current_volume, biggest_pain)
+  4. Fit & Readiness (goal, timeline, budget_band, ready_to_start)
+- Top progress indicator + gradient bar (Step N of 4 + %).
+- Inline per-field validation on attempted Next.
+- "Next →" replaces "Submit Application →" only on Section 4.
+- "Back" button disabled on Section 1.
+- POST `/api/applications` returns 201 with `{id, full_name, company_name}`;
+  page redirects to `/apply/thank-you?id=...` on success.
+
+**V4 — `/apply/thank-you` (NEW)**
+- Personalised confirmation page: "Application received." then "Thanks,
+  `{full_name}`. We've got everything we need from `{company_name}`."
+- "We review every application personally and will be in touch within
+  48 hours if we see a strong fit."
+- Single primary CTA: "See ARIA in action →" → /demo (so applicants can
+  explore while they wait).
+- Graceful degradation when `?id=` missing (generic copy, same CTA).
+
+**V5 — `/login`**
+- Removed `register-link` ("Sign up") entirely. Replaced with `apply-link`
+  pointing to `/apply` ("Apply to work with ARIA →").
+- Login error message normalised to neutral **"Invalid email or password"**
+  (no hint about which field is wrong).
+- **Bug fix**: global axios 401 response interceptor in
+  `/app/frontend/src/config/api.js` was unconditionally hard-redirecting to
+  /login on any 401 — including the login request itself. Result: the
+  setError() text was wiped by the page reload before the user could see
+  it. Guarded with `!isLoginCall && !onLogin`. Verified live: bad creds
+  now display the red error inline without reloading.
+
+### Backend (NEW)
+- `routes/applications.py`:
+  - `POST /api/applications` (public, no auth) — Pydantic-validated submit,
+    inserts into `applications` collection with `status='new'`, returns
+    `{id, full_name, company_name}` with HTTP 201.
+  - `GET /api/applications/{id}/confirm` (public) — returns persisted
+    name + company for the thank-you page personalisation.
+  - 60s duplicate-submit guard (founder double-tapping form).
+  - Fire-and-forget founder notification email via Resend (swallows errors
+    so a failed/sandboxed Resend never crashes the submit).
+- Indexes on `work_email`, `created_at`, `status` for fast admin querying
+  (Batch 4 will use them).
+- Registered in `routes/__init__.py`.
+
+### Verification
+- testing_agent_v3_fork iter140: backend 8/8 PASS, V10 guard exit 0.
+- Frontend E2E: V1 ✅ V2 ✅ V3 ✅ V4 ✅ V5 ✅ (after the 1-line interceptor fix).
+- Zero JS pageerrors on `/`, `/demo`, `/apply`, `/apply/thank-you`, `/login`,
+  `/app`, `/app/leads`, `/app/touchpoints`.
+
+### Files added / changed
+- **NEW** `/app/backend/routes/applications.py` (200 lines)
+- **NEW** `/app/frontend/src/pages/Apply.js` (4-section form)
+- **NEW** `/app/frontend/src/pages/ApplyThankYou.js`
+- `/app/backend/routes/__init__.py` (register applications_router)
+- `/app/frontend/src/App.js` (+ 2 routes)
+- `/app/frontend/src/pages/landing/AriaLanding.js` (CtaCard, Nav, CTABand,
+  footer)
+- `/app/frontend/src/pages/Login.js` (apply-link, neutral error)
+- `/app/frontend/src/pages/InteractiveDemo.js` (live banner + bottom CTA)
+- `/app/frontend/src/config/api.js` (401 interceptor guard)
+- **NEW** `/app/backend/tests/test_iter140_applications.py`
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`. Joyston-ready public funnel.
+
+### Carry-over for next batches
+- Batch 2 (V6-V9 + V13-V18): sidebar nav order, Lead 360 routing/back-preserves-filters,
+  Intel/Conversations UX polish, global modal Esc, 404 page, browser back
+- Batch 3 (V10-V12 + V20): Instinct after-action, Approvals badge,
+  Integrations real-time validation, responsive sidebar
+- Batch 4 (V19): /admin/applications drawer + Create Workspace modal
+
+---
+
+
 ## Iter 138-139 — Backlog Cleanup + Journey Progress Banner (Mar 1, 2026)
 
 User-triggered C: do both P2/P3 cleanup AND add the journey progress UX.
