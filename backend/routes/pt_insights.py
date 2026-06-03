@@ -141,7 +141,7 @@ async def _newsapi_company_news(api_key: str, company: str) -> List[Dict[str, An
 
 
 # ─── Signal classifier (Claude) ─────────────────────────────────────────
-_CLASSIFY_SYSTEM_PROMPT = f"""You are a B2B sales intelligence agent. Given enriched data about a prospect, you classify any new signals into exactly one of these 8 types:
+_CLASSIFY_SYSTEM_PROMPT = """You are a B2B sales intelligence agent. Given enriched data about a prospect, you classify any new signals into exactly one of these 8 types:
 
 deal_closed | funding_round | event_attending | job_change | hiring_signal | content_published | company_news | social_activity
 
@@ -149,12 +149,12 @@ Rules:
 1. Return ONLY signals you are at least 0.70 confident in. If unsure, return an empty array.
 2. Each signal MUST include: type (from list above), summary (one sentence), confidence (0.0-1.0), rationale (one short line).
 3. Never fabricate. If the input has no real new signal, return [].
-4. Output strict JSON: {{"signals": [...]}}. No preamble, no markdown.
+4. Output strict JSON: {"signals": [...]}. No preamble, no markdown.
 
 Example output:
-{{"signals": [
-  {{"type": "funding_round", "summary": "Acme Co raised $30M Series B led by Bessemer.", "confidence": 0.92, "rationale": "TechCrunch article dated within 7 days"}}
-]}}"""
+{"signals": [
+  {"type": "funding_round", "summary": "Acme Co raised $30M Series B led by Bessemer.", "confidence": 0.92, "rationale": "TechCrunch article dated within 7 days"}
+]}"""
 
 
 async def _classify_signals_via_claude(

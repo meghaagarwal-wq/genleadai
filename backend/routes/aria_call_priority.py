@@ -220,18 +220,46 @@ def _compute_call_priority(limit: int = 3, tenant_id: Optional[str] = None) -> d
     ).limit(30):
         candidate_ids.add(str(d["_id"]))
 
+    # iter146 — also surface high-priority pt_leads for Pietential workspaces.
+    pt_leads_col = db["pt_leads"]
+    for d in pt_leads_col.find(
+        {**tf, "$or": [
+            {"score": {"$gte": 60}},
+            {"stage": {"$in": ["hot", "engaged", "session_pilot"]}},
+        ]},
+        {"_id": 0, "id": 1},
+    ).limit(30):
+        if d.get("id"):
+            candidate_ids.add(f"pt:{d['id']}")
+
     results = []
     for lid in candidate_ids:
         try:
-            lead_doc = leads_collection.find_one(
-                {"_id": ObjectId(lid), **tf},
-                {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1, "status": 1, "email": 1},
-            )
+            if lid.startswith("pt:"):
+                pt_id = lid[3:]
+                lead_doc = pt_leads_col.find_one(
+                    {"id": pt_id, **tf},
+                    {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "phone": 1,
+                     "score": 1, "stage": 1, "email": 1, "title": 1},
+                )
+                if not lead_doc:
+                    continue
+                # Normalise pt_leads shape into legacy lead_doc shape so
+                # _compute_best_time_to_call_for_lead works unchanged.
+                lead_doc["icp_score"] = lead_doc.get("score") or 0
+                lead_doc["icp_tier"] = lead_doc.get("stage")
+                lead_doc["status"] = lead_doc.get("stage")
+                lead_doc["id"] = lid
+            else:
+                lead_doc = leads_collection.find_one(
+                    {"_id": ObjectId(lid), **tf},
+                    {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1, "country": 1, "phone": 1, "icp_score": 1, "icp_tier": 1, "status": 1, "email": 1},
+                )
+                if not lead_doc:
+                    continue
+                lead_doc["id"] = lid
         except Exception:
             continue
-        if not lead_doc:
-            continue
-        lead_doc["id"] = lid
         score_data = _compute_best_time_to_call_for_lead(lead_doc)
         results.append({
             "lead_id": lid,

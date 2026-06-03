@@ -524,9 +524,12 @@ async def create_sequence(payload: SequenceCreate, tenant: dict = Depends(get_ac
 @router.patch("/api/sequences/{seq_id}")
 async def update_sequence(seq_id: str, payload: SequenceUpdate, tenant: dict = Depends(get_active_tenant)):
     update: Dict[str, Any] = {}
-    if payload.name is not None: update["name"] = payload.name
-    if payload.channel is not None: update["channel"] = payload.channel
-    if payload.steps is not None: update["steps"] = [s.dict() for s in payload.steps]
+    if payload.name is not None:
+        update["name"] = payload.name
+    if payload.channel is not None:
+        update["channel"] = payload.channel
+    if payload.steps is not None:
+        update["steps"] = [s.dict() for s in payload.steps]
     if not update:
         return {"ok": True, "noop": True}
     res = sequences_col.update_one({"id": seq_id, "tenant_id": tenant["id"]}, {"$set": update})

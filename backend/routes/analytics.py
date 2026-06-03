@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 import resend
 
 from deps import leads_collection, get_current_user
+from routes.lead_query import count_tenant_leads
 
 resend.api_key = os.getenv("RESEND_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
@@ -15,15 +16,16 @@ router = APIRouter(tags=["analytics-misc"])
 
 @router.get("/api/analytics/dashboard")
 async def get_dashboard_analytics(current_user: dict = Depends(get_current_user)):
-    # Tenant isolation — every count must be scoped to the caller's tenant
+    # iter146 — use count_tenant_leads so Pietential analytics include pt_leads.
     tid = current_user.get("tenant_id")
     base = {"tenant_id": tid}
-    total_leads = leads_collection.count_documents(base)
+    total_leads = count_tenant_leads(tid)
 
     status_counts = {}
     for s in ["new", "contacted", "qualified", "proposal_sent", "negotiation", "won", "lost"]:
-        status_counts[s] = leads_collection.count_documents({**base, "status": s})
+        status_counts[s] = count_tenant_leads(tid, status_in={s})
 
+    # source_channel + lead_type are legacy-only fields (pt_leads doesn't carry them).
     channel_counts = {}
     for ch in ["whatsapp", "email", "linkedin", "instagram", "facebook", "website_form", "cold_call", "referral"]:
         channel_counts[ch] = leads_collection.count_documents({**base, "source_channel": ch})
@@ -31,9 +33,9 @@ async def get_dashboard_analytics(current_user: dict = Depends(get_current_user)
     b2b_count = leads_collection.count_documents({**base, "lead_type": "B2B"})
     b2c_count = leads_collection.count_documents({**base, "lead_type": "B2C"})
 
-    hot_count = leads_collection.count_documents({**base, "icp_tier": "hot"})
-    warm_count = leads_collection.count_documents({**base, "icp_tier": "warm"})
-    cold_count = leads_collection.count_documents({**base, "icp_tier": "cold"})
+    hot_count = count_tenant_leads(tid, icp_tier_in={"hot"}, stage_in={"hot", "engaged", "session_pilot"})
+    warm_count = count_tenant_leads(tid, icp_tier_in={"warm"}, stage_in={"warm"})
+    cold_count = count_tenant_leads(tid, icp_tier_in={"cold"}, stage_in={"cold", "dnc"})
 
     return {
         "total_leads": total_leads,

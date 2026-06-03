@@ -138,10 +138,14 @@ def _stamp_tenant(doc: dict, current_user: dict) -> dict:
 
 
 def recommendation_for(score: int) -> str:
-    if score >= 110: return "Create opportunity and track session/pilot."
-    if score >= 70:  return "Remove from automation. John owns this conversation."
-    if score >= 35:  return "Pause outreach and alert John."
-    if score >= 15:  return "Add to Good Slice and monitor."
+    if score >= 110:
+        return "Create opportunity and track session/pilot."
+    if score >= 70:
+        return "Remove from automation. John owns this conversation."
+    if score >= 35:
+        return "Pause outreach and alert John."
+    if score >= 15:
+        return "Add to Good Slice and monitor."
     return "Let automation continue."
 
 
@@ -323,14 +327,21 @@ def _ensure_company(name: Optional[str], lead: dict, tenant_id: Optional[str] = 
 
 
 def _exec_role_from_title(title: Optional[str]) -> Optional[str]:
-    if not title: return None
+    if not title:
+        return None
     t = title.lower()
-    if "ceo" in t or "chief executive" in t: return "ceo"
-    if "cfo" in t or "chief financial" in t: return "cfo"
-    if "chro" in t or "chief people" in t or "chief human" in t: return "chro"
-    if "vp people" in t and "analytics" in t: return "vp_people_analytics"
-    if "director" in t and "wellbeing" in t: return "director_wellbeing"
-    if "vp total rewards" in t or "vp rewards" in t: return "vp_total_rewards"
+    if "ceo" in t or "chief executive" in t:
+        return "ceo"
+    if "cfo" in t or "chief financial" in t:
+        return "cfo"
+    if "chro" in t or "chief people" in t or "chief human" in t:
+        return "chro"
+    if "vp people" in t and "analytics" in t:
+        return "vp_people_analytics"
+    if "director" in t and "wellbeing" in t:
+        return "director_wellbeing"
+    if "vp total rewards" in t or "vp rewards" in t:
+        return "vp_total_rewards"
     return None
 
 
@@ -339,7 +350,7 @@ def _recompute_company(company_id: str):
     leads = list(leads_col.find({"company_id": company_id}, {"_id": 0}))
     if not leads:
         return
-    highest = max((l.get("score") or 0) for l in leads)
+    highest = max((lead.get("score") or 0) for lead in leads)
     stage = classify_stage(highest)
     # Pause required if any lead is hot/engaged/session OR has a pause-trigger event
     pause = stage in ("hot", "engaged", "session_pilot")
@@ -360,10 +371,10 @@ def _recompute_company(company_id: str):
         seq_status = "john_owns"
     # Update exec_status from member titles
     exec_status = {}
-    for l in leads:
-        role = _exec_role_from_title(l.get("title"))
+    for lead in leads:
+        role = _exec_role_from_title(lead.get("title"))
         if role and role not in exec_status:
-            exec_status[role] = f"{l.get('first_name','')} {l.get('last_name','')}".strip()
+            exec_status[role] = f"{lead.get('first_name','')} {lead.get('last_name','')}".strip()
     owner = "John" if stage in ("hot", "engaged", "session_pilot") else (company.get("owner") if company else "Content Vista")
     # Per-platform activity flags — set when leads/events from that platform exist
     saleshandy_active = leads_col.count_documents({"company_id": company_id, "source": "saleshandy"}) > 0 \
@@ -573,14 +584,22 @@ async def list_leads(
     current_user: dict = Depends(get_current_user),
 ):
     query = {**_tf(current_user)}
-    if stage: query["stage"] = stage
-    if source: query["source"] = source
-    if score_min is not None: query.setdefault("score", {})["$gte"] = score_min
-    if score_max is not None: query.setdefault("score", {})["$lte"] = score_max
-    if industry: query["industry"] = industry
-    if title: query["title"] = {"$regex": title, "$options": "i"}
-    if owner: query["owner"] = owner
-    if company_id: query["company_id"] = company_id
+    if stage:
+        query["stage"] = stage
+    if source:
+        query["source"] = source
+    if score_min is not None:
+        query.setdefault("score", {})["$gte"] = score_min
+    if score_max is not None:
+        query.setdefault("score", {})["$lte"] = score_max
+    if industry:
+        query["industry"] = industry
+    if title:
+        query["title"] = {"$regex": title, "$options": "i"}
+    if owner:
+        query["owner"] = owner
+    if company_id:
+        query["company_id"] = company_id
     if q:
         query["$or"] = [
             {"email": {"$regex": q, "$options": "i"}},
@@ -798,12 +817,18 @@ async def bulk_leads(payload: BulkLeadsPayload, current_user: dict = Depends(get
     for i, row in enumerate(payload.leads):
         email = (row.get("email") or "").strip().lower()
         if not email or "@" not in email:
-            failed += 1; errors.append({"row": i, "reason": "Invalid email"}); continue
+            failed += 1
+            errors.append({"row": i, "reason": "Invalid email"})
+            continue
         if email in seen_emails:
-            failed += 1; errors.append({"row": i, "reason": "Duplicate email in payload"}); continue
+            failed += 1
+            errors.append({"row": i, "reason": "Duplicate email in payload"})
+            continue
         seen_emails.add(email)
         if leads_col.find_one({"email": email}):
-            failed += 1; errors.append({"row": i, "reason": "Email already exists"}); continue
+            failed += 1
+            errors.append({"row": i, "reason": "Email already exists"})
+            continue
         try:
             score = int(row.get("score") or 0)
         except Exception:
@@ -851,10 +876,14 @@ async def list_companies(
     current_user: dict = Depends(get_current_user),
 ):
     query = {**_tf(current_user)}
-    if pause_required is not None: query["pause_required"] = pause_required
-    if account_stage: query["account_stage"] = account_stage
-    if industry: query["industry"] = industry
-    if q: query["name"] = {"$regex": q, "$options": "i"}
+    if pause_required is not None:
+        query["pause_required"] = pause_required
+    if account_stage:
+        query["account_stage"] = account_stage
+    if industry:
+        query["industry"] = industry
+    if q:
+        query["name"] = {"$regex": q, "$options": "i"}
     rows = list(companies_col.find(query, {"_id": 0}).sort("highest_score", DESCENDING).limit(500))
     return {"companies": rows, "total": len(rows)}
 
@@ -899,8 +928,10 @@ async def post_event(payload: EventCreate, current_user: dict = Depends(get_curr
 @router.get("/events")
 async def list_events(lead_id: Optional[str] = None, company_id: Optional[str] = None, limit: int = 100, current_user: dict = Depends(get_current_user)):
     query = {**_tf(current_user)}
-    if lead_id: query["lead_id"] = lead_id
-    if company_id: query["company_id"] = company_id
+    if lead_id:
+        query["lead_id"] = lead_id
+    if company_id:
+        query["company_id"] = company_id
     rows = list(events_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(min(limit, 500)))
     return {"events": rows}
 
@@ -929,11 +960,16 @@ async def list_tasks(
 ):
     tf = _tf(current_user)
     query = {**tf}
-    if status: query["status"] = status
-    if owner: query["owner"] = owner
-    if priority: query["priority"] = priority
-    if lead_id: query["lead_id"] = lead_id
-    if company_id: query["company_id"] = company_id
+    if status:
+        query["status"] = status
+    if owner:
+        query["owner"] = owner
+    if priority:
+        query["priority"] = priority
+    if lead_id:
+        query["lead_id"] = lead_id
+    if company_id:
+        query["company_id"] = company_id
     rows = list(tasks_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(500))
     counts = {
         "total": tasks_col.count_documents(tf),
@@ -985,8 +1021,10 @@ async def create_note(payload: NoteCreate, current_user: dict = Depends(get_curr
 @router.get("/notes")
 async def list_notes(lead_id: Optional[str] = None, company_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {**_tf(current_user)}
-    if lead_id: query["lead_id"] = lead_id
-    if company_id: query["company_id"] = company_id
+    if lead_id:
+        query["lead_id"] = lead_id
+    if company_id:
+        query["company_id"] = company_id
     rows = list(notes_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(200))
     return {"notes": rows}
 
@@ -1989,8 +2027,8 @@ async def test_send_email(payload: TestSendPayload, current_user: dict = Depends
             **result,
             "message": (
                 f"Test email sent to {payload.to}. Check the inbox in a few seconds."
-                + (f" Attachment: included." if result.get("attachments_count") else "")
-                + (f" Signature: appended." if result.get("signature_appended") else "")
+                + (" Attachment: included." if result.get("attachments_count") else "")
+                + (" Signature: appended." if result.get("signature_appended") else "")
             ),
         }
     except HTTPException:
@@ -2096,20 +2134,20 @@ def _platform_activity(source: str, current_user: dict):
     for row in extra_cursor:
         if row["_id"]:
             extra_lead_ids.add(row["_id"])
-    seen = {l["id"] for l in leads}
+    seen = {lead["id"] for lead in leads}
     extra_ids = [lid for lid in extra_lead_ids if lid not in seen]
     if extra_ids:
         leads.extend(list(leads_col.find({"id": {"$in": extra_ids}}, {"_id": 0})))
 
     rows = []
-    for l in leads:
-        evs = list(events_col.find({"lead_id": l["id"], "source": source}, {"_id": 0}).sort("created_at", DESCENDING))
+    for lead in leads:
+        evs = list(events_col.find({"lead_id": lead["id"], "source": source}, {"_id": 0}).sort("created_at", DESCENDING))
         opens = sum(1 for e in evs if e["event_type"] in ("saleshandy.email_opened", "newsletter.opened"))
         clicks = sum(1 for e in evs if e["event_type"] in ("saleshandy.email_clicked", "newsletter.clicked", "lemlist.post_engagement"))
         replies = sum(1 for e in evs if "positive_reply" in e["event_type"] or "dm_positive_reply" in e["event_type"])
         connections = sum(1 for e in evs if e["event_type"] == "lemlist.connection_accepted")
         rows.append({
-            **l,
+            **lead,
             "events_count": len(evs),
             "opens": opens,
             "clicks": clicks,
@@ -2236,20 +2274,20 @@ def _run_score_decay():
     cutoff_60 = (now - timedelta(days=60)).isoformat()
     decayed_30, decayed_60 = 0, 0
     # 60-day decay — applied first so 30-day doesn't double-count it
-    for l in leads_col.find({"last_activity_at": {"$lt": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
-        new_score = max(-100, (l["score"] or 0) - 20)
-        leads_col.update_one({"id": l["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "automation_status": "long_cycle_nurture", "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
-        events_col.insert_one({"id": _new_id("pte"), "lead_id": l["id"], "company_id": l.get("company_id"), "event_type": "decay.60_days", "label": "60-day inactivity decay", "source": "system", "score_change": -20, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
-        if l.get("company_id"):
-            _recompute_company(l["company_id"])
+    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
+        new_score = max(-100, (lead["score"] or 0) - 20)
+        leads_col.update_one({"id": lead["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "automation_status": "long_cycle_nurture", "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
+        events_col.insert_one({"id": _new_id("pte"), "lead_id": lead["id"], "company_id": lead.get("company_id"), "event_type": "decay.60_days", "label": "60-day inactivity decay", "source": "system", "score_change": -20, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        if lead.get("company_id"):
+            _recompute_company(lead["company_id"])
         decayed_60 += 1
     # 30-day decay
-    for l in leads_col.find({"last_activity_at": {"$lt": cutoff_30, "$gte": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
-        new_score = max(-100, (l["score"] or 0) - 10)
-        leads_col.update_one({"id": l["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
-        events_col.insert_one({"id": _new_id("pte"), "lead_id": l["id"], "company_id": l.get("company_id"), "event_type": "decay.30_days", "label": "30-day inactivity decay", "source": "system", "score_change": -10, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
-        if l.get("company_id"):
-            _recompute_company(l["company_id"])
+    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_30, "$gte": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
+        new_score = max(-100, (lead["score"] or 0) - 10)
+        leads_col.update_one({"id": lead["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
+        events_col.insert_one({"id": _new_id("pte"), "lead_id": lead["id"], "company_id": lead.get("company_id"), "event_type": "decay.30_days", "label": "30-day inactivity decay", "source": "system", "score_change": -10, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        if lead.get("company_id"):
+            _recompute_company(lead["company_id"])
         decayed_30 += 1
     return {"decayed_30_days": decayed_30, "decayed_60_days": decayed_60, "ran_at": now.isoformat()}
 
@@ -2365,7 +2403,8 @@ def register_pietential_startup(app):
 
 # ─── Saleshandy CSV import (their export format) ───────────────────────────
 def _truthy(s):
-    if not s: return False
+    if not s:
+        return False
     return str(s).strip().lower() in ("yes", "true", "1", "y", "opened", "clicked", "replied", "sent", "accepted")
 
 
@@ -2413,7 +2452,8 @@ async def import_saleshandy_csv(file: UploadFile = File(...), current_user: dict
         norm = {k.strip().lower().replace(" ", "_"): (v or "").strip() for k, v in row.items()}
         email = (norm.get("email") or "").lower()
         if not email or "@" not in email:
-            errors.append({"row": i, "reason": "Invalid email"}); continue
+            errors.append({"row": i, "reason": "Invalid email"})
+            continue
         campaign_id = _campaign_upsert("saleshandy", norm.get("campaign") or norm.get("campaign_name") or "")
         # Upsert lead
         existing = leads_col.find_one({"email": email}, {"_id": 0})
@@ -2448,14 +2488,18 @@ async def import_saleshandy_csv(file: UploadFile = File(...), current_user: dict
         _bump_campaign(campaign_id)
         # Events
         if _truthy(norm.get("opened")):
-            _ingest_event("saleshandy.email_opened", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("saleshandy.email_opened", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"])
+            events_added += 1
         if _truthy(norm.get("clicked")):
-            _ingest_event("saleshandy.email_clicked", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("saleshandy.email_clicked", {"lead_id": lead_id}, {"sequence_id": campaign_id, "csv_import": True}, current_user["email"])
+            events_added += 1
         sentiment = (norm.get("reply_sentiment") or "").lower()
         if _truthy(norm.get("replied")) and sentiment in ("positive", "interested", "yes"):
-            _ingest_event("saleshandy.positive_reply", {"lead_id": lead_id}, {"sequence_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("saleshandy.positive_reply", {"lead_id": lead_id}, {"sequence_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"])
+            events_added += 1
         if _truthy(norm.get("unsubscribed")):
-            _ingest_event("manual.dnc", {"lead_id": lead_id}, {"reason": "saleshandy_unsubscribe", "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("manual.dnc", {"lead_id": lead_id}, {"reason": "saleshandy_unsubscribe", "csv_import": True}, current_user["email"])
+            events_added += 1
         # Always recompute company so saleshandy_active flag reflects "lead exists"
         # even when no engagement events fired this row.
         company_id = leads_col.find_one({"id": lead_id}, {"_id": 0, "company_id": 1}).get("company_id")
@@ -2479,7 +2523,8 @@ async def import_lemlist_csv(file: UploadFile = File(...), current_user: dict = 
         norm = {k.strip().lower().replace(" ", "_"): (v or "").strip() for k, v in row.items()}
         email = (norm.get("email") or "").lower()
         if not email or "@" not in email:
-            errors.append({"row": i, "reason": "Invalid email"}); continue
+            errors.append({"row": i, "reason": "Invalid email"})
+            continue
         campaign_id = _campaign_upsert("lemlist", norm.get("campaign") or norm.get("campaign_name") or "")
         existing = leads_col.find_one({"email": email}, {"_id": 0})
         if not existing:
@@ -2513,10 +2558,12 @@ async def import_lemlist_csv(file: UploadFile = File(...), current_user: dict = 
             lead_id = existing["id"]
         _bump_campaign(campaign_id)
         if _truthy(norm.get("connection_accepted")):
-            _ingest_event("lemlist.connection_accepted", {"lead_id": lead_id}, {"campaign_id": campaign_id, "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("lemlist.connection_accepted", {"lead_id": lead_id}, {"campaign_id": campaign_id, "csv_import": True}, current_user["email"])
+            events_added += 1
         sentiment = (norm.get("reply_sentiment") or "").lower()
         if _truthy(norm.get("replied")) and sentiment in ("positive", "interested", "yes"):
-            _ingest_event("lemlist.dm_positive_reply", {"lead_id": lead_id}, {"campaign_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"]); events_added += 1
+            _ingest_event("lemlist.dm_positive_reply", {"lead_id": lead_id}, {"campaign_id": campaign_id, "sentiment": sentiment, "csv_import": True}, current_user["email"])
+            events_added += 1
         # Always recompute company so lemlist_active flag reflects "lead exists"
         company_id = leads_col.find_one({"id": lead_id}, {"_id": 0, "company_id": 1}).get("company_id")
         if company_id:
@@ -2538,7 +2585,7 @@ async def list_campaigns(platform: Optional[str] = None, current_user: dict = De
         cid = r["id"]
         # Count events from leads in this campaign
         field = "saleshandy_campaign_id" if plat == "saleshandy" else "lemlist_campaign_id"
-        lead_ids = [l["id"] for l in leads_col.find({field: cid}, {"_id": 0, "id": 1})]
+        lead_ids = [lead["id"] for lead in leads_col.find({field: cid}, {"_id": 0, "id": 1})]
         r["lead_count"] = len(lead_ids)
         if lead_ids:
             r["opens"] = events_col.count_documents({"lead_id": {"$in": lead_ids}, "event_type": "saleshandy.email_opened"})
@@ -2554,8 +2601,10 @@ async def list_campaigns(platform: Optional[str] = None, current_user: dict = De
 @router.get("/logs")
 async def list_logs(kind: Optional[str] = None, level: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
     query = {}
-    if kind: query["kind"] = kind
-    if level: query["level"] = level
+    if kind:
+        query["kind"] = kind
+    if level:
+        query["level"] = level
     rows = list(logs_col.find(query, {"_id": 0}).sort("created_at", DESCENDING).limit(min(limit, 500)))
     counts = {
         "total": logs_col.count_documents({}),

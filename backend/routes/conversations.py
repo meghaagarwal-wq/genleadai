@@ -365,7 +365,7 @@ async def draft_reply(
                     f"not because their reps are bad, but because no one's watching the gap between capture and call. "
                     f"Curious if that's a problem at {company} too?\n\nHappy to share what we've seen work.\n\nAria"
                 )
-                subject = subject or f"The 30% leak most founders ignore"
+                subject = subject or "The 30% leak most founders ignore"
             elif body.attempt == 3:
                 text = (
                     f"Hi {first_name} — one question: how many leads did {company} capture last month vs. how many you actually called? "

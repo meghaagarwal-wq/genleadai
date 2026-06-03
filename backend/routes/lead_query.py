@@ -145,7 +145,9 @@ def iter_tenant_leads(
     # pt_leads.
     pt_q = dict(base)
     or_clauses = []
+    pt_filter_requested = False
     if status_in:
+        pt_filter_requested = True
         # Map requested legacy statuses back to pt stages.
         target_stages = {
             stage for stage, status in _PT_STAGE_TO_STATUS.items() if status in status_in
@@ -153,14 +155,19 @@ def iter_tenant_leads(
         if target_stages:
             or_clauses.append({"stage": {"$in": list(target_stages)}})
     if stage_in:
+        pt_filter_requested = True
         or_clauses.append({"stage": {"$in": list(stage_in)}})
     if min_score is not None:
+        pt_filter_requested = True
         or_clauses.append({"score": {"$gte": min_score}})
     if or_clauses:
         if len(or_clauses) == 1:
             pt_q.update(or_clauses[0])
         else:
             pt_q["$or"] = or_clauses
+    elif pt_filter_requested:
+        # Filters requested but no pt-side mapping → don't yield any pt rows.
+        return
     for d in pt_leads_col.find(pt_q, {"_id": 0}):
         yield _pt_to_unified(d)
         yielded += 1
@@ -193,21 +200,31 @@ def count_tenant_leads(
 
     pt_q = dict(base)
     or_clauses = []
+    pt_filter_requested = False
     if status_in:
+        pt_filter_requested = True
+        # Map requested legacy statuses back to pt stages.
         target_stages = {
             stage for stage, status in _PT_STAGE_TO_STATUS.items() if status in status_in
         }
         if target_stages:
             or_clauses.append({"stage": {"$in": list(target_stages)}})
     if stage_in:
+        pt_filter_requested = True
         or_clauses.append({"stage": {"$in": list(stage_in)}})
     if min_score is not None:
+        pt_filter_requested = True
         or_clauses.append({"score": {"$gte": min_score}})
     if or_clauses:
         if len(or_clauses) == 1:
             pt_q.update(or_clauses[0])
         else:
             pt_q["$or"] = or_clauses
+    elif pt_filter_requested:
+        # iter146 — Filters were requested but NONE produced a pt-side
+        # clause (e.g. status_in={'proposal_sent'} which has no pt
+        # equivalent). Return 0 instead of counting all pt_leads.
+        return legacy_n
     pt_n = pt_leads_col.count_documents(pt_q)
 
     return legacy_n + pt_n

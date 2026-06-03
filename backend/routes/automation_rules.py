@@ -244,14 +244,22 @@ def _eval_condition(c: Dict[str, Any], context: Dict[str, Any]) -> bool:
     op = c["op"]
     expected = c["value"]
     try:
-        if op == "eq":       return actual == expected
-        if op == "ne":       return actual != expected
-        if op == "gt":       return actual is not None and actual > expected
-        if op == "gte":      return actual is not None and actual >= expected
-        if op == "lt":       return actual is not None and actual < expected
-        if op == "lte":      return actual is not None and actual <= expected
-        if op == "in":       return actual in (expected or [])
-        if op == "contains": return expected in (actual or "")
+        if op == "eq":
+            return actual == expected
+        if op == "ne":
+            return actual != expected
+        if op == "gt":
+            return actual is not None and actual > expected
+        if op == "gte":
+            return actual is not None and actual >= expected
+        if op == "lt":
+            return actual is not None and actual < expected
+        if op == "lte":
+            return actual is not None and actual <= expected
+        if op == "in":
+            return actual in (expected or [])
+        if op == "contains":
+            return expected in (actual or "")
     except (TypeError, ValueError):
         return False
     return False

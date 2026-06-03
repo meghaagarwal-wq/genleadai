@@ -62,18 +62,23 @@ async def founder_command_center(
     money_at_risk = 0
 
     for lead in leads:
-        lead["id"] = str(lead["_id"]); lead.pop("_id", None)
+        lead["id"] = str(lead["_id"])
+        lead.pop("_id", None)
         status = lead.get("status")
         nfu = lead.get("next_followup_at")
         nfu_dt = None
         if nfu:
-            try: nfu_dt = datetime.fromisoformat(nfu.replace("Z", "+00:00"))
-            except Exception: pass
+            try:
+                nfu_dt = datetime.fromisoformat(nfu.replace("Z", "+00:00"))
+            except Exception:
+                pass
         last_contact = lead.get("last_contacted_at")
         last_contact_dt = None
         if last_contact:
-            try: last_contact_dt = datetime.fromisoformat(last_contact.replace("Z", "+00:00"))
-            except Exception: pass
+            try:
+                last_contact_dt = datetime.fromisoformat(last_contact.replace("Z", "+00:00"))
+            except Exception:
+                pass
         deal = lead.get("deal_value") or 0
         if status not in ("won", "lost", "unqualified"):
             pipeline_value += deal
@@ -136,8 +141,10 @@ async def founder_command_center(
         src = lead.get("source_channel") or "other"
         bucket = source_map.setdefault(src, {"total": 0, "hot": 0, "calls_booked": 0, "pipeline": 0})
         bucket["total"] += 1
-        if (lead.get("icp_score") or 0) >= 80: bucket["hot"] += 1
-        if lead.get("status") == "call_booked": bucket["calls_booked"] += 1
+        if (lead.get("icp_score") or 0) >= 80:
+            bucket["hot"] += 1
+        if lead.get("status") == "call_booked":
+            bucket["calls_booked"] += 1
         if lead.get("status") not in ("won","lost","unqualified"):
             bucket["pipeline"] += (lead.get("deal_value") or 0)
     source_rows = sorted(
@@ -153,7 +160,8 @@ async def founder_command_center(
     }
     lost_reasons = {}
     for lead in leads:
-        if lead.get("status") != "lost": continue
+        if lead.get("status") != "lost":
+            continue
         r = (lead.get("lost_reason") or "no_follow_up").lower().replace(" ", "_")
         lost_reasons[r] = lost_reasons.get(r, 0) + 1
     if not lost_reasons:

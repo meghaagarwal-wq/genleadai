@@ -45,11 +45,19 @@ async def get_audit_log(skip: int = 0, limit: int = 50, current_user: dict = Dep
 
 @router.get("/api/export/leads")
 async def export_leads_csv(current_user: dict = Depends(get_current_user)):
-    """Export all leads as CSV."""
-    leads = list(leads_collection.find({}, {"_id": 0}).limit(5000))
+    """Export all leads (legacy + pt_leads) as CSV.
+
+    iter146 — Uses the unified `iter_tenant_leads` helper so Pietential
+    workspaces get their pt_leads in the CSV too.
+    """
+    from routes.lead_query import iter_tenant_leads
+    tenant_id = current_user.get("tenant_id")
+    leads = list(iter_tenant_leads(tenant_id, limit=5000)) if tenant_id else []
     output = io.StringIO()
     if leads:
-        fields = ["first_name", "last_name", "email", "phone", "lead_type", "company_name", "job_title", "industry", "source_channel", "status", "icp_score", "icp_tier", "city", "country", "created_at"]
+        fields = ["first_name", "last_name", "email", "phone", "company_name", "job_title",
+                  "source_channel", "status", "stage_native", "icp_score", "icp_tier", "score",
+                  "created_at", "_origin"]
         writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
         writer.writeheader()
         for lead in leads:
@@ -83,14 +91,22 @@ async def export_lead_activities(lead_id: str, current_user: dict = Depends(get_
 
 @router.get("/api/export/report")
 async def export_analytics_report(current_user: dict = Depends(get_current_user)):
-    """Export analytics report as CSV."""
-    total = leads_collection.count_documents({})
+    """Export analytics report as CSV.
+
+    iter146 — Uses `count_tenant_leads` so Pietential numbers include
+    pt_leads (otherwise B2B founders downloading their analytics CSV see
+    0 for every status bucket).
+    """
+    from routes.lead_query import count_tenant_leads
+    tenant_id = current_user.get("tenant_id")
+    total = count_tenant_leads(tenant_id) if tenant_id else 0
     status_counts = {}
     for s in ["new", "contacted", "qualified", "proposal_sent", "negotiation", "won", "lost"]:
-        status_counts[s] = leads_collection.count_documents({"status": s})
+        status_counts[s] = count_tenant_leads(tenant_id, status_in={s}) if tenant_id else 0
     channel_counts = {}
     for c in ["whatsapp", "email", "linkedin", "instagram", "facebook", "website_form", "cold_call", "referral", "webinar", "organic_search", "paid_ads"]:
-        channel_counts[c] = leads_collection.count_documents({"source_channel": c})
+        # source_channel filter is legacy-only — pt_leads doesn't carry it.
+        channel_counts[c] = leads_collection.count_documents({"tenant_id": tenant_id, "source_channel": c}) if tenant_id else 0
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -98,8 +114,8 @@ async def export_analytics_report(current_user: dict = Depends(get_current_user)
     writer.writerow([])
     writer.writerow(["Metric", "Value"])
     writer.writerow(["Total Leads", total])
-    writer.writerow(["B2B", leads_collection.count_documents({"lead_type": "B2B"})])
-    writer.writerow(["B2C", leads_collection.count_documents({"lead_type": "B2C"})])
+    writer.writerow(["B2B", leads_collection.count_documents({"tenant_id": tenant_id, "lead_type": "B2B"}) if tenant_id else 0])
+    writer.writerow(["B2C", leads_collection.count_documents({"tenant_id": tenant_id, "lead_type": "B2C"}) if tenant_id else 0])
     writer.writerow([])
     writer.writerow(["Status", "Count"])
     for s, c in status_counts.items():

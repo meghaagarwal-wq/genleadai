@@ -162,12 +162,18 @@ def _profile_summary(tenant_id: str) -> str:
     tdoc = db["tenants"].find_one({"id": tenant_id}, {"_id": 0, "settings": 1}) or {}
     prof = ((tdoc.get("settings") or {}).get("aria_training_profile") or {}).get("data") or {}
     bits = []
-    if prof.get("what_you_sell"):       bits.append(f"What we sell: {prof['what_you_sell']}")
-    if prof.get("who_you_sell_to"):     bits.append(f"Buyer: {prof['who_you_sell_to']}")
-    if prof.get("problem_you_solve"):   bits.append(f"Problem solved: {prof['problem_you_solve']}")
-    if prof.get("differentiator"):      bits.append(f"Differentiator: {prof['differentiator']}")
-    if prof.get("brand_voice_style"):   bits.append(f"Brand voice: {prof['brand_voice_style']}")
-    if prof.get("custom_tone_instructions"): bits.append(f"Tone notes: {prof['custom_tone_instructions']}")
+    if prof.get("what_you_sell"):
+        bits.append(f"What we sell: {prof['what_you_sell']}")
+    if prof.get("who_you_sell_to"):
+        bits.append(f"Buyer: {prof['who_you_sell_to']}")
+    if prof.get("problem_you_solve"):
+        bits.append(f"Problem solved: {prof['problem_you_solve']}")
+    if prof.get("differentiator"):
+        bits.append(f"Differentiator: {prof['differentiator']}")
+    if prof.get("brand_voice_style"):
+        bits.append(f"Brand voice: {prof['brand_voice_style']}")
+    if prof.get("custom_tone_instructions"):
+        bits.append(f"Tone notes: {prof['custom_tone_instructions']}")
     icps = prof.get("icp_profiles") or []
     if icps:
         first = icps[0]

@@ -942,7 +942,7 @@ async def _slack_founder_alert(insight: Dict[str, Any], lead: Dict[str, Any], in
         "blocks": [
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": f"🔍 Founder-attention signal · Pietential", "emoji": True},
+                "text": {"type": "plain_text", "text": "🔍 Founder-attention signal · Pietential", "emoji": True},
             },
             {
                 "type": "section",

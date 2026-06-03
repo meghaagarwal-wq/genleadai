@@ -1,3 +1,85 @@
+## Iter 147 — Lint cleanup + helper migration (Feb 4, 2026)
+
+User triggered the two carried-over items from iter146:
+  • `routes/pietential.py` pre-existing E701/E702 style violations
+  • Migrate remaining endpoints to `lead_query.py` helper
+
+### What shipped
+
+**🧹 Lint sweep — 86 → 0 violations across all `routes/`**
+- Ran `autopep8 --select=E701,E702` across `routes/pietential.py`,
+  `routes/automation_rules.py`, `routes/iter105_fixes.py`,
+  `routes/journey.py`, `routes/founder_command_center.py`. Auto-fixed
+  the bulk of one-line `if x: stmt` legacy patterns.
+- Ran `ruff --select F541 --fix` across `routes/pietential_intel.py`,
+  `routes/pt_insights.py`, `routes/conversations.py` (f-strings without
+  placeholders).
+- Hand-fixed 7 E741 `l` (ambiguous variable name) → `lead` in
+  `routes/pietential.py` (5 distinct loops/comprehensions).
+- Verification: `flake8 routes/ --select E701,E702,F541,E741` exits 0.
+- Backend boots clean after every batch · 54/54 sprint regression PASS.
+
+**📦 lead_query.py migration — 5 endpoints**
+- `/api/analytics/dashboard` (`routes/analytics.py`) — total_leads,
+  status_distribution, and icp_distribution now use `count_tenant_leads`
+  with mapped status / stage / icp_tier filters. Verified live on
+  Pietential: total=44 (correct), status sum=44 (no double-counting).
+- `/api/export/leads` (`routes/exports_audit.py`) — uses
+  `iter_tenant_leads(limit=5000)` so the CSV download includes pt_leads
+  with the `_origin` column showing legacy vs pt source.
+- `/api/export/report` (`routes/exports_audit.py`) — same migration for
+  status counts (lead_type + channel stay legacy-only since pt_leads
+  doesn't carry those fields).
+- `/api/aria/call-priority` (`routes/aria_call_priority.py`) — also
+  pulls pt_leads where `score≥60` or `stage∈{hot,engaged,session_pilot}`
+  as additional call-priority candidates. Normalises pt_leads shape into
+  the legacy lead_doc shape so `_compute_best_time_to_call_for_lead`
+  works unchanged.
+- `/api/leads/counts` already using both collections from iter146.
+
+**🐛 Helper bug found + fixed (caught during migration)**
+- `count_tenant_leads` had a subtle bug: when caller passed e.g.
+  `status_in={'proposal_sent'}` (a status with no pt-side stage mapping),
+  the pt query fell through to `{tenant_id: tid}` and counted ALL pt_leads
+  — over-counting analytics by ~64% for Pietential. Fixed by tracking
+  `pt_filter_requested` and returning `legacy_n` only (skipping pt entirely)
+  when filters were requested but produced no pt-side clause.
+- Same fix applied to `iter_tenant_leads` so callers iterating with
+  legacy-only filters don't get unrelated pt rows.
+- Verified live: Pietential analytics `sum(status_distribution.values()) == 44`
+  (was 128 before fix).
+
+### Files changed
+- `/app/backend/routes/lead_query.py` (helper bug fix — `pt_filter_requested`)
+- `/app/backend/routes/analytics.py` (use `count_tenant_leads`)
+- `/app/backend/routes/exports_audit.py` (use `iter_tenant_leads` + `count_tenant_leads`)
+- `/app/backend/routes/aria_call_priority.py` (union pt_leads into priority candidates)
+- `/app/backend/routes/pietential.py` (E741 rename `l` → `lead`)
+- `/app/backend/routes/pietential.py`, `automation_rules.py`, `iter105_fixes.py`, `journey.py`, `founder_command_center.py`, `pietential_intel.py`, `pt_insights.py`, `conversations.py` (autopep8 + ruff F541 sweep — style only)
+
+### Verification
+- `flake8 routes/ --select E701,E702,F541,E741` exits 0.
+- **54/54 sprint pytest PASS** (iter137+140+141+143).
+- V10 architectural guard PASS.
+- Pietential `/api/analytics/dashboard` returns mathematically-consistent
+  counts (total=44, status sum=44).
+- Demo workspace regression: total=138, untouched.
+
+### Status
+**READY TO REDEPLOY**. After redeploy, Pietential workspace's analytics
+dashboard, call priority queue, and lead CSV export will all reflect
+real pt_leads data.
+
+### Carry-over (not in this iteration)
+- Remaining files using `leads_collection` directly (lead_magnets,
+  touchpoint_engine, public_api, webhooks_inbound, webhooks_whatsapp,
+  outreach, campaigns, demo_seeder, admin_deployments, ai) — most are
+  write paths or workspace-agnostic. Migrate only when a Pietential bug
+  surfaces.
+
+---
+
+
 ## Iter 146 — COMPLETE BACKEND DEBUG: Pietential / multi-collection fixes (Feb 4, 2026)
 
 User triggered "RUN COMPLETE BACKEND AND DO COMPLETE DEBUGGING" with a
