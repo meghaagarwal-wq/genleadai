@@ -1,3 +1,85 @@
+## Iter 143 — Pietential Intelligence Engine Verified (Feb 3, 2026)
+
+User trigger: "E. Go." — run the 15-point verification checklist for the
+Pietential Intelligence Engine that was built (and largely scaffolded) in
+the previous fork. Adapt the UI / Saleshandy gate / Scan Now button in
+the same pass.
+
+### What shipped
+- **15-point verification — all GREEN** via the new
+  `/app/backend/tests/test_iter143_pietential_engine.py` suite.
+  Local run + testing_agent_v3_fork iter143: **15/15 PASS · 39/39
+  regression PASS (iter137 + iter140 + iter141) · V10 guard exit 0 ·
+  frontend Pietential surfaces all clean.**
+- **UI compatibility (b)** — `generate_insight_card_for_lead` now also
+  writes `prospect_name`, `prospect_title`, `prospect_company`,
+  `suggested_message` (mapped from `outreach_recommendation.opening_message`),
+  `confidence`, `icp_match_name`, `icp_match_score`, and `status='new'`
+  on every Pietential insight card so the existing `/api/pt/insights/feed`
+  → `IntelligenceFeed.js` renders the card without changes.
+- **Pietential Scan Now button (c)** — new
+  `PietentialScanNowButton` component in `/app/frontend/src/workspace/pages/IntelTab.js`
+  with `data-testid="pietential-intel-scan-now"`. Tenant-gated via
+  `localStorage.active_tenant` (only renders when active tenant is Pietential).
+  Wired into both the empty-state CTA and the live-profile header. Calls
+  `POST /api/pietential/lead/{id}/scan-now`, shows the right toast for
+  enriched/skipped/no-signal/dedup paths, then refreshes the intel profile.
+- **Saleshandy gate (d)** — `/app/backend/routes/audit_loops.py`
+  `saleshandy_poll_once` now filters `tenant_id: {$ne: 'ten_pietential'}`
+  in its config query. The Pietential workspace uses Lemlist + the
+  pietential_intel.py pipeline exclusively, never Saleshandy.
+- **New pytest** — `/app/backend/tests/test_iter143_pietential_engine.py`
+  (15 tests covering simulate → intent → ICP → insight card → founder_flag
+  → pipeline-health → tenant isolation → Saleshandy gate → UI fields →
+  role guards → dedup → V10 guard → cleanup → loops registered →
+  manual triggers reachable). Runtime ~30s (Claude calls dominate).
+
+### Files changed
+- `/app/backend/routes/pietential_intel.py` — UI-compatibility fields
+  written on insight card creation.
+- `/app/backend/routes/audit_loops.py` — Saleshandy poll loop gated to
+  skip ten_pietential.
+- `/app/frontend/src/workspace/pages/IntelTab.js` — `PietentialScanNowButton`
+  component + 2 wire-in points.
+- **NEW** `/app/backend/tests/test_iter143_pietential_engine.py` (15 tests).
+
+### Verification details
+- `POST /api/pietential/_test/simulate` (admin@demo.com, X-Tenant-Id=
+  ten_pietential) → 200; `intent.intent="HIGH_INTENT"`,
+  `icp_result.matched_icp_id="icp_b"` (CHRO),  insight_card created,
+  `final_lead.founder_flag=true`, `lead_score=100`, `account_tier="tier_1"`.
+- `GET /api/pietential/pipeline-health` returns
+  `{total_active_lemlist_leads, high_intent, high_intent_stale,
+   awaiting_enrichment, signals_this_week, next_weekly_report_hint}`.
+- Sales-rep on ten_demo gets 403 on every Pietential endpoint.
+- Dedup verified: 2nd `/lead/{id}/scan-now` on the same lead returns
+  `card:{skipped:true, reason:"duplicate_within_30d"}`.
+- V10 guard exit 0 (no direct Anthropic imports outside `services/claude_service.py`).
+- Frontend: `[data-testid="lemlist-pipeline-health-card"]` visible with
+  5 stat tiles on Pietential CommandCenter; `pietential-intel-scan-now`
+  visible on Pietential Lead 360 Intel tab, hidden on ten_demo. Zero JS
+  pageerrors on /app, /app/leads, /app/instinct (Pietential context).
+
+### Carry-over (not iter143 scope)
+- Cosmetic UX: clicking a lead row from `/app/leads` list emits an
+  "Invalid lead ID" toast. Direct navigation to `/app/leads/:id` works.
+  Surfaced by testing agent — separate UX bug, P2.
+- P1 still open: `claude_call` blocks the FastAPI event loop during
+  heavy generation (the Pietential simulate takes 25s because of this).
+- Test data cleanup: `TEST_`-prefixed apps + `ws_` tenants from prior runs.
+- P3: cleanup F401 unused imports in `aria_agent_routes/brain.py`.
+- LinkedIn Sales Navigator integration (P3).
+- Embedding-based RAG (blocked — Emergent proxy lacks embedding models).
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`. Production reminder:
+After deploy, paste the Pietential workspace's Lemlist API key + RapidAPI key
++ Serper key + 360dialog WhatsApp key + Resend key (via Production
+`/app/integrations` UI). Preview keys do NOT sync.
+
+---
+
+
 ## Iter 142 — `/invite/{token}` Accept Flow Closed (Mar 1, 2026)
 
 User trigger: "A. Wire the invite accept page. Then D — deploy and wait."
