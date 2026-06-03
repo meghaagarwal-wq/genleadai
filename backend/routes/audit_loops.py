@@ -48,7 +48,8 @@ async def saleshandy_poll_once() -> Dict[str, Any]:
     from routes.integrations_hub import _decrypt_config_secrets
     out = {"tenants_scanned": 0, "replies_imported": 0, "errors": 0}
     cfgs = list(configs_col.find(
-        {"integration_type": "saleshandy", "status": "connected"},
+        {"integration_type": "saleshandy", "status": "connected",
+         "tenant_id": {"$ne": "ten_pietential"}},  # iter143 — Pietential uses Lemlist-only via pietential_intel.py
         {"_id": 0},
     ))
     out["tenants_scanned"] = len(cfgs)

@@ -39,6 +39,52 @@ const TIMING_LABELS = {
 
 const CHANNEL_ICONS = { whatsapp: ChatCircleText, email: EnvelopeSimple, linkedin: LinkedinLogo };
 
+// iter143 — Pietential-only "Scan Now" button. Hits the Pietential
+// intelligence engine (Lemlist + Claude + Serper + RapidAPI) for a single
+// lead. Visible only when the active tenant is Pietential.
+const PietentialScanNowButton = ({ leadId, onComplete }) => {
+  const [busy, setBusy] = useState(false);
+  let isPietential = false;
+  try {
+    const t = JSON.parse(localStorage.getItem('active_tenant') || 'null');
+    isPietential = !!t && (t.id === 'ten_pietential' || (t.name || '').toLowerCase().includes('pietential'));
+  } catch (e) { /* private mode */ }
+  if (!isPietential) return null;
+  const onClick = async () => {
+    setBusy(true);
+    try {
+      const r = await ptApi.post(`/api/pietential/lead/${leadId}/scan-now`);
+      const card = r.data?.card;
+      if (card?.skipped) {
+        toast.info('Skipped — duplicate signal within 30 days.');
+      } else if (card?.id) {
+        toast.success('New insight card created. Open Instinct to review.');
+      } else if (r.data?.signal && !r.data.signal.signal_found) {
+        toast.info('Scan complete — no Pietential-relevant signal found.');
+      } else if (r.data?.enrich?.skipped) {
+        toast.info(`Skipped enrichment (${r.data.enrich.reason}).`);
+      } else {
+        toast.success('Pietential scan complete.');
+      }
+      if (onComplete) onComplete();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Pietential scan failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      data-testid="pietential-intel-scan-now"
+      className="inline-flex items-center gap-1 text-xs font-semibold text-[#7C35DC] hover:text-[#4C1D95] disabled:opacity-50"
+    >
+      <Sparkle size={12} weight="fill" /> {busy ? 'Scanning Pietential…' : 'Pietential Scan'}
+    </button>
+  );
+};
+
 const IntelTab = ({ leadId, lead }) => {
   const [profile, setProfile] = useState(null);
   const [budget, setBudget] = useState(null);
@@ -195,6 +241,7 @@ const IntelTab = ({ leadId, lead }) => {
           <Sparkle size={14} weight="fill" />
           {researching ? 'Crawling & synthesising…' : 'Run Intel'}
         </button>
+        <div className="mt-3"><PietentialScanNowButton leadId={leadId} onComplete={fetchProfile} /></div>
       </div>
     );
   }
@@ -223,6 +270,7 @@ const IntelTab = ({ leadId, lead }) => {
           >
             <ArrowsClockwise size={12} weight="bold" /> {researching ? 'Refreshing…' : 'Re-crawl'}
           </button>
+          <PietentialScanNowButton leadId={leadId} onComplete={fetchProfile} />
         </div>
       </div>
 

@@ -704,6 +704,7 @@ async def generate_insight_card_for_lead(lead_id: str) -> Optional[Dict[str, Any
         return None
 
     lead_score, account_tier, founder_flag = _compute_score_tier_flag(lead, intel)
+    prospect_name = f"{lead.get('first_name', '')} {lead.get('last_name', '')}".strip() or lead.get('email', '')
     doc = {
         "id": f"ins_{uuid.uuid4().hex[:14]}",
         "tenant_id": PT_TENANT_ID,
@@ -718,7 +719,16 @@ async def generate_insight_card_for_lead(lead_id: str) -> Optional[Dict[str, Any
         "account_tier": account_tier,
         "founder_flag": founder_flag,
         "signal_dedup_hash": sig_hash,
-        "status": "pending",
+        # UI-compatibility fields so /api/pt/insights/feed renders the card.
+        "prospect_name": prospect_name,
+        "prospect_title": lead.get("job_title") or "",
+        "prospect_company": lead.get("company_name") or "",
+        "suggested_message": (data or {}).get("opening_message") or "",
+        "confidence": float(intel.get("confidence") or 0.0),
+        "icp_match_name": lead.get("icp_segment_name") or "",
+        "icp_match_score": (int(lead.get("icp_score") or 0) / 100.0),
+        "status": "new",
+        "source": "pietential_engine",
         "created_at": _now_iso(),
         "week_of": _iso_week(),
     }
