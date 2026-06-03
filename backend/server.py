@@ -452,16 +452,17 @@ async def get_sleeping_leads_route(threshold_days: int = 14, current_user: dict 
 
 @app.get("/api/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
+    # Try ObjectId lookup first (legacy CRM leads). If lead_id isn't a valid
+    # ObjectId (e.g. it's a pt_leads UUID), fall through to a 404 so the
+    # frontend can transparently try /api/pt/leads/{id} as a second hop.
     try:
-        # Tenant isolation: lookup must include tenant_id
-        lead = leads_collection.find_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")})
-        if not lead:
-            raise HTTPException(status_code=404, detail="Lead not found")
-        return serialize_doc(lead)
-    except HTTPException:
-        raise
+        oid = ObjectId(lead_id)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid lead ID")
+        raise HTTPException(status_code=404, detail="Lead not found")
+    lead = leads_collection.find_one({"_id": oid, "tenant_id": current_user.get("tenant_id")})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return serialize_doc(lead)
 
 @app.patch("/api/leads/{lead_id}")
 async def update_lead(lead_id: str, lead_update: LeadUpdate, current_user: dict = Depends(get_current_user)):

@@ -137,7 +137,10 @@ const Lead360 = () => {
         const r = await api.get(`/api/leads/${id}`);
         leadDoc = r.data;
       } catch (e) {
-        if (e?.response?.status === 404) {
+        // iter144 — pt_leads use UUID-style IDs that can't be cast to ObjectId,
+        // so /api/leads/{id} can return 400 OR 404 for them. Fall through to
+        // the Pietential endpoint in either case.
+        if (e?.response?.status === 404 || e?.response?.status === 400) {
           const r2 = await api.get(`/api/pt/leads/${id}`);
           // Pietential wraps the lead under .lead — flatten so we keep the
           // same UI bindings.

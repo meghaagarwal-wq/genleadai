@@ -198,9 +198,18 @@ async def _one_attempt(
     ).with_model("anthropic", model)
 
     started = time.time()
+    # iter144 — `chat.send_message` is `async def` but internally calls the
+    # SYNC `litellm.completion()` (see emergentintegrations/llm/chat.py line
+    # 123). Awaiting it directly blocks the FastAPI event loop for the entire
+    # Claude round-trip (5-25s for sonnet). Offload to a worker thread so
+    # the loop stays responsive — poll endpoints, websockets, and other
+    # API calls continue to work during heavy LLM generation.
+    def _run_in_worker_loop() -> str:
+        return asyncio.run(chat.send_message(UserMessage(text=prompt)))
+
     try:
         result = await asyncio.wait_for(
-            chat.send_message(UserMessage(text=prompt)),
+            asyncio.to_thread(_run_in_worker_loop),
             timeout=timeout_s,
         )
     except asyncio.TimeoutError:

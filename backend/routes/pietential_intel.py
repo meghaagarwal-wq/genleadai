@@ -740,6 +740,12 @@ async def generate_insight_card_for_lead(lead_id: str) -> Optional[Dict[str, Any
             await _whatsapp_founder_alert(doc, lead, intel)
         except Exception:  # noqa: BLE001
             logger.exception("whatsapp founder alert failed (non-fatal)")
+        # iter144 — Slack ping alongside the WhatsApp alert. Fires only when
+        # SLACK_WEBHOOK_URL is set in env; silent no-op otherwise.
+        try:
+            await _slack_founder_alert(doc, lead, intel)
+        except Exception:  # noqa: BLE001
+            logger.exception("slack founder alert failed (non-fatal)")
 
     return {k: v for k, v in doc.items() if k != "_id"}
 
@@ -865,6 +871,72 @@ async def pietential_insight_scan_loop() -> None:
 
 
 # ─────────────────────── Part 9 — Delivery ───────────────────────
+
+async def _slack_founder_alert(insight: Dict[str, Any], lead: Dict[str, Any], intel: Dict[str, Any]) -> None:
+    """iter144 — Slack ping for high-confidence Pietential signals (founder_flag
+    + confidence ≥ 0.85). Uses block-kit so the founder sees prospect, signal,
+    score, and a deeplink in one glance. Silent no-op when SLACK_WEBHOOK_URL
+    not set."""
+    webhook = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook:
+        return
+    rec = insight.get("outreach_recommendation") or {}
+    opening = " ".join((rec.get("opening_message") or "").split()[:35])
+    name = f"{lead.get('first_name','')} {lead.get('last_name','')}".strip() or lead.get("email", "Prospect")
+    company = lead.get("company_name") or "—"
+    title = lead.get("job_title") or "—"
+    deeplink = f"https://app.genleadai.com/app/instinct?card_id={insight.get('id')}"
+    payload = {
+        "text": f"🔍 ARIA Signal · {name} · {company}",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f"🔍 Founder-attention signal · Pietential", "emoji": True},
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Prospect*\n{name}"},
+                    {"type": "mrkdwn", "text": f"*Role*\n{title}"},
+                    {"type": "mrkdwn", "text": f"*Company*\n{company}"},
+                    {"type": "mrkdwn", "text": f"*Score*\n{insight.get('lead_score', 0)}/100 · {insight.get('account_tier', '—')}"},
+                ],
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Signal* ({int((intel.get('confidence') or 0) * 100)}% conf · {intel.get('signal_type', '—')})\n{insight.get('signal_summary', '—')}"},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Suggested opening*\n_{opening}…_"},
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Open in ARIA", "emoji": True},
+                        "url": deeplink,
+                        "style": "primary",
+                    },
+                ],
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"channel: *{rec.get('channel', '—')}* · timing: *{rec.get('timing', '—')}*"},
+                ],
+            },
+        ],
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(webhook, data=data, headers={"Content-Type": "application/json"})
+    try:
+        await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=8).read())
+        _audit_event("slack_founder_alert_sent", insight_id=insight.get("id"), lead_id=lead.get("id"))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("slack founder alert send failed: %s", str(e)[:200])
+
 
 async def _whatsapp_founder_alert(insight: Dict[str, Any], lead: Dict[str, Any], intel: Dict[str, Any]) -> None:
     key = _get_provider_key("360dialog") or _get_provider_key("whatsapp")

@@ -2,15 +2,9 @@
 Auto-split from aria_agent_routes.py (iter75).
 """
 from ._shared import (
-    router, training_collection, playbooks_collection, leads_collection,
-    activities_collection, db, get_current_user, AriaTrainingPayload,
+    router, training_collection, leads_collection, get_current_user,
 )
-from fastapi import Depends, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime, timezone, timedelta
-import os
-import json
+from fastapi import Depends
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

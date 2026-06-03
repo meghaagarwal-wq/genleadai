@@ -1,3 +1,106 @@
+## Iter 144 — Enhancement Backlog Sweep + Scan Hot Leads UX Fix (Feb 3, 2026)
+
+User triggered "A. Go" after a production walkthrough surfaced the
+"No hot leads matched" issue. Single continuous run executing all P1/P2/P3
+enhancements + a small Slack delivery channel on top of the iter143 engine.
+
+### What shipped
+
+**🟧 P1 — Claude event-loop blocking RESOLVED**
+- Root cause: `emergentintegrations.llm.chat.LlmChat.send_message` is
+  declared `async def` but internally calls the **synchronous** `litellm.completion()`,
+  blocking the FastAPI event loop for the full 5-25s Claude round-trip.
+- Fix: wrap each Claude call in `asyncio.to_thread(lambda: asyncio.run(chat.send_message(...)))`
+  inside `services/claude_service._one_attempt`. Each call runs on its own
+  worker thread + its own asyncio loop, leaving the FastAPI loop free.
+- **Verified live**: while a 26s `/_test/simulate` (3x Claude calls) was
+  running, 5 concurrent `/pipeline-health` pings completed in 0.10–0.16s
+  each. Before the fix they would have queued behind the simulate.
+
+**🟨 P2 — "Invalid lead ID" toast on row click FIXED**
+- Root cause: `/api/leads/{id}` cast `lead_id` through `ObjectId()` which
+  raises `InvalidId` for the UUID-style ids used by `pt_leads`. The
+  except branch returned HTTP 400 — Lead360.js only fell back to
+  `/api/pt/leads/{id}` on HTTP 404, so the fallback never fired and the
+  toast surfaced instead.
+- Fix in `server.py`: `try { oid = ObjectId(lead_id) } except → 404` so
+  the frontend fallback path takes over.
+- Belt-and-braces in `Lead360.js`: the fallback now also fires on 400
+  (in case any other legacy endpoint emits it).
+
+**🟦 P3a — Test data teardown fixture**
+- New `/app/backend/tests/conftest.py` with a `session`-scoped autouse
+  fixture that purges, AFTER all tests finish:
+  - `applications` where `full_name` or `company_name` starts with `TEST_`
+  - `tenants` matching `^ws_` with `application_id` set
+  - matching `tenant_memberships`, `onboarding_config`, `invitations`,
+    `workspace_invites`
+  - simulated Pietential leads (`@pietential-test.com`)
+  - orphan `pt_insights` cards from cleaned simulated leads
+- Verified: running iter140+141+143+137 in one invocation purged 5
+  leftover apps automatically (visible in pytest output).
+
+**🟦 P3b — F401 unused imports cleaned**
+- `/app/backend/aria_agent_routes/brain.py` was importing 14 unused
+  symbols (`db`, `HTTPException`, `BaseModel`, `Field`, `Optional`,
+  `List`, `datetime`, `timezone`, `timedelta`, `os`, `json`,
+  `playbooks_collection`, `activities_collection`, `AriaTrainingPayload`).
+  Stripped down to just the 4 actually-used names. `flake8 --select F401`
+  now exits clean for this file.
+
+**✨ Slack high-confidence Pietential pings**
+- New `_slack_founder_alert` in `routes/pietential_intel.py` fires
+  alongside the existing WhatsApp founder alert whenever a Pietential
+  insight card lands with `founder_flag=true AND confidence ≥ 0.85`.
+- Block-kit payload: prospect name + role + company + lead score/tier
+  on one row, signal summary on the next, 35-word opening preview, and
+  a primary "Open in ARIA" button deeplinking to
+  `https://app.genleadai.com/app/instinct?card_id={id}`.
+- Reads `SLACK_WEBHOOK_URL` from env; silent no-op when not set.
+- Audit logged as `slack_founder_alert_sent` on success.
+
+**🎯 Scan Hot Leads UX fix (user-triggered before backlog)**
+- Frontend `LeadFeed.js`: button now sends `min_icp_score: 15` instead
+  of `80`, so warm/engaged leads (score 15–79) qualify. Button label
+  flipped to "Scan engaged leads" so the copy matches behaviour.
+- Backend `intel.py`: empty-state message rewrites to
+  "No engaged leads matched. Add leads with ICP score ≥ 15 to enable batch intel."
+- Verified live on Pietential: 10 candidates queued (previously 0).
+
+### Files changed
+- `/app/backend/services/claude_service.py` (event-loop fix)
+- `/app/backend/server.py` (lead 404-on-bad-ObjectId)
+- `/app/frontend/src/workspace/pages/Lead360.js` (400 fallback)
+- `/app/backend/routes/pietential_intel.py` (Slack alert function)
+- `/app/backend/aria_agent_routes/brain.py` (F401 sweep)
+- `/app/frontend/src/workspace/pages/LeadFeed.js` (min_icp_score 80→15 + label)
+- `/app/backend/routes/intel.py` (empty-state msg)
+- **NEW** `/app/backend/tests/conftest.py` (teardown fixture)
+
+### Verification
+- **54/54 sprint pytest PASS** (iter137 + iter140 + iter141 + iter143
+  run together in one invocation = 62s total runtime, conftest
+  teardown purged 5 leftover TEST_ apps automatically).
+- **V10 architectural guard PASS** — only `services/claude_service.py`
+  imports Anthropic.
+- **Concurrent-call live proof** — pipeline-health 0.1s while simulate 26s
+  ran in parallel. Event loop is unblocked.
+- **Lint clean**: claude_service.py, Lead360.js, LeadFeed.js,
+  IntelTab.js, brain.py (F401).
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`. Note: production-only env
+keys still needed — Lemlist · RapidAPI · Serper · 360dialog · Resend ·
+new optional `SLACK_WEBHOOK_URL` for the high-confidence Pietential pings.
+
+### Carry-over (not blocking)
+- UX sweep V8/V9/V10/V12/V13-V16/V20 pending production walkthrough.
+- LinkedIn Sales Navigator (P3).
+- Embedding RAG (blocked on Emergent proxy capability).
+
+---
+
+
 ## Iter 143 — Pietential Intelligence Engine Verified (Feb 3, 2026)
 
 User trigger: "E. Go." — run the 15-point verification checklist for the
