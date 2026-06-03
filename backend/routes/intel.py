@@ -216,31 +216,41 @@ async def scan_hot_leads(
     def _add(doc: Dict[str, Any], src: str):
         if not doc:
             return
+        # iter145 — pt_leads use `score`/`stage`; legacy ARIA leads use
+        # `icp_score`/`icp_tier`. Normalise both into the same shape.
+        score = doc.get("icp_score") if doc.get("icp_score") is not None else doc.get("score")
+        tier = doc.get("icp_tier") or doc.get("stage")
         candidates.append({
             "lead_id": str(doc.get("id") or doc.get("_id")),
             "name": (f"{doc.get('first_name', '')} {doc.get('last_name', '')}").strip() or doc.get("name") or doc.get("email") or "Lead",
-            "icp_score": doc.get("icp_score") or 0,
-            "icp_tier": doc.get("icp_tier"),
+            "icp_score": score or 0,
+            "icp_tier": tier,
             "source": src,
         })
 
-    # Legacy CRM leads — sort by score desc + apply cap.
-    for d in leads_col.find(
+    # iter145 — Pietential pt_leads use `score` + `stage`, NOT `icp_score`/`icp_tier`.
+    # Pull pt_leads FIRST since those are the leads the user sees in the
+    # Lead Feed for Pietential workspaces (legacy `leads` is test data on
+    # this tenant and would otherwise starve the cap).
+    for d in pt_leads_col.find(
         {
             "tenant_id": tenant_id,
             "$or": [
+                {"score": {"$gte": body.min_icp_score}},
                 {"icp_score": {"$gte": body.min_icp_score}},
+                {"stage": {"$in": ["hot", "engaged", "session_pilot", "warm"]}},
                 {"icp_tier": "hot"},
             ],
         },
-        {"_id": 1, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1, "icp_score": 1, "icp_tier": 1},
-    ).sort([("icp_score", -1)]).limit(body.max_leads):
-        _add(d, "legacy")
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1,
+         "icp_score": 1, "icp_tier": 1, "score": 1, "stage": 1},
+    ).sort([("score", -1)]).limit(body.max_leads):
+        _add(d, "pt")
 
-    # Pietential pt_leads — covers Pietential workspaces.
+    # Legacy CRM leads — fill any remaining slots after pt_leads.
     remaining = max(0, body.max_leads - len(candidates))
     if remaining > 0:
-        for d in pt_leads_col.find(
+        for d in leads_col.find(
             {
                 "tenant_id": tenant_id,
                 "$or": [
@@ -248,9 +258,9 @@ async def scan_hot_leads(
                     {"icp_tier": "hot"},
                 ],
             },
-            {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1, "icp_score": 1, "icp_tier": 1},
+            {"_id": 1, "id": 1, "first_name": 1, "last_name": 1, "name": 1, "email": 1, "icp_score": 1, "icp_tier": 1},
         ).sort([("icp_score", -1)]).limit(remaining):
-            _add(d, "pt")
+            _add(d, "legacy")
 
     if not candidates:
         return {"queued": 0, "leads": [], "message": "No engaged leads matched. Add leads with ICP score ≥ 15 to enable batch intel."}

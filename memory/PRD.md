@@ -1,3 +1,46 @@
+## Iter 145 — Scan Engaged Leads field-name bug (Feb 3, 2026)
+
+User reported the production "Scan engaged leads" button still returned
+zero matches even though the Lead Feed UI clearly showed lemlist-sourced
+pt_leads with score 15 / 30.
+
+### Root cause
+`/api/intel/scan-hot` queried `pt_leads` with `{icp_score: {$gte: 15}}`
++ `{icp_tier: 'hot'}`. But `pt_leads` (written by the lemlist poll loop
+in `routes/pietential.py`) uses **`score`** and **`stage`** field names,
+NOT `icp_score`/`icp_tier`. The query never matched the user's actual
+leads. A secondary bug: legacy `leads` collection had 10+ test docs with
+`icp_score=50` that filled the 10-lead cap first, starving any pt_leads
+that did happen to match.
+
+### Fix
+1. `pt_leads` query now uses `$or` across both field-name conventions
+   (`score`/`stage` for lemlist-sourced rows, `icp_score`/`icp_tier`
+   for engine-written rows).
+2. Reorder: pt_leads queried FIRST, legacy `leads` only fills any
+   remaining slots — so the user's actual Lemlist leads always make it
+   into the batch.
+3. `_add` normalises both shapes into the same `{icp_score, icp_tier}`
+   wire format.
+
+### Verification (live, Pietential)
+Before: `queued: 10` (all "Iter102/Alice/Wire/Pixel" legacy test data —
+the user's lemlist leads never queued).
+After: `queued: 10, pt: 10, legacy: 0` — actual lemlist leads queued
+("Alex Patel score 145", "Maria Lopez score 131", "Liz Ceisler score 78
+hot", "Mark Lombardozzi score 75 hot", …).
+
+### Files changed
+- `/app/backend/routes/intel.py` (scan-hot field-name + ordering fix)
+
+### Status
+READY TO REDEPLOY to `app.genleadai.com`. After redeploy, "Scan engaged
+leads" on the Pietential Lead Feed will properly queue your real
+Lemlist-sourced leads.
+
+---
+
+
 ## Iter 144 — Enhancement Backlog Sweep + Scan Hot Leads UX Fix (Feb 3, 2026)
 
 User triggered "A. Go" after a production walkthrough surfaced the
