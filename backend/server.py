@@ -2354,6 +2354,20 @@ async def _start_approval_digest_loop():
     print("[ApprovalDigest] Background loop started (60s tick)")
 
 
+@app.on_event("startup")
+async def _start_pietential_intel_loops():
+    """iter143 — Pietential intelligence engine: 3 background loops."""
+    from routes.pietential_intel import (
+        lemlist_poll_loop,
+        pietential_insight_scan_loop,
+        weekly_intel_report_loop,
+    )
+    asyncio.create_task(lemlist_poll_loop())
+    asyncio.create_task(pietential_insight_scan_loop())
+    asyncio.create_task(weekly_intel_report_loop())
+    print("[Pietential] Lemlist poll (30min) + daily scan (07:30 IST) + weekly report (Mon 08:00 IST) started")
+
+
 
 # EOD-wrap module moved to routes/aria_eod_wrap.py (iter108 ACTION 3)
 

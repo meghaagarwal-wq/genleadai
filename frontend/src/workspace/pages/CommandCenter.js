@@ -24,6 +24,83 @@ import { useAuth } from '../../context/AuthContext';
 import { ptApi } from '../shared';
 import api from '../../config/api';
 
+// iter143 — Lemlist Pipeline Health card. Renders only on the Pietential workspace.
+const LemlistPipelineHealthCard = () => {
+  const [data, setData] = useState(null);
+  const [active, setActive] = useState(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('active_tenant');
+      if (raw) setActive(JSON.parse(raw));
+    } catch (e) { /* private mode */ }
+    const onTenant = () => {
+      try { setActive(JSON.parse(localStorage.getItem('active_tenant') || 'null')); } catch (e) { /* ignore */ }
+    };
+    window.addEventListener('aria:tenant-changed', onTenant);
+    return () => window.removeEventListener('aria:tenant-changed', onTenant);
+  }, []);
+
+  const isPietential = active && (active.id === 'ten_pietential' || (active.name || '').toLowerCase().includes('pietential'));
+
+  useEffect(() => {
+    if (!isPietential) { setData(null); return undefined; }
+    let alive = true;
+    api.get('/api/pietential/pipeline-health')
+      .then((r) => { if (alive) setData(r.data); })
+      .catch(() => { if (alive) setData(null); });
+    return () => { alive = false; };
+  }, [isPietential]);
+
+  if (!isPietential || !data) return null;
+
+  const staleAlert = (data.high_intent_stale || 0) > 5;
+  return (
+    <div
+      data-testid="lemlist-pipeline-health-card"
+      className="rounded-xl border p-4 md:p-5"
+      style={{
+        background: 'linear-gradient(135deg, rgba(124,53,220,0.06) 0%, rgba(192,68,224,0.04) 100%)',
+        borderColor: staleAlert ? '#D97706' : '#E8E0F5',
+      }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em]" style={{ color: '#7C35DC' }}>
+            Lemlist Pipeline Health
+          </div>
+          <div className="text-xs text-[#5A4A7A] mt-0.5">
+            Pulled every 30 min · Daily scan 07:30 IST · Weekly report Mon 08:00 IST
+          </div>
+        </div>
+        {staleAlert && (
+          <span data-testid="lemlist-stale-alert" className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-amber-100 text-amber-800">
+            {data.high_intent_stale} hot leads untouched 48h+
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <StatTile label="Active Lemlist leads" value={data.total_active_lemlist_leads} testid="lph-total-active" />
+        <StatTile label="High intent" value={data.high_intent} testid="lph-high-intent" />
+        <StatTile label="Awaiting enrichment" value={data.awaiting_enrichment} testid="lph-awaiting" />
+        <StatTile label="Signals this week" value={data.signals_this_week} testid="lph-signals" />
+        <StatTile
+          label="Last weekly report"
+          value={data.last_weekly_report ? new Date(data.last_weekly_report).toLocaleDateString() : '—'}
+          testid="lph-last-report"
+        />
+      </div>
+    </div>
+  );
+};
+
+const StatTile = ({ label, value, testid }) => (
+  <div data-testid={testid} className="bg-white border border-[#E8E0F5] rounded-lg px-3 py-2.5">
+    <div className="text-[10px] uppercase tracking-wider text-[#9B8AB0] font-bold">{label}</div>
+    <div className="text-xl md:text-2xl font-extrabold text-[#1A0A2E] mt-0.5">{value}</div>
+  </div>
+);
+
 const greeting = () => {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
@@ -357,6 +434,9 @@ const CommandCenter = () => {
 
       {/* iter126 — Pipeline Snapshot row (live, clickable chips → /app/leads with filter) */}
       {pipelineSnapshot && <PipelineSnapshotRow snapshot={pipelineSnapshot} />}
+
+      {/* iter143 — Lemlist Pipeline Health (Pietential workspace only) */}
+      <LemlistPipelineHealthCard />
 
       {/* MODE-SPECIFIC LOWER CONTENT */}
       {mode === 'b2b' && (
