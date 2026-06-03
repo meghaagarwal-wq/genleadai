@@ -253,7 +253,7 @@ async def scan_hot_leads(
             _add(d, "pt")
 
     if not candidates:
-        return {"queued": 0, "leads": [], "message": "No hot leads matched. Try lowering the score threshold."}
+        return {"queued": 0, "leads": [], "message": "No engaged leads matched. Add leads with ICP score ≥ 15 to enable batch intel."}
 
     # iter134 — track progress so the UI can poll for a live "X / N done" toast.
     batch_id = uuid.uuid4().hex

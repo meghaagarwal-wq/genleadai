@@ -63,7 +63,7 @@ const LeadFeed = ({ embedded = false }) => {
     setBatchResult(null);
     try {
       const r = await api.post('/api/intel/scan-hot', {
-        min_icp_score: 80,
+        min_icp_score: 15,
         refresh: false,
         max_leads: 50,
       });
@@ -143,7 +143,7 @@ const LeadFeed = ({ embedded = false }) => {
             <button onClick={runBatchIntel} disabled={batchBusy} data-testid="scan-all-hot-leads-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
-              <Brain size={14} weight="duotone" /> {batchBusy ? 'Queuing scans…' : 'Scan all hot leads'}
+              <Brain size={14} weight="duotone" /> {batchBusy ? 'Queuing scans…' : 'Scan engaged leads'}
             </button>
             <button onClick={() => setShowCsv(true)} data-testid="import-csv-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
