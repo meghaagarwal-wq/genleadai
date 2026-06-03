@@ -247,7 +247,9 @@ async def delete_icp(
 
     tenant_id = tenant["id"]
     counts = {
-        "contacts": leads_collection.count_documents({"tenant_id": tenant_id, "icp_id": icp_id}),
+        # iter146 — also count pt_leads referencing this ICP.
+        "contacts": leads_collection.count_documents({"tenant_id": tenant_id, "icp_id": icp_id})
+                   + db["pt_leads"].count_documents({"tenant_id": tenant_id, "icp_id": icp_id}),
         "assets": workspace_assets_collection.count_documents({"tenant_id": tenant_id, "icp_id": icp_id}),
         "conversations": aria_conversations_collection.count_documents({"tenant_id": tenant_id, "icp_id": icp_id}),
     }

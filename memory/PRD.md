@@ -1,3 +1,105 @@
+## Iter 146 — COMPLETE BACKEND DEBUG: Pietential / multi-collection fixes (Feb 4, 2026)
+
+User triggered "RUN COMPLETE BACKEND AND DO COMPLETE DEBUGGING" with a
+screenshot showing the sidebar lead-count strip displaying **0/0/0/0/0**
+for the Pietential workspace, while the Lead Feed itself was populated.
+
+### Root cause (sweeping)
+The backend has TWO lead collections with different field shapes:
+  • `leads` (legacy ARIA) — `status`, `icp_score`, `icp_tier`, `_id: ObjectId`
+  • `pt_leads` (Pietential / Lemlist) — `stage`, `score`, `source`, `id: UUID`
+
+Every aggregation endpoint historically only queried `leads_collection`.
+For Pietential workspaces (where 100% of data lives in `pt_leads`) that
+means sidebar counts, milestones, EOD wrap, Command Center "new today",
+pipeline-health, ICP contact counts, and the daily Pietential scan ALL
+returned 0 / empty even with rich data in MongoDB.
+
+### What shipped
+
+**🟥 Tier-1 (production-visible) — FIXED**
+- **`/api/leads/counts`** (`routes/lead_counts.py`) — rewrote to aggregate
+  both `leads` (`status` field) and `pt_leads` (`stage` field), collapsed
+  into 4 buckets: qualified, nurturing, new, cold. Verified live: Pietential
+  now returns `total=44, qualified=10, nurturing=2, new=16, cold=16`.
+- **`/api/pietential/pipeline-health`** (`routes/pietential_intel.py`) —
+  all 5 KPIs filtered for `lemlist_data.is_active_in_sequence: True`
+  which only the engine-classified rows have. Now `$or`s across 3
+  data-source shapes (engine, lemlist sync, outreach import). Verified:
+  was `0/0/0/0/0`, now `12 active / 11 high-intent / 10 stale / 10 awaiting`.
+- **`/api/pietential/lead/{id}/scan-now` enrichment gate** — same gate
+  ("HIGH_INTENT only") starved 99% of production pt_leads. Gate now also
+  fires on `stage in {hot, engaged, session_pilot, replied}` OR `score >= 35`.
+  Verified live: scan-now now returns `enriched: true, signal_found: true,
+  signal_type: wellbeing, confidence: 0.85` on a real pt_lead.
+- **Claude JSON-shape hardening** — Sonnet occasionally wraps single-object
+  schemas in a one-element list, which 500'd the engine. Added `isinstance(data, list)`
+  unwrap at all 4 Claude callsites (intent · ICP · signal · insight). Defensive.
+
+**🟧 Tier-2 (data quality) — FIXED**
+- **`/api/aria/eod-wrap`** (`routes/aria_eod_wrap.py`) — daily wrap now
+  unions pt_leads for `new_leads_today`, `wins_today` (stage=session_pilot),
+  `losses_today` (stage=dnc), `hot_untouched` (stage hot/engaged with no
+  activity), and `overdue_pending`. Stops Pietential founders getting
+  empty EOD emails.
+- **`/api/command-center/founder`** (`routes/founder_command_center.py`) —
+  `new_today` KPI tile now counts both `leads` + `pt_leads` in the last 24h.
+- **`/api/ttv/milestones`** (`routes/onboarding_legacy.py`) — first_lead /
+  first_meeting / first_won timestamps now pull from pt_leads too.
+  Pietential workspace onboarding progress jumped from `40% → 80%`.
+- **`/api/icps/{id}`** (`routes/icps.py`) — `contacts` count now includes
+  pt_leads referencing that ICP id.
+
+**📦 Architectural foundation — NEW**
+- **`/app/backend/routes/lead_query.py`** — new unified-lead helper:
+  - `iter_tenant_leads(tenant_id, status_in, stage_in, icp_tier_in, min_score, limit)`
+    yields normalised dicts from BOTH collections.
+  - `count_tenant_leads(...)` returns the combined count.
+  - `find_tenant_lead_by_id(tenant_id, lead_id)` resolves across both.
+  - `_PT_STAGE_TO_STATUS` mapping (cold→new, hot/engaged→qualified, etc.).
+  Future endpoints should use this helper instead of querying collections
+  directly. Already wired into `lead_counts.py`. Other endpoints can
+  migrate incrementally without breaking anything.
+
+### Files changed
+- **NEW**: `/app/backend/routes/lead_query.py` (unified helper, 200 LOC)
+- `/app/backend/routes/lead_counts.py` (rewrite — both collections)
+- `/app/backend/routes/pietential_intel.py` (pipeline-health · enrichment gate · 4x Claude list-unwrap)
+- `/app/backend/routes/aria_eod_wrap.py` (pt_leads union in 4 stats)
+- `/app/backend/routes/founder_command_center.py` (new_today + db import)
+- `/app/backend/routes/onboarding_legacy.py` (3 milestones include pt_leads)
+- `/app/backend/routes/icps.py` (contacts count includes pt_leads)
+
+### Verification
+- **54/54 sprint pytest PASS** (iter137 + iter140 + iter141 + iter143).
+- **V10 architectural guard exit 0**.
+- Live Pietential audit:
+  - sidebar counts: total=44 (was 0)
+  - pipeline-health: 12/11/10/10 (was 0/0/0/0)
+  - onboarding milestones: 80% complete (was 40%)
+  - per-lead scan-now: `enriched: true, signal_found: true, confidence: 0.85`
+  - intel/scan-hot from iter145: still queues 10 pt_leads correctly.
+- **Tenant isolation preserved** — all queries pass tenant_id; admin@demo
+  on ten_demo gets ten_demo numbers, on ten_pietential gets ten_pietential.
+
+### Backend audit findings deferred to follow-up
+Lower-priority Tier-2/3 items the audit surfaced (not in this iteration):
+- `/api/leads` list / `your-five-today` / `sleeping` — Pietential UI calls
+  `/api/pt/leads` directly so these are correctly Pietential-blind. Will
+  unify after the Pietential UI starts using a workspace-agnostic feed.
+- `/api/campaigns` aggregations — campaigns are workspace-agnostic in
+  current product. Defer until campaign data lands in both collections.
+- Pre-existing E701/E702 style violations in `routes/pietential.py` (legacy
+  one-line if/else patterns from initial scaffold).
+
+### Status
+**READY TO REDEPLOY** to `app.genleadai.com`. After redeploy, sidebar lead
+counts, pipeline-health card, EOD wrap email, Command Center "new today"
+tile, and onboarding milestones will all reflect the real Pietential data.
+
+---
+
+
 ## Iter 145 — Scan Engaged Leads field-name bug (Feb 3, 2026)
 
 User reported the production "Scan engaged leads" button still returned

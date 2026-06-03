@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends
 
 from deps import (
+    db,
     leads_collection,
     activities_collection,
     get_current_user,
@@ -163,7 +164,13 @@ async def founder_command_center(
     )
 
     # Daily Brief copy
-    new_today = leads_collection.count_documents({"created_at": {"$gte": (now - timedelta(hours=24)).isoformat()}})
+    # iter146 — also count pt_leads so Pietential workspaces' "new today"
+    # KPI reflects the actual ingest, not just legacy ARIA leads.
+    cutoff = (now - timedelta(hours=24)).isoformat()
+    new_today = (
+        leads_collection.count_documents({**lead_query, "created_at": {"$gte": cutoff}})
+        + db["pt_leads"].count_documents({**lead_query, "created_at": {"$gte": cutoff}})
+    )
     hot_count = len([lead for lead in leads if (lead.get("icp_score") or 0) >= 80 and lead.get("status") not in ("won","lost","unqualified")])
 
     return {

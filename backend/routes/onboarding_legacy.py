@@ -80,12 +80,21 @@ async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
     user_doc = users_collection.find_one({"email": current_user["email"]})
     signup_at = user_doc.get("created_at") if user_doc else now.isoformat()
 
+    # iter146 — Onboarding milestones must also see pt_leads so Pietential
+    # workspaces' first-lead/first-meeting/first-won milestones fire correctly.
+    pt_leads_col = db["pt_leads"]
+    tenant_id = current_user.get("tenant_id")
+    pt_filter = {"tenant_id": tenant_id} if tenant_id else {}
+
     first_lead = leads_collection.find_one(
         {"created_by": {"$in": [current_user["email"], "web_form", "api", "meta_webhook"]}},
         {"created_at": 1},
         sort=[("created_at", ASCENDING)]
     )
+    first_pt_lead = pt_leads_col.find_one(pt_filter, {"_id": 0, "created_at": 1}, sort=[("created_at", ASCENDING)])
     first_lead_at = first_lead.get("created_at") if first_lead else None
+    if first_pt_lead and first_pt_lead.get("created_at") and (not first_lead_at or first_pt_lead["created_at"] < first_lead_at):
+        first_lead_at = first_pt_lead["created_at"]
 
     first_aria = aria_conversations_collection.find_one(
         {"role": "aria"},
@@ -99,14 +108,28 @@ async def get_ttv_milestones(current_user: dict = Depends(get_current_user)):
         {"updated_at": 1},
         sort=[("updated_at", ASCENDING)]
     )
+    first_pt_meeting = pt_leads_col.find_one(
+        {**pt_filter, "stage": "session_pilot"},
+        {"_id": 0, "updated_at": 1},
+        sort=[("updated_at", ASCENDING)]
+    )
     first_meeting_at = first_meeting_lead.get("updated_at") if first_meeting_lead else None
+    if first_pt_meeting and first_pt_meeting.get("updated_at") and (not first_meeting_at or first_pt_meeting["updated_at"] < first_meeting_at):
+        first_meeting_at = first_pt_meeting["updated_at"]
 
     first_won = leads_collection.find_one(
         {"status": "won"},
         {"updated_at": 1},
         sort=[("updated_at", ASCENDING)]
     )
+    first_pt_won = pt_leads_col.find_one(
+        {**pt_filter, "stage": "session_pilot", "automation_status": "closed_won"},
+        {"_id": 0, "updated_at": 1},
+        sort=[("updated_at", ASCENDING)]
+    )
     first_won_at = first_won.get("updated_at") if first_won else None
+    if first_pt_won and first_pt_won.get("updated_at") and (not first_won_at or first_pt_won["updated_at"] < first_won_at):
+        first_won_at = first_pt_won["updated_at"]
 
     def time_diff_human(start_str, end_str):
         if not start_str or not end_str:

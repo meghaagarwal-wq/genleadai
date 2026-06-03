@@ -85,19 +85,31 @@ def _compute_eod_wrap(tz_off_hours: float = 0.0, tenant_id: str | None = None) -
     meetings_booked = _count(["meeting_scheduled"])
     status_changes_today = [a for a in today_activities if a.get("activity_type") == "status_changed"]
 
+    # iter146 — also include pt_leads (Pietential workspaces) so EOD wrap
+    # doesn't under-report by ~64% on workspaces that store leads in pt_leads.
+    pt_leads_col = db["pt_leads"]
     new_leads_today = list(leads_collection.find(
         {**tenant_filter, "created_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "source_channel": 1},
+    )) + list(pt_leads_col.find(
+        {**tenant_filter, "created_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "score": 1, "source": 1},
     ))
     new_leads_count = len(new_leads_today)
 
     wins_today = list(leads_collection.find(
         {**tenant_filter, "status": "won", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "deal_value": 1},
+    )) + list(pt_leads_col.find(
+        {**tenant_filter, "stage": "session_pilot", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "deal_value": 1},
     ))
     losses_today = list(leads_collection.find(
         {**tenant_filter, "status": "lost", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "lost_reason": 1},
+    )) + list(pt_leads_col.find(
+        {**tenant_filter, "stage": "dnc", "updated_at": {"$gte": day_start_iso, "$lte": now_iso}},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "lost_reason": 1},
     ))
 
     won_value = sum((w.get("deal_value") or 0) for w in wins_today)
@@ -121,12 +133,20 @@ def _compute_eod_wrap(tz_off_hours: float = 0.0, tenant_id: str | None = None) -
     hot_untouched = list(leads_collection.find(
         {**tenant_filter, "icp_score": {"$gte": 80}, "status": "new", "last_contacted_at": {"$in": [None]}},
         {"_id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "icp_score": 1, "source_channel": 1},
+    ).limit(5)) + list(pt_leads_col.find(
+        {**tenant_filter, "stage": {"$in": ["hot", "engaged"]},
+         "$or": [{"last_activity_at": None}, {"last_activity_at": {"$exists": False}}]},
+        {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "company_name": 1, "score": 1, "source": 1},
     ).limit(5))
 
     overdue_pending = leads_collection.count_documents({
         **tenant_filter,
         "next_followup_at": {"$lt": now_iso},
         "status": {"$nin": ["won", "lost", "unqualified"]},
+    }) + pt_leads_col.count_documents({
+        **tenant_filter,
+        "next_followup_at": {"$lt": now_iso},
+        "stage": {"$nin": ["dnc"]},
     })
 
     try:

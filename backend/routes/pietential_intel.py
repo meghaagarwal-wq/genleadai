@@ -387,6 +387,13 @@ async def classify_intent_for_lead(lead_id: str) -> Optional[Dict[str, Any]]:
         logger.warning("intent classify claude failed: %s", str(e)[:200])
         return None
 
+    # iter146 — defensive unwrap (Claude can wrap single-object schemas in
+    # a one-element list when the prompt was iterated on).
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), None)
+    if not isinstance(data, dict):
+        return None
+
     _leads.update_one(
         {"tenant_id": PT_TENANT_ID, "id": lead_id},
         {"$set": {
@@ -435,6 +442,11 @@ async def score_icp_for_lead(lead_id: str) -> Optional[Dict[str, Any]]:
         logger.warning("icp claude failed: %s", str(e)[:200])
         return None
 
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), None)
+    if not isinstance(data, dict):
+        return None
+
     _leads.update_one(
         {"tenant_id": PT_TENANT_ID, "id": lead_id},
         {"$set": {
@@ -452,12 +464,29 @@ async def score_icp_for_lead(lead_id: str) -> Optional[Dict[str, Any]]:
 # ─────────────────────── Part 4 — Enrichment ───────────────────────
 
 def _enrichment_gate(lead: Dict[str, Any]) -> Tuple[bool, str]:
+    """Decide whether to enrich + signal-scan a lead.
+
+    iter146 — Production pt_leads can come from three different paths,
+    each with a different field shape:
+      • pietential_intel.lemlist_poll_once → sets lemlist_intent + icp_segment
+      • routes/pietential.py legacy lemlist sync → sets `score` + `stage` only
+      • outreach_import.py → sets source/score
+    Accept ANY high-intent signal across the three shapes so the production
+    'Pietential Scan' button actually fires on real data.
+    """
     intent = lead.get("lemlist_intent")
     icp = lead.get("icp_segment")
     if intent == "HIGH_INTENT":
         return True, "high_intent"
     if intent == "MEDIUM_INTENT" and icp in ("icp_a", "icp_b"):
         return True, "medium_intent_high_icp"
+    # Fallback: legacy pt_leads stage/score (no Claude intent classified yet).
+    stage = (lead.get("stage") or "").lower()
+    score = int(lead.get("score") or 0)
+    if stage in ("hot", "engaged", "session_pilot", "replied"):
+        return True, f"stage_{stage}"
+    if score >= 35:
+        return True, f"score_{score}"
     return False, "below_threshold"
 
 
@@ -620,6 +649,14 @@ async def classify_signal_for_lead(lead_id: str) -> Optional[Dict[str, Any]]:
         logger.warning("signal classify failed: %s", str(e)[:200])
         return None
 
+    # iter146 — Sonnet occasionally returns a JSON array wrapping the
+    # single-object schema. Unwrap defensively so the scan doesn't 500.
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), None)
+    if not isinstance(data, dict):
+        logger.warning("signal classify returned non-dict: %s", type(data).__name__)
+        return None
+
     conf = float(data.get("confidence") or 0)
     payload = {
         "signal_found": bool(data.get("signal_found")) and conf >= 0.70,
@@ -702,6 +739,11 @@ async def generate_insight_card_for_lead(lead_id: str) -> Optional[Dict[str, Any
     except ClaudeServiceError as e:
         logger.warning("insight gen failed: %s", str(e)[:200])
         return None
+
+    if isinstance(data, list):
+        data = next((x for x in data if isinstance(x, dict)), None)
+    if not isinstance(data, dict):
+        data = {}
 
     lead_score, account_tier, founder_flag = _compute_score_tier_flag(lead, intel)
     prospect_name = f"{lead.get('first_name', '')} {lead.get('last_name', '')}".strip() or lead.get('email', '')
@@ -826,9 +868,18 @@ def _recompute_lead_score(lead_id: str) -> Optional[Dict[str, Any]]:
 # ─────────────────────── Part 8 — Daily 07:30 IST scan ───────────────────────
 
 async def pietential_insight_scan_once() -> Dict[str, Any]:
+    # iter146 — production pt_leads come from THREE sources with different
+    # field shapes. Pull leads matching ANY high-intent shape so the daily
+    # scan actually processes real data, not just engine-classified rows.
     leads = list(_leads.find(
-        {"tenant_id": PT_TENANT_ID, "insights_enabled": True,
-         "lemlist_intent": {"$in": ["HIGH_INTENT", "MEDIUM_INTENT"]}},
+        {
+            "tenant_id": PT_TENANT_ID,
+            "$or": [
+                {"insights_enabled": True, "lemlist_intent": {"$in": ["HIGH_INTENT", "MEDIUM_INTENT"]}},
+                {"stage": {"$in": ["hot", "engaged", "session_pilot", "replied"]}},
+                {"score": {"$gte": 35}},
+            ],
+        },
         {"_id": 0, "id": 1},
     ).limit(200))
     enriched = 0
@@ -1075,18 +1126,47 @@ async def pipeline_health(current_user: dict = Depends(get_current_user)):
     if not membership and current_user.get("role") != "master_admin":
         raise HTTPException(403, "Pietential workspace access required")
 
-    total_active = _leads.count_documents({"tenant_id": PT_TENANT_ID, "lemlist_data.is_active_in_sequence": True})
-    high_intent = _leads.count_documents({"tenant_id": PT_TENANT_ID, "lemlist_intent": "HIGH_INTENT"})
+    # iter146 — Production pt_leads come from THREE different sync paths
+    # with different shapes. Each filter below uses $or to count rows from
+    # all sources, not just engine-classified ones.
+    total_active = _leads.count_documents({
+        "tenant_id": PT_TENANT_ID,
+        "$or": [
+            {"lemlist_data.is_active_in_sequence": True},
+            {"source": "lemlist", "automation_status": "active"},
+            {"source": "lemlist", "stage": {"$in": ["warm", "hot", "engaged", "session_pilot", "replied"]}},
+        ],
+    })
+    high_intent = _leads.count_documents({
+        "tenant_id": PT_TENANT_ID,
+        "$or": [
+            {"lemlist_intent": "HIGH_INTENT"},
+            {"stage": {"$in": ["hot", "engaged", "session_pilot", "replied"]}},
+            {"score": {"$gte": 60}},
+        ],
+    })
     # "Untouched for 48h+" = high intent + no outbound since last_lemlist_activity
     forty_eight_ago = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     high_intent_stale = _leads.count_documents({
-        "tenant_id": PT_TENANT_ID, "lemlist_intent": "HIGH_INTENT",
-        "$or": [{"founder_actioned_at": {"$exists": False}}, {"founder_actioned_at": {"$lt": forty_eight_ago}}],
+        "tenant_id": PT_TENANT_ID,
+        "$or": [
+            {"lemlist_intent": "HIGH_INTENT"},
+            {"stage": {"$in": ["hot", "engaged", "session_pilot", "replied"]}},
+        ],
+        "$and": [{
+            "$or": [{"founder_actioned_at": {"$exists": False}}, {"founder_actioned_at": {"$lt": forty_eight_ago}}],
+        }],
     })
     awaiting_enrichment = _leads.count_documents({
         "tenant_id": PT_TENANT_ID,
-        "lemlist_intent": {"$in": ["HIGH_INTENT", "MEDIUM_INTENT"]},
-        "$or": [{"enrichment_status": {"$exists": False}}, {"enrichment_status": "pending"}],
+        "$and": [
+            {"$or": [
+                {"lemlist_intent": {"$in": ["HIGH_INTENT", "MEDIUM_INTENT"]}},
+                {"stage": {"$in": ["hot", "engaged", "session_pilot", "replied"]}},
+                {"score": {"$gte": 35}},
+            ]},
+            {"$or": [{"enrichment_status": {"$exists": False}}, {"enrichment_status": "pending"}]},
+        ],
     })
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     signals_this_week = _insights.count_documents({"tenant_id": PT_TENANT_ID, "created_at": {"$gte": week_ago}})
