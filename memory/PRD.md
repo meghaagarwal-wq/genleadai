@@ -1,3 +1,83 @@
+## Iter 148 — Megha client + Demo viewer accounts + 6 demo leads (Feb 5, 2026)
+
+### Provisioning
+- **megha@contentvista.com** — password `Pietential2026!` · role `workspace_owner`
+  · single membership in `ten_pietential` (role `owner`). Stray memberships purged.
+- **meghaagarwaljain2015@gmail.com** — password `DemoView2026!` · role
+  `workspace_viewer` · single membership in `ten_demo` (role `viewer`,
+  read-only). Previous auto-provisioned tenant `ten_af0b03831422` membership
+  removed.
+- Both passwords bcrypt-hashed on write.
+- Credentials added to `/app/memory/test_credentials.md`.
+
+### Demo lead seed — 6 leads in `ten_demo`, fully fictional
+**B2B Instinct (3 cards in pt_insights + pt_leads)**:
+- Sarah Chen · CPO · NovaBridge Technologies · score 84 · HIGH_INTENT · tier_1 ·
+  signal `new_people_leader` · LinkedIn DM Tue 10am
+- Arjun Mehta · VP People · Kestrel Financial Group · score 71 · HIGH_INTENT ·
+  tier_1 · signal `layoffs` (12%) · reply_sentiment POSITIVE
+- James Whitfield · Head HR Transformation · Alveron Consulting · score 58 ·
+  MEDIUM_INTENT · tier_2 · signal `benefits_hr_transformation`
+
+**B2C Automation (3 leads in pt_leads + outbound_log + inbound_messages)**:
+- Priya Nair · WhatsApp · stage warm · journey 2/7 · 3-message thread (qualification)
+- Rahul Desai · Email · stage hot · journey 5/7 · 5-message thread (qualification → booking)
+- Ananya Sharma · WhatsApp · stage warm · journey 3/7 · 2-message thread (nurture)
+
+All seeded data tagged `seed_source: iter148` for idempotent re-runs.
+Seeder script: `/app/backend/scripts/iter148_seed_demo_accounts.py` (re-runnable).
+
+### Verification — 10/10 PASS
+- **V1** PT-owner workspace switcher returns exactly 1 entry (ten_pietential,
+  role=owner) · admin panel blocked.
+- **V2** Demo-viewer workspace switcher returns exactly 1 entry (ten_demo,
+  role=viewer) · admin panel blocked.
+- **V3** PT-owner querying `/api/pt/insights/feed` with `X-Tenant-Id=ten_demo`
+  gets **403 "Not a member of requested tenant"** (Pietential routes use
+  the strict `get_active_tenant` dep). Calling with their own tenant
+  returns ZERO demo cards.
+- **V4** Demo-viewer forging `X-Tenant-Id=ten_pietential` — `/api/pt/leads`
+  silently falls back to ten_demo (route uses `get_current_user`); the
+  response contains zero Pietential-domain emails. Strict 403 path also
+  confirmed on `/api/pt/insights/feed`.
+- **V5** All 6 demo leads visible to demo-viewer via `/api/pt/leads`.
+- **V6** No email-domain overlap — `novabridge.io`, `kestrelfinancial.com`,
+  `alveron.com`, `*.example` absent from real Pietential pt_leads.
+- **V7** Instinct Feed renders 3 cards with correct
+  `prospect_name`/`signal_type`/`lead_score`/`suggested_message`/`icp_match_name`/`confidence`
+  populated (iter143 UI-compat fields all present).
+- **V8** Conversation thread endpoint returns the correct number of
+  outbound + inbound messages per lead (Priya 3, Rahul 5, Ananya 2).
+
+Test file: `/app/backend/tests/test_iter148_demo_isolation.py` (10 tests, 2.8s).
+
+### What was NOT touched
+- Existing Pietential leads, intel cards, ICP config — all preserved.
+- `lemlist_poll_loop` / `pietential_insight_scan_loop` jobs untouched.
+- Other tenants — only ten_demo received seed data.
+- `claude_service.py` wrapper — V10 architectural rule preserved.
+
+### Files changed
+- **NEW** `/app/backend/scripts/iter148_seed_demo_accounts.py` (re-runnable seeder)
+- **NEW** `/app/backend/tests/test_iter148_demo_isolation.py` (10 isolation tests)
+- `/app/memory/test_credentials.md` (Megha credentials)
+- MongoDB: `users`, `tenant_memberships`, `pt_leads`, `pt_insights`,
+  `outbound_log`, `inbound_messages` (ten_demo only — seed_source=iter148).
+
+### Status
+**READY** on preview. Megha can log in to **app.genleadai.com** with
+`megha@contentvista.com / Pietential2026!` after redeploy AND a one-time
+DB sync from preview to production (the user/membership/seed writes only
+exist in preview's MongoDB).
+
+⚠️ **Production reminder**: Preview MongoDB ≠ Production MongoDB. The
+provisioning + seed writes don't sync automatically. After redeploy, re-run
+`python -m scripts.iter148_seed_demo_accounts` against the production
+MongoDB connection (or have Emergent Support do it).
+
+---
+
+
 ## Iter 147 — Lint cleanup + helper migration (Feb 4, 2026)
 
 User triggered the two carried-over items from iter146:
