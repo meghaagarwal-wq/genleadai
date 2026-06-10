@@ -48,7 +48,17 @@ audit_col = db["audit_log"]
 
 # Default callback host. In production this should resolve to your API origin.
 def _api_base() -> str:
-    return os.getenv("PUBLIC_API_BASE_URL", "https://app.genleadai.com")
+    # iter150 — follow the env-var fallback chain instead of hardcoding the
+    # production domain. Deployment-agent flagged the original
+    # `os.getenv("PUBLIC_API_BASE_URL", "https://app.genleadai.com")` as a
+    # leaky default (would route OAuth callbacks to production even on a
+    # preview deploy missing the env var).
+    return (
+        os.environ.get("PUBLIC_API_BASE_URL")
+        or os.environ.get("FRONTEND_URL")
+        or os.environ.get("BACKEND_URL")
+        or "http://localhost:8001"
+    ).rstrip("/")
 
 
 def _now() -> datetime:
