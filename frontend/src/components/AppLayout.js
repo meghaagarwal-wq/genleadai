@@ -22,8 +22,9 @@ import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
   CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold, CheckCircle,
-  Sparkle,
+  Sparkle, ArrowsClockwise,
 } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import NotificationsBell from './NotificationsBell';
@@ -128,9 +129,10 @@ const ThemeToggle = () => {
 // Lives in the top header. Lists every workspace the current user belongs
 // to. Picking one updates localStorage.active_tenant + dispatches a window
 // event so child pages can refetch. NEVER hardcodes a tenant id.
-const WorkspaceSwitcher = ({ onSwitch }) => {
+const WorkspaceSwitcher = ({ onSwitch, user }) => {
   const [open, setOpen] = useState(false);
   const [tenants, setTenants] = useState([]);
+  const [resetting, setResetting] = useState(false);
   const [active, setActiveLocal] = useState(() => {
     try { return JSON.parse(localStorage.getItem('active_tenant') || 'null'); }
     catch { return null; }
@@ -164,6 +166,29 @@ const WorkspaceSwitcher = ({ onSwitch }) => {
     localStorage.setItem('active_tenant', JSON.stringify(t));
     window.dispatchEvent(new CustomEvent('aria:tenant-changed', { detail: t }));
     onSwitch?.(t);
+  };
+
+  // iter149 — Reset Demo seeds. Visible only when active workspace is the
+  // demo tenant AND caller is master_admin. One click → POST /api/demo/reset
+  // → toast result. Useful between back-to-back live demos.
+  const isDemoTenant = active?.id === 'ten_demo';
+  const canResetDemo = isDemoTenant && user?.role === 'master_admin';
+  const handleResetDemo = async () => {
+    if (resetting) return;
+    if (!window.confirm('Reset the Demo workspace?\n\nThis will wipe all walkthrough annotations and re-seed:\n  • 6 demo leads (3 B2B Instinct + 3 B2C Automation)\n  • 3 insight cards\n  • 10 conversation messages\n\nFresh timestamps anchored to now.')) return;
+    setResetting(true);
+    try {
+      const r = await api.post('/api/demo/reset');
+      const s = r.data?.reseeded || {};
+      toast.success(`Demo reset · ${(s.b2b_leads || 0) + (s.b2c_leads || 0)} leads · ${s.insight_cards || 0} cards · ${s.messages || 0} messages`);
+      // Broadcast so all child pages refetch (insight feed, lead inbox, etc.)
+      window.dispatchEvent(new CustomEvent('aria:tenant-changed', { detail: active }));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Demo reset failed');
+    } finally {
+      setResetting(false);
+      setOpen(false);
+    }
   };
 
   return (
@@ -215,6 +240,20 @@ const WorkspaceSwitcher = ({ onSwitch }) => {
               )}
             </button>
           ))}
+          {canResetDemo && (
+            <div className="border-t" style={{ borderColor: 'var(--theme-border)' }}>
+              <button
+                onClick={handleResetDemo}
+                disabled={resetting}
+                data-testid="workspace-switcher-reset-demo"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-left transition-colors hover:bg-[var(--theme-surface2)] disabled:opacity-50"
+                style={{ color: 'var(--theme-purple-light)' }}
+              >
+                <ArrowsClockwise size={14} weight="bold" className={resetting ? 'animate-spin' : ''} />
+                {resetting ? 'Resetting demo…' : 'Reset demo data'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -559,7 +598,7 @@ const AppLayout = ({ children }) => {
             >
               <List size={22} />
             </button>
-            <WorkspaceSwitcher onSwitch={handleWorkspaceSwitch} />
+            <WorkspaceSwitcher onSwitch={handleWorkspaceSwitch} user={user} />
             <span
               className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em]"
               style={{ background: 'var(--theme-purple-dim)', color: 'var(--theme-purple-light)' }}

@@ -1,3 +1,39 @@
+## Iter 149b — Workspace Switcher "Reset demo data" button (Feb 5, 2026)
+
+UI follow-up to iter149's `/api/demo/reset` endpoint. Founder no longer
+needs a curl to reset between live demos — one click from the
+workspace switcher.
+
+### What shipped
+- `/app/frontend/src/components/AppLayout.js` — added a "🔄 Reset demo
+  data" footer row inside the existing `WorkspaceSwitcher` dropdown
+  (`data-testid="workspace-switcher-reset-demo"`). Renders ONLY when:
+  - active tenant id = `ten_demo`, AND
+  - `user.role === 'master_admin'`
+- Click → window.confirm dialog explaining exactly what will be wiped
+  and reseeded (6 leads + 3 cards + 10 messages) → `POST /api/demo/reset`
+  → toast `Demo reset · 6 leads · 3 cards · 10 messages` → broadcasts
+  `aria:tenant-changed` so every child page (Instinct Feed, Lead Inbox,
+  Command Center KPIs) refetches immediately.
+- Spinner on the icon while in-flight, double-click protected.
+
+### Verified live on preview
+- Master_admin on ten_demo → reset row VISIBLE.
+- Master_admin on ten_pietential → reset row HIDDEN (count == 0).
+- Non-admin users still get the 403 from the backend (iter149 guard).
+
+### Files changed
+- `/app/frontend/src/components/AppLayout.js` (imports + `WorkspaceSwitcher` component)
+
+### Status
+**READY**. Push via Save to GitHub → redeploy. After redeploy, log into
+`https://app.genleadai.com` as master_admin (admin@demo.com), pick
+"GenLeadAI Demo" in the workspace switcher → the Reset row appears at
+the bottom of the dropdown.
+
+---
+
+
 ## Iter 149 — /api/demo/reset endpoint (Feb 5, 2026)
 
 ### What shipped
