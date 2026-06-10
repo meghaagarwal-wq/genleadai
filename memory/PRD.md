@@ -1,3 +1,42 @@
+## Iter 149 — /api/demo/reset endpoint (Feb 5, 2026)
+
+### What shipped
+- **`POST /api/demo/reset`** — master_admin only · tenant-locked to ten_demo.
+  Purges every `seed_source: iter148` row across `pt_leads`, `pt_insights`,
+  `outbound_log`, `inbound_messages`, `activities`. Then re-runs the iter148
+  seeder (via `importlib.reload` so timestamps re-anchor to NOW). Returns
+  a summary of `{purged, reseeded, reset_at, actor}` + writes an audit_log
+  entry.
+- **`GET /api/demo/state`** — master_admin only · read-only health check
+  returning `{counts, fully_seeded, oldest_seed_created_at}`. Useful before
+  starting a live demo to confirm data is fresh.
+- File: `/app/backend/routes/demo_reset.py` (~110 LOC).
+- Registered in `routes/__init__.py` (alongside the other iter149 routers).
+
+### Verification (live)
+- `admin@demo.com` calling `POST /api/demo/reset` → 200; oldest_seed_at
+  jumped from 10:33:45 → 10:46:09 (fresh anchor). All 6 leads + 3 cards
+  + 10 messages re-seeded.
+- Demo viewer (`meghaagarwaljain2015@gmail.com`) calling reset → **403**.
+- Unauth → **403**.
+- iter148 10/10 isolation tests still PASS after the reset cycle.
+
+### Files changed
+- **NEW** `/app/backend/routes/demo_reset.py`
+- `/app/backend/routes/__init__.py` (import + register `demo_reset_router`)
+
+### Use
+```bash
+# Before a demo — confirm seeds are fresh
+curl $API_URL/api/demo/state -H "Authorization: Bearer <master_admin>"
+
+# After a demo (or between sessions) — pristine reset
+curl -X POST $API_URL/api/demo/reset -H "Authorization: Bearer <master_admin>"
+```
+
+---
+
+
 ## Iter 148 — Megha client + Demo viewer accounts + 6 demo leads (Feb 5, 2026)
 
 ### Provisioning

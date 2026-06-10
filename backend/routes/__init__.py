@@ -193,6 +193,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter131 — Founder voice training
     from .voice_seeds import router as voice_seeds_router
 
+    # iter149 — Demo workspace reset (master_admin only, ten_demo only)
+    from .demo_reset import router as demo_reset_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -258,5 +261,6 @@ def register_all_routes(app: FastAPI) -> None:
         onboarding_legacy_router,
         lead_counts_router,
         voice_seeds_router,
+        demo_reset_router,
     ):
         app.include_router(router)
