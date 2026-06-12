@@ -314,6 +314,52 @@ def _seeded_sequences() -> list[dict]:
     ]
 
 
+def _seeded_pending_outreach(leads: list[dict]) -> list[dict]:
+    """3 awaiting_owner_approval rows so the /api/approvals sidebar page renders entries."""
+    drafts = [
+        (leads[0], "linkedin",  "Saw your team's note on flat-hierarchy restructure — happy to share our 6-week framework for keeping culture intact during the shift. Worth a 20-min call this week?"),
+        (leads[2], "email",     "Subject: Retention-after-RIF data\n\nHi James — saw the latest workforce update. Quick offer: anonymised retention data from 4 manufacturing logos who navigated similar RIFs. Worth a Tuesday call?"),
+        (leads[4], "whatsapp",  "Marcus — quick note. Spotted the new wellbeing benchmark you shared on LinkedIn. Curious if you've seen our ROI module — built for People Analytics roles. Reply 1 to skip, 2 for the deck."),
+    ]
+    rows = []
+    for i, (lead, channel, draft) in enumerate(drafts):
+        rows.append({
+            "tenant_id": TENANT, "lead_id": lead["id"],
+            "channel": channel, "draft": draft, "draft_preview": draft[:120],
+            "status": "awaiting_owner_approval",
+            "confidence": 0.62 + (i * 0.07),
+            "reason_for_review": "First-touch to enterprise account — needs founder sign-off.",
+            "ai_model": "claude-haiku-4.5",
+            "session_id": f"sess_demo_{i:02d}",
+            "created_at": _iso(NOW - timedelta(hours=i * 2 + 1)),
+            "_seed_source": SOURCE_TAG,
+        })
+    return rows
+
+
+def _seeded_legacy_leads(leads: list[dict]) -> list[dict]:
+    """Mirror leads into the legacy `leads` collection so the sidebar Conversations
+    threads page (uses leads_col, not pt_leads_col) renders all 10 demo names."""
+    rows = []
+    for L in leads:
+        rows.append({
+            "id": L["id"], "tenant_id": TENANT,
+            "first_name": L["first_name"], "last_name": L["last_name"],
+            "email": L["email"], "phone": None,
+            "company_name": L["company_name"], "title": L["title"],
+            "source": L["source"], "stage": L["stage"],
+            "score": L["score"], "lemlist_intent": L["lemlist_intent"],
+            "owner": L["owner"], "assigned_to": L["owner"],
+            "aria_active": True, "latest_sentiment": L.get("reply_sentiment"),
+            "last_activity_at": L["last_activity_at"],
+            "last_contacted_at": L["last_contacted_at"],
+            "created_at": L["created_at"],
+            "updated_at": L["updated_at"],
+            "_seed_source": SOURCE_TAG,
+        })
+    return rows
+
+
 def _seeded_ad_spend() -> list[dict]:
     """4 ad-spend rows for current month → Cost-per-Qualified-Lead widget."""
     month = NOW.strftime("%Y-%m")
@@ -332,6 +378,7 @@ def main() -> None:
     # 1. Wipe any prior seeded rows for `ten_demo` matching SOURCE_TAG.
     targets = {
         "pt_leads":        {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
+        "leads":           {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
         "pt_insights":     {"tenant_id": TENANT, "source": SOURCE_TAG},
         "outbound_log":    {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
         "inbound_messages":{"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
@@ -340,6 +387,7 @@ def main() -> None:
         "asset_clicks":    {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
         "lemlist_sequences": {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
         "ad_spend":        {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
+        "pending_outreach": {"tenant_id": TENANT, "_seed_source": SOURCE_TAG},
     }
     for col, q in targets.items():
         n = db[col].delete_many(q).deleted_count
@@ -351,9 +399,20 @@ def main() -> None:
                       "Helix Pharma", "Quantum Logistics", "EcoBuild GmbH", "Asia Pay Group",
                       "NordicWell Co", "Sahara Energy"}
     db["pt_leads"].delete_many({"tenant_id": TENANT, "company_name": {"$in": list(demo_companies)}})
+    db["leads"].delete_many({"tenant_id": TENANT, "company_name": {"$in": list(demo_companies)}})
+
+    # iter154 — wipe legacy demo decay rows on score_history for our demo
+    # leads so the dedup-fix in dashboards.py doesn't have to fight stale data.
+    demo_lead_ids = [f"ptl_demo_{fn.lower()}_{ln.lower().replace(chr(39), '').replace(chr(252), 'u')}"
+                     for (fn, ln) in [("Sarah", "Chen"), ("Arjun", "Mehta"), ("James", "Whitfield"),
+                                       ("Priya", "Sharma"), ("Marcus", "O'Brien"), ("Aisha", "Patel"),
+                                       ("David", "Müller"), ("Lin", "Zhao"), ("Olivia", "Tremblay"),
+                                       ("Yusuf", "Rahman")]]
+    db["score_history"].delete_many({"tenant_id": TENANT, "lead_id": {"$in": demo_lead_ids}})
 
     # 2. Seed.
     leads = _seeded_leads()
+    legacy_leads = _seeded_legacy_leads(leads)
     insights = _seeded_insights(leads)
     outbound = _seeded_outbound(leads)
     inbound = _seeded_inbound(leads)
@@ -362,9 +421,11 @@ def main() -> None:
     clicks = _seeded_asset_clicks()
     seqs = _seeded_sequences()
     spends = _seeded_ad_spend()
+    pending = _seeded_pending_outreach(leads)
 
     inserts = [
         ("pt_leads",         leads),
+        ("leads",            legacy_leads),
         ("pt_insights",      insights),
         ("outbound_log",     outbound),
         ("inbound_messages", inbound),
@@ -373,6 +434,7 @@ def main() -> None:
         ("asset_clicks",     clicks),
         ("lemlist_sequences", seqs),
         ("ad_spend",         spends),
+        ("pending_outreach", pending),
     ]
     for col, rows in inserts:
         if rows:

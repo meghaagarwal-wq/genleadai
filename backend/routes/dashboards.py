@@ -530,12 +530,16 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
 
     # Why Now Feed.
     yesterday = (now - timedelta(days=1)).isoformat()
-    score_changes = latest_score_changes(tenant_id, since_iso=yesterday, min_delta=10, limit=10)
-    why_now = []
+    score_changes = latest_score_changes(tenant_id, since_iso=yesterday, min_delta=10, limit=20)
+    why_now: list[dict] = []
+    seen_lead_ids: set[str] = set()  # dedup: keep only the most recent score-change per lead
     for sh in score_changes:
+        if sh["lead_id"] in seen_lead_ids:
+            continue
         lead = pt_leads_col.find_one({"id": sh["lead_id"]}, {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1})
         if not lead:
             continue
+        seen_lead_ids.add(sh["lead_id"])
         why_now.append({
             "lead_id": sh["lead_id"],
             "name": f"{lead.get('first_name', '')} {lead.get('last_name', '')}".strip(),
@@ -545,6 +549,8 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "reason": sh.get("reason") or "Score updated by ARIA",
             "when": sh["created_at"],
         })
+        if len(why_now) >= 10:
+            break
 
     # Founder flags (pt_insights with founder_flag true).
     founder_flags = list(pt_insights_col.find(
@@ -767,11 +773,15 @@ async def dashboard_b2b_sales(current_user: dict = Depends(get_current_user)):
     # Why Now Feed.
     yesterday = (now - timedelta(days=1)).isoformat()
     score_changes = latest_score_changes(tenant_id, since_iso=yesterday, min_delta=10, limit=10)
-    why_now = []
+    why_now: list[dict] = []
+    seen_lead_ids: set[str] = set()
     for sh in score_changes:
+        if sh["lead_id"] in seen_lead_ids:
+            continue
         lead = pt_leads_col.find_one({"id": sh["lead_id"]}, {"_id": 0, "first_name": 1, "last_name": 1, "company_name": 1})
         if not lead:
             continue
+        seen_lead_ids.add(sh["lead_id"])
         why_now.append({
             "lead_id": sh["lead_id"],
             "name": f"{lead.get('first_name', '')} {lead.get('last_name', '')}".strip(),
@@ -779,6 +789,8 @@ async def dashboard_b2b_sales(current_user: dict = Depends(get_current_user)):
             "score_before": sh["prev_score"], "score_after": sh["new_score"], "delta": sh["delta"],
             "reason": sh.get("reason") or "Score updated", "when": sh["created_at"],
         })
+        if len(why_now) >= 10:
+            break
 
     # Signal-to-revenue attribution (compact — top 3).
     attr_rows = list(pt_insights_col.aggregate([
