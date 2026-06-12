@@ -20,6 +20,8 @@ import {
   Sparkle, ArrowRight, ArrowLeft, X, House, MapTrifold,
   GraduationCap, Plug, Rocket,
 } from '@phosphor-icons/react';
+import { useAuth } from '../context/AuthContext';
+import api from '../config/api';
 
 const STORAGE_KEY = 'aria.tour.completed.v1';
 // iter109 — accept either localStorage key so e2e tests can pre-seed without
@@ -77,14 +79,31 @@ const STEPS = [
 const AriaTourModal = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
   const forceTour = searchParams.get('tour') === '1';
+  // iter150-B (P1) — gate first on the backend-persisted `tour_completed_at`
+  // so returning founders (fresh browser/device, no localStorage) don't see
+  // the welcome modal again and have the sidebar blocked. localStorage stays
+  // as a fast secondary gate (no flicker before /auth/me hydrates).
   const [open, setOpen] = useState(() => {
     if (forceTour) return true;
-    const seen = localStorage.getItem(STORAGE_KEY) === '1' ||
-                 localStorage.getItem(STORAGE_KEY_ALIAS) === 'true';
-    return !seen;
+    const localSeen = localStorage.getItem(STORAGE_KEY) === '1' ||
+                      localStorage.getItem(STORAGE_KEY_ALIAS) === 'true';
+    return !localSeen;
   });
   const [idx, setIdx] = useState(0);
+
+  // When the auth context hydrates, close the tour if the backend says it
+  // was already completed (covers fresh-browser logins where localStorage
+  // is empty but the user finished the tour previously).
+  useEffect(() => {
+    if (forceTour) return;
+    if (user?.tour_completed_at) {
+      localStorage.setItem(STORAGE_KEY, '1');
+      localStorage.setItem(STORAGE_KEY_ALIAS, 'true');
+      setOpen(false);
+    }
+  }, [user?.tour_completed_at, forceTour]);
 
   // Strip ?tour=1 from URL once we open it, so refresh doesn't re-trigger
   useEffect(() => {
@@ -114,6 +133,9 @@ const AriaTourModal = () => {
     localStorage.setItem(STORAGE_KEY, '1');
     localStorage.setItem(STORAGE_KEY_ALIAS, 'true');
     setOpen(false);
+    // Persist on the backend so other devices/browsers don't re-show the tour.
+    // Fire-and-forget — UI never blocks on this.
+    api.post('/api/auth/me/tour-complete').catch(() => {});
     if (navigateTo) navigate(navigateTo);
   };
 

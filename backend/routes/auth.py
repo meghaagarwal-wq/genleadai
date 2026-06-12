@@ -170,8 +170,21 @@ async def login(credentials: UserLogin, request: Request):
             "full_name": user["full_name"],
             "role": user["role"],
             "avatar_url": user.get("avatar_url"),
+            "tour_completed_at": user.get("tour_completed_at"),
         },
     }
+
+
+@router.post("/me/tour-complete")
+async def mark_tour_complete(current_user: dict = Depends(get_current_user)):
+    """Mark the product tour as completed for this user — persists across
+    devices/browsers so returning founders don't see the welcome modal again."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    users_collection.update_one(
+        {"email": current_user["email"]},
+        {"$set": {"tour_completed_at": now_iso}},
+    )
+    return {"ok": True, "tour_completed_at": now_iso}
 
 
 def _safe_user(user: dict) -> dict:
@@ -188,6 +201,7 @@ def _safe_user(user: dict) -> dict:
         "avatar_url": user.get("avatar_url"),
         "workspace_id": user.get("workspace_id") or user.get("tenant_id"),
         "created_at": user.get("created_at"),
+        "tour_completed_at": user.get("tour_completed_at"),
     }
 
 
