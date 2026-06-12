@@ -262,7 +262,19 @@ export const B2CDashboard = () => {
           )}
         </SectionCard>
         <SectionCard title="Multi-touch leads" sub="Leads from 2+ channels convert higher" testid="channel-overlap">
-          <ComingSoon what="multi-touch tracking" why="Connect more channels + tag lead source on every channel to see overlap." />
+          {data.channel_overlap?.coming_soon || !(data.channel_overlap?.rows?.length) ? (
+            <ComingSoon what="multi-touch tracking" why="Tag lead source on every channel to see overlap." />
+          ) : (
+            <div className="space-y-2">
+              {data.channel_overlap.rows.map((r) => (
+                <div key={r.channels} className="flex items-center justify-between text-xs gap-2">
+                  <span className="capitalize font-semibold truncate flex-1" style={{ color: 'var(--theme-text)' }}>{r.channels}</span>
+                  <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads</span>
+                  <span className="font-bold" style={{ color: r.conv_rate >= 30 ? '#10B981' : r.conv_rate >= 10 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
         <SectionCard title="Leads to recover" sub={`${data.ghost_leads.length} warm leads gone quiet`} testid="ghost-leads">
           {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghost leads — nice.</div> : data.ghost_leads.map((g) => (
@@ -378,7 +390,19 @@ export const B2BFounderDashboard = () => {
 
       {/* Signal Attribution */}
       <SectionCard title="What signals actually predict meetings" sub="Workspace-specific — needs 90+ days of data" testid="signal-attribution">
-        {data.signal_attribution.coming_soon ? <ComingSoon what="attribution data" why="Need 90+ days of pipeline data + ≥3 meetings booked from signal-sourced leads." /> : null}
+        {data.signal_attribution.coming_soon || !(data.signal_attribution.rows?.length) ? (
+          <ComingSoon what="attribution data" why="Need 90+ days of pipeline data + ≥3 meetings booked from signal-sourced leads." />
+        ) : (
+          <div className="space-y-2">
+            {data.signal_attribution.rows.map((r) => (
+              <div key={r.signal_type} className="flex items-center justify-between text-xs">
+                <span className="font-semibold capitalize" style={{ color: 'var(--theme-text)' }}>{(r.signal_type || '').replace(/_/g, ' ')}</span>
+                <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads · {r.meetings} meetings</span>
+                <span className="font-bold" style={{ color: r.conv_rate >= 50 ? '#10B981' : r.conv_rate >= 20 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
+              </div>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       {/* Instinct Feed widget — top 5 intelligence cards */}

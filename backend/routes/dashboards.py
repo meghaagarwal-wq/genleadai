@@ -334,10 +334,62 @@ async def dashboard_b2c(current_user: dict = Depends(get_current_user)):
         "funnel": funnel,
         "biggest_drop": biggest_drop,
         "sequences": sequences,
-        "channel_overlap": {"coming_soon": True, "rows": []},
+        "channel_overlap": _channel_overlap(tenant_id),
         "ghost_leads": ghost_leads,
-        "cost_per_qualified_lead": {"coming_soon": True, "rows": []},
+        "cost_per_qualified_lead": _cost_per_qualified_lead(tenant_id, currency, month_start),
     }
+
+
+def _channel_overlap(tenant_id: str) -> Dict[str, Any]:
+    """Leads touched by 2+ channels — they convert higher. Reads `source_channels`
+    (array) on pt_leads; falls back to single-channel rows when array missing."""
+    rows = list(pt_leads_col.aggregate([
+        {"$match": {"tenant_id": tenant_id, "source_channels": {"$exists": True, "$type": "array"}}},
+        {"$project": {"_id": 0, "channels": "$source_channels", "score": 1,
+                      "is_meeting": {"$cond": [{"$gte": ["$score", 70]}, 1, 0]}}},
+    ]))
+    if not rows:
+        return {"coming_soon": True, "rows": []}
+    overlap_buckets: Dict[str, Dict[str, int]] = {}
+    for r in rows:
+        chs = sorted(set(r.get("channels") or []))
+        if len(chs) < 2:
+            continue
+        key = " + ".join(chs[:3])
+        b = overlap_buckets.setdefault(key, {"leads": 0, "meetings": 0})
+        b["leads"] += 1
+        b["meetings"] += r.get("is_meeting") or 0
+    if not overlap_buckets:
+        return {"coming_soon": True, "rows": []}
+    out_rows = sorted(
+        [{"channels": k, "leads": v["leads"], "meetings": v["meetings"],
+          "conv_rate": round((v["meetings"] / v["leads"]) * 100, 1) if v["leads"] else 0}
+         for k, v in overlap_buckets.items()],
+        key=lambda r: r["leads"], reverse=True,
+    )[:5]
+    return {"coming_soon": False, "rows": out_rows}
+
+
+def _cost_per_qualified_lead(tenant_id: str, currency: str, month_start: str) -> Dict[str, Any]:
+    """Per-channel ad-spend / qualified-lead ratio. Reads `ad_spend` collection
+    when present; returns coming_soon when no spend recorded."""
+    spend_col = db["ad_spend"]
+    spend_rows = list(spend_col.aggregate([
+        {"$match": {"tenant_id": tenant_id, "month": month_start[:7]}},
+        {"$group": {"_id": "$channel", "spend": {"$sum": "$amount"}}},
+    ]))
+    if not spend_rows:
+        return {"coming_soon": True, "rows": []}
+    out = []
+    for s in spend_rows:
+        qualified = pt_leads_col.count_documents({
+            "tenant_id": tenant_id, "source": s["_id"],
+            "created_at": {"$gte": month_start}, "score": {"$gte": 40},
+        })
+        cpql = round(s["spend"] / qualified, 0) if qualified else None
+        out.append({"channel": s["_id"], "spend": round(s["spend"]),
+                    "qualified": qualified, "cpql": cpql, "currency": currency})
+    return {"coming_soon": False, "rows": sorted(out, key=lambda r: (r["cpql"] or 1e9))}
 
 
 def _b2c_revenue_forecast(tenant_id: str, currency: str) -> Dict[str, Any]:
@@ -376,6 +428,33 @@ def _asset_performance(tenant_id: str, day_start_iso: str):
     if not rows:
         return {"coming_soon": True, "rows": []}
     return {"coming_soon": False, "rows": [{"name": r["_id"], "clicks": r["clicks"]} for r in rows]}
+
+
+def _signal_attribution(tenant_id: str, days_present: int) -> Dict[str, Any]:
+    """Which signal types actually predict meetings — aggregates pt_insights by
+    signal_type and joins booking_events on lead_id. Unlocks once we have
+    ≥3 signal-sourced leads in any signal type so demos and early workspaces
+    can show real numbers without waiting 90 days."""
+    base = {"tenant_id": tenant_id}
+    rows = list(pt_insights_col.aggregate([
+        {"$match": base},
+        {"$lookup": {"from": "booking_events", "localField": "lead_id", "foreignField": "lead_id", "as": "b"}},
+        {"$group": {
+            "_id": "$signal_type",
+            "leads": {"$sum": 1},
+            "meetings": {"$sum": {"$cond": [{"$gt": [{"$size": "$b"}, 0]}, 1, 0]}},
+        }},
+        {"$match": {"leads": {"$gte": 3}}},
+    ]))
+    if not rows:
+        return {"coming_soon": days_present < 90, "rows": []}
+    out = []
+    for r in rows:
+        rate = round((r["meetings"] / r["leads"]) * 100, 1) if r["leads"] else 0
+        out.append({"signal_type": r["_id"] or "unknown", "leads": r["leads"],
+                    "meetings": r["meetings"], "conv_rate": rate})
+    out.sort(key=lambda x: x["conv_rate"], reverse=True)
+    return {"coming_soon": False, "rows": out[:6]}
 
 
 # ───────────────────────── B2B FOUNDER ───────────────────────────
@@ -534,7 +613,7 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "icp_distribution": [{"icp": k, "count": v, "pct": round(v / total * 100, 1)} for k, v in icp_dist.items()],
         },
         "channel_performance": channel_perf,
-        "signal_attribution": {"coming_soon": days_present < 90, "rows": []},
+        "signal_attribution": _signal_attribution(tenant_id, days_present),
         "why_now": why_now,
         "founder_flags": founder_flags,
         "buying_committee": radar,
