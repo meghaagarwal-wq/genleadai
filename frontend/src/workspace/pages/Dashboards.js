@@ -21,7 +21,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   TrendUp, TrendDown, Sparkle, Clock, ChartLine, Lightning, ArrowsClockwise,
-  Buildings, ArrowRight, Warning, Robot,
+  Buildings, ArrowRight, Warning, Robot, Brain, Lightbulb,
 } from '@phosphor-icons/react';
 import api from '../../config/api';
 
@@ -381,6 +381,9 @@ export const B2BFounderDashboard = () => {
         {data.signal_attribution.coming_soon ? <ComingSoon what="attribution data" why="Need 90+ days of pipeline data + ≥3 meetings booked from signal-sourced leads." /> : null}
       </SectionCard>
 
+      {/* Instinct Feed widget — top 5 intelligence cards */}
+      <InstinctFeedWidget />
+
       {/* Why Now + Founder Flags + Buying Committee */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Why Now — Pipeline movements (24h)" testid="why-now-feed">
@@ -632,16 +635,174 @@ const PipelineStagePill = ({ s }) => {
   return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: cfg.bg, color: cfg.color }}>{s}</span>;
 };
 
+// ───────────────────────── Instinct Feed Widget ─────────────────
+// Top 5 intelligence cards — full cards on desktop, compact list on mobile.
+// Surfaces the same data as /app/instinct (pt insights feed).
+const InstinctFeedWidget = () => {
+  const [cards, setCards] = useState(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    api.get('/api/pt/insights/feed', { params: { status: 'new' } })
+      .then(r => setCards((r.data?.cards || []).slice(0, 5)))
+      .catch(() => setError(true));
+  }, []);
+
+  if (error) return null;
+  if (cards === null) {
+    return (
+      <SectionCard title="Latest Instinct Cards" sub="ARIA's intelligence engine output" testid="instinct-widget">
+        <div className="text-xs py-4 text-center" style={{ color: 'var(--theme-text-muted)' }}>Loading instinct cards…</div>
+      </SectionCard>
+    );
+  }
+  if (cards.length === 0) {
+    return (
+      <SectionCard title="Latest Instinct Cards" sub="ARIA's intelligence engine output" testid="instinct-widget"
+        action={<Link to="/app/instinct" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }}>View all →</Link>}>
+        <ComingSoon what="instinct cards" why="No new intelligence signals yet — run a scan from the Instinct Feed to populate." />
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard
+      title="Latest Instinct Cards"
+      sub={`Top ${cards.length} signals from ARIA's intelligence engine`}
+      testid="instinct-widget"
+      action={<Link to="/app/instinct" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }} data-testid="instinct-widget-view-all">View all →</Link>}
+    >
+      {/* Mobile: compact list */}
+      <div className="md:hidden divide-y" style={{ borderColor: 'var(--theme-border)' }}>
+        {cards.map((c) => (
+          <Link to={`/app/instinct?card_id=${c.id}`} key={c.id} className="flex items-start gap-2 py-2.5 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" data-testid={`instinct-card-mobile-${c.id}`}>
+            <Brain size={14} weight="duotone" className="shrink-0 mt-0.5" style={{ color: 'var(--theme-purple-light)' }} />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold truncate" style={{ color: 'var(--theme-text)' }}>{c.prospect_name || 'Unknown'} · <span className="font-normal" style={{ color: 'var(--theme-text-muted)' }}>{c.prospect_company || ''}</span></div>
+              <div className="text-[11px] mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+                <span className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-bold mr-1.5" style={{ background: 'rgba(124,53,220,0.15)', color: '#7C35DC' }}>{c.signal_type || 'signal'}</span>
+                <span className="line-clamp-1">{c.signal_summary}</span>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop: full cards */}
+      <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {cards.map((c) => (
+          <Link
+            to={`/app/instinct?card_id=${c.id}`}
+            key={c.id}
+            className="rounded-lg border p-3 hover:shadow-md transition group"
+            style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}
+            data-testid={`instinct-card-${c.id}`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide" style={{ background: 'rgba(124,53,220,0.15)', color: '#7C35DC' }}>
+                <Lightbulb size={10} weight="fill" />{c.signal_type || 'signal'}
+              </span>
+              {c.confidence != null && (
+                <span className="text-[10px] font-bold" style={{ color: c.confidence >= 0.7 ? '#10B981' : c.confidence >= 0.4 ? '#F59E0B' : '#94A3B8' }}>
+                  {Math.round((c.confidence || 0) * 100)}%
+                </span>
+              )}
+            </div>
+            <div className="text-xs font-bold mb-1 line-clamp-1" style={{ color: 'var(--theme-text)' }}>
+              {c.prospect_name || 'Unknown prospect'}
+              {c.prospect_company && <span className="font-normal" style={{ color: 'var(--theme-text-muted)' }}> · {c.prospect_company}</span>}
+            </div>
+            <div className="text-[11px] line-clamp-3 mb-2" style={{ color: 'var(--theme-text-muted)' }}>{c.signal_summary}</div>
+            {c.suggested_message && (
+              <div className="text-[11px] italic line-clamp-2 pt-2 border-t" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-muted)' }}>
+                <span className="not-italic font-semibold" style={{ color: 'var(--theme-text)' }}>ARIA: </span>{c.suggested_message}
+              </div>
+            )}
+            <div className="mt-2 text-[10px] font-semibold inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition" style={{ color: 'var(--theme-purple-light)' }}>
+              Open card <ArrowRight size={10} weight="bold" />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </SectionCard>
+  );
+};
+
+// ───────────────────────── Demo Mode Switcher ────────────────────
+// Renders 4 pill buttons at the top of /app for ten_demo only. Lets the
+// founder cycle B2C / B2B Founder / B2B Sales / Hybrid during sales calls.
+// Selection persists in localStorage so a refresh doesn't reset the demo.
+const DEMO_MODE_KEY = 'aria.demo.dashboard.mode';
+const DemoModeSwitcher = ({ value, onChange }) => {
+  const pills = [
+    { key: 'b2c',          label: 'B2C Demo',         color: '#0E9F86' },
+    { key: 'b2b-founder',  label: 'B2B Founder Demo', color: '#7C35DC' },
+    { key: 'b2b-sales',    label: 'B2B Sales Demo',   color: '#F59E0B' },
+    { key: 'hybrid',       label: 'Hybrid Demo',      color: '#6366F1' },
+  ];
+  return (
+    <div className="px-6 pt-4" data-testid="demo-mode-switcher">
+      <div className="max-w-[1600px] mx-auto rounded-xl border p-3 flex flex-wrap items-center gap-2"
+        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
+        <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] mr-2" style={{ color: 'var(--theme-text-muted)' }}>Demo Mode</span>
+        {pills.map((p) => {
+          const active = value === p.key;
+          return (
+            <button
+              key={p.key}
+              onClick={() => onChange(p.key)}
+              data-testid={`demo-mode-${p.key}`}
+              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+              style={{
+                background: active ? p.color : 'var(--theme-surface2)',
+                color: active ? '#fff' : 'var(--theme-text)',
+                boxShadow: active ? `0 2px 12px ${p.color}66` : 'none',
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Sales-call preview · saved locally</span>
+      </div>
+    </div>
+  );
+};
+
 // ───────────────────────── Router ───────────────────────────────
 export const DashboardRouter = ({ forceMode }) => {
   const [mode, setMode] = useState(null);
+  const [tenantId, setTenantId] = useState(null);
+  const [demoMode, setDemoMode] = useState(() => localStorage.getItem(DEMO_MODE_KEY) || 'b2b-founder');
+
   useEffect(() => {
     if (forceMode) { setMode(forceMode); return; }
     api.get('/api/dashboard/_mode')
-      .then(r => setMode(r.data?.mode || 'hybrid'))
+      .then(r => { setMode(r.data?.mode || 'hybrid'); setTenantId(r.data?.tenant_id || null); })
       .catch(() => setMode('hybrid'));
   }, [forceMode]);
+
+  const handleDemoChange = (k) => {
+    setDemoMode(k);
+    localStorage.setItem(DEMO_MODE_KEY, k);
+  };
+
   if (!mode) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading dashboard…</div>;
+
+  // Demo tenant: render the switcher + selected demo dashboard.
+  if (tenantId === 'ten_demo') {
+    const inner =
+      demoMode === 'b2c' ? <B2CDashboard /> :
+      demoMode === 'b2b-sales' ? <B2BSalesDashboard /> :
+      demoMode === 'hybrid' ? <B2BFounderDashboard /> :
+      <B2BFounderDashboard />;
+    return (
+      <div>
+        <DemoModeSwitcher value={demoMode} onChange={handleDemoChange} />
+        {inner}
+      </div>
+    );
+  }
+
   if (mode === 'b2c') return <B2CDashboard />;
   if (mode === 'b2b') return <B2BFounderDashboard />;
   // hybrid → default to founder view (richest signal density). Sales view available as /app/sales-view.
