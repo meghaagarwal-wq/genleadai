@@ -1,3 +1,28 @@
+## Iter 153 — Pietential B2B mode + Instinct widget + Demo sales-call mode switcher (Feb 12, 2026)
+
+User: "I want the Pietential workspace frontend dashboard to look like b2b dashboard (with the instinct feature/widget on the dashboard), and in the demo dashboard I need option of b2b demo dashboard, b2c demo dashboard and hybrid demo dashboard so that i can show all 3 to the clients on sales calls."
+
+### Shipped
+- **Pietential tenant mode: `hybrid` → `b2b`** (direct MongoDB update) so `/app` locks to B2BFounderDashboard.
+- **InstinctFeedWidget** on B2BFounderDashboard — fetches `GET /api/pt/insights/feed?status=new`, displays top 5 cards.
+  - Mobile (<md): compact list with signal_type badge + 1-line summary.
+  - Desktop (md/lg): responsive card grid (2-col md, 3-col lg) showing signal_type, confidence %, prospect, summary, ARIA suggested message.
+  - Both link through to `/app/instinct?card_id=<id>` for full detail.
+- **DemoModeSwitcher** on `/app` for `ten_demo` only — 4 pills (B2C / B2B Founder / B2B Sales / Hybrid). Selection persists in `localStorage['aria.demo.dashboard.mode']` so sales-call refreshes don't lose context. Switcher overrides client-side rendering only — tenant mode in DB stays `hybrid`.
+
+### Verified (iter153, 100% pass)
+- Pietential `_mode` → b2b ✅
+- Pietential dashboard renders InstinctFeedWidget with 5 cards on desktop; demo switcher absent ✅
+- Demo `_mode` returns `ten_demo`/hybrid; switcher visible with all 4 pills ✅
+- Pill clicks render correct dashboards; localStorage persists; reload restores selection ✅
+- Tenant isolation intact — Demo's Instinct widget shows only `ins_demo_*` cards, no Pietential leak ✅
+
+### Known follow-up (P2)
+- `Dashboards.js` now ~810 lines — split B2C / B2BFounder / B2BSales / widgets into separate files for maintainability.
+
+---
+
+
 ## Iter 151–152 — Onboarding tour auto-dismiss for returning users (Feb 12, 2026)
 
 User: "Auto-dismiss onboarding tour modal so first-time users can click 'Sales View' without skipping the tour (P1, found in iter150 testing)"
