@@ -1,3 +1,25 @@
+## Iter 151–152 — Onboarding tour auto-dismiss for returning users (Feb 12, 2026)
+
+User: "Auto-dismiss onboarding tour modal so first-time users can click 'Sales View' without skipping the tour (P1, found in iter150 testing)"
+
+### Shipped
+- **Backend persistence** — new `tour_completed_at` field on the user document. Endpoint `POST /api/auth/me/tour-complete` (auth required) sets it to ISO timestamp. `GET /api/auth/me` and login response now include the field.
+- **Backfill** — all 44 existing users (accounts > 24h old) had `tour_completed_at` set to "<now> (backfilled)" so returning founders never see the welcome modal again, regardless of browser/device.
+- **Frontend `AriaTourModal`** — gates open state on `user.tour_completed_at` from `useAuth()`. localStorage stays as the fast secondary gate to avoid flicker before /auth/me hydrates. `complete()` now POSTs to the new endpoint (fire-and-forget) so completion persists across browsers.
+- **`?tour=1` re-run preserved** — `forceTourLockedRef = useRef(forceTour)` captures the value at mount so the URL-strip effect can't accidentally trip the auto-dismiss path for users who explicitly request a tour re-run.
+
+### Verified (iter151 + iter152, 100% pass)
+- Backend: 7 pytest cases — `_safe_user`, login response, `POST /me/tour-complete` persistence + auth gate.
+- Frontend: Logging in as Pietential owner & Demo viewer with backfilled `tour_completed_at` shows NO `aria-tour-modal`; `nav-sales-view` is clickable on first render.
+- `/app?tour=1` re-run path keeps modal visible for the entire session (20/20 polls); skip click fires `POST /api/auth/me/tour-complete` and closes.
+
+### Minor follow-ups (P2)
+- `api.post('/api/auth/me/tour-complete').catch(() => {})` swallows errors — consider `console.warn` for observability.
+- `auth.py` mixes naive `_utc_now()` and tz-aware `datetime.now(timezone.utc).isoformat()` — pick one helper for consistency.
+
+---
+
+
 ## Iter 150-B — Phase B Step 1: SALES_COACH Top 3 Actions + DashboardRouter wiring (Feb 12, 2026)
 
 User: "A. Proceed top to bottom." (resumed Phase B Step 1 after fork)
