@@ -2269,23 +2269,28 @@ async def my_permissions(current_user: dict = Depends(get_current_user)):
 # ─── Score decay job ────────────────────────────────────────────────────────
 def _run_score_decay():
     """Apply −10 after 30 days of inactivity, −20 + nurture flag after 60 days."""
+    from .dashboard_data import log_score_change  # iter150
     now = datetime.now(timezone.utc)
     cutoff_30 = (now - timedelta(days=30)).isoformat()
     cutoff_60 = (now - timedelta(days=60)).isoformat()
     decayed_30, decayed_60 = 0, 0
     # 60-day decay — applied first so 30-day doesn't double-count it
-    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
-        new_score = max(-100, (lead["score"] or 0) - 20)
+    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1, "tenant_id": 1}):
+        prev_score = lead["score"] or 0
+        new_score = max(-100, prev_score - 20)
         leads_col.update_one({"id": lead["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "automation_status": "long_cycle_nurture", "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
         events_col.insert_one({"id": _new_id("pte"), "lead_id": lead["id"], "company_id": lead.get("company_id"), "event_type": "decay.60_days", "label": "60-day inactivity decay", "source": "system", "score_change": -20, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        log_score_change(lead.get("tenant_id"), lead["id"], new_score, prev_score=prev_score, reason="60_day_inactivity_decay", source="system")
         if lead.get("company_id"):
             _recompute_company(lead["company_id"])
         decayed_60 += 1
     # 30-day decay
-    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_30, "$gte": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1}):
-        new_score = max(-100, (lead["score"] or 0) - 10)
+    for lead in leads_col.find({"last_activity_at": {"$lt": cutoff_30, "$gte": cutoff_60}, "score": {"$gt": 0}}, {"_id": 0, "id": 1, "score": 1, "company_id": 1, "tenant_id": 1}):
+        prev_score = lead["score"] or 0
+        new_score = max(-100, prev_score - 10)
         leads_col.update_one({"id": lead["id"]}, {"$set": {"score": new_score, "stage": classify_stage(new_score), "updated_at": now.isoformat(), "last_decay_at": now.isoformat()}})
         events_col.insert_one({"id": _new_id("pte"), "lead_id": lead["id"], "company_id": lead.get("company_id"), "event_type": "decay.30_days", "label": "30-day inactivity decay", "source": "system", "score_change": -10, "score_after": new_score, "stage_after": classify_stage(new_score), "metadata": {}, "created_by": "system", "created_at": now.isoformat()})
+        log_score_change(lead.get("tenant_id"), lead["id"], new_score, prev_score=prev_score, reason="30_day_inactivity_decay", source="system")
         if lead.get("company_id"):
             _recompute_company(lead["company_id"])
         decayed_30 += 1

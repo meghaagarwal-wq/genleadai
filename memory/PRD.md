@@ -1,3 +1,85 @@
+## Iter 150 — Phase A foundation + Phase C dashboard skeletons (Feb 6, 2026)
+
+User: "A first, then C — one session, two phases, back to back. Don't stop."
+
+### Phase A — Data foundation (plumbing) ✅
+- **New tenant fields** (backfilled on all 6 existing tenants):
+  - `mode` ∈ {`b2c`, `b2b`, `hybrid`} — defaults to `settings.workspace_type` or `hybrid`
+  - `currency` ∈ {INR, USD, GBP, AED, EUR} — Pietential→INR, rest→USD
+  - `hourly_rate_assumption` — INR ₹3500 / USD $45 / GBP £38 / AED د.إ165 / EUR €42
+- **New collections** (with indexes):
+  - `score_history` — every score change writes a delta row (lead_id, prev, new, delta, reason, source). Backfilled with 34 baseline rows for existing pt_leads.
+  - `booking_events` — meeting log (when, channel, deal_value, booked_by). Empty in production until your booking flow writes here.
+  - `asset_clicks` — lead-magnet click telemetry (asset_id, lead_id, channel). Empty until tracked-link wiring.
+- **`pt_leads` new fields**: `lead_score_delta`, `next_followup_at` (defaulted on 31 rows).
+- **Write hooks**: `_run_score_decay` (30/60-day) now calls `log_score_change` so the Why-Now-Feed has real data on day one.
+- **Helper module** `/app/backend/routes/dashboard_data.py` with `get_tenant_mode`, `get_tenant_currency`, `get_tenant_hourly_rate`, `log_score_change`, `log_booking`, `log_asset_click`, `latest_score_changes`, `ensure_indexes`.
+- **Migration script**: `/app/backend/scripts/iter150_phase_a_migrations.py` (idempotent, re-runnable).
+
+### Phase C — 3 dashboard skeletons ✅
+- **New router** `/app/backend/routes/dashboards.py` registered at `/api/dashboard/*`:
+  - `GET /_mode` — returns active tenant's mode + currency + hourly_rate
+  - `GET /b2c` — KPIs · ARIA Time Saved · Momentum · Revenue Forecast · Live Conversations · Lead Sources · Asset Performance · Booking Funnel (w/ biggest drop) · Sequences · Ghost Leads · Multi-Touch (coming_soon) · Cost-per-Qualified (coming_soon)
+  - `GET /b2b-founder` — KPIs · Momentum · Time Saved · ICP Drift · Channel Performance Table · Signal Attribution (gated 90d) · Why-Now · Founder Flags · Buying Committee Radar · Deal Risk · Ghost Leads · Monday Brief Preview
+  - `GET /b2b-sales` — Top 3 actions (coming_soon — Phase B Claude) · KPIs · Hot Leads (3 cards) · Pipeline Table · Today's Agenda · Approval Queue · Deal Risk · Ghost Leads · Attribution top 3 · Why-Now
+- **Frontend page** `/app/frontend/src/workspace/pages/Dashboards.js` exports `B2CDashboard`, `B2BFounderDashboard`, `B2BSalesDashboard`, `DashboardRouter`.
+- **Routes mounted** in `App.js`:
+  - `/app/dashboard/automation` → B2C
+  - `/app/dashboard/founder` → B2B Founder
+  - `/app/dashboard/sales` + `/app/sales-view` → B2B Sales
+  - Existing `/app` still serves the legacy `<CommandCenter />` — zero regression.
+
+### Currently live on data (real, populated)
+- KPIs (leads / high-intent / meetings / signals / conversion / pipeline value)
+- ARIA Time Saved (real conv + draft + insight + research counts × hourly rate)
+- Momentum score (real 14-day vs prior 14-day deltas across 3 inputs)
+- Live Conversations feed (real outbound_log + lead lookups)
+- Booking Funnel (real counts at each stage from existing collections)
+- Channel Performance Table (real lead/meeting/health rollups)
+- ICP Drift detection (real distribution vs primary ICP)
+- Why-Now Feed (driven by `score_history` from now on)
+- Founder Flags (real pt_insights with founder_flag=true)
+- Buying Committee Radar (real pt_leads grouped by company × role keywords)
+- Deal Risk Flags · Ghost Lead Recovery · Today's Agenda · Approval Queue · Pipeline Table · Hot Lead cards
+
+### Showing "Coming soon" empty states (data sources empty in prod)
+- **Revenue Forecast** — needs `booking_events.deal_value` writes from your booking flow
+- **Asset Performance** — needs tracked-link writes calling `log_asset_click`
+- **Multi-Touch Channel Overlap** — needs `pt_leads.source_channels[]` array tracking
+- **Cost per Qualified Lead** — needs Meta/Google Ads integration + spend data
+- **Signal-to-Revenue Attribution** — auto-unhides once workspace has 90 days of data + ≥3 booked meetings tied to signals
+- **B2B Sales Top 3 Actions** — Phase B work (Claude `SALES_COACH` task_type — needs adding to `task_types.py`)
+- **B2C Sequences** — only Lemlist `lemlist_data.campaign` campaigns are surfaced today; expand when Saleshandy/Instantly track campaign IDs
+
+### Files added
+- **NEW** `/app/backend/routes/dashboard_data.py` (helper module)
+- **NEW** `/app/backend/routes/dashboards.py` (3 endpoints + _mode)
+- **NEW** `/app/backend/scripts/iter150_phase_a_migrations.py` (idempotent)
+- **NEW** `/app/frontend/src/workspace/pages/Dashboards.js` (3 dashboards in one file)
+- Modified: `routes/__init__.py` (registered `dashboards_router`)
+- Modified: `routes/pietential.py` (score decay → `log_score_change`)
+- Modified: `App.js` (4 new routes, 0 deletions)
+
+### Verification
+- Phase A migrations ran cleanly: indexes created · 6 tenants backfilled · 34 score_history rows · 31 pt_leads delta fields.
+- Backend boots clean · all 4 endpoints respond 200 · payload shape verified.
+- `yarn build` clean (0 errors, 11 pre-existing warnings from other files).
+- Live screenshot of B2C dashboard at `/app/dashboard/automation` shows full render with real data + clean coming-soon states.
+- iter148 isolation suite (10/10) still PASS — no regression on existing flows.
+
+### Status
+**READY**. Both new collections + tenant fields live on preview Mongo. After redeploy, run `python -m scripts.iter150_phase_a_migrations` against production Mongo (idempotent — safe).
+
+### Carry-over (Phase B candidates, prioritised)
+1. Add `SALES_COACH` task_type to `task_types.py` + wire Top-3-Actions Claude call (cached per user/day).
+2. Find the existing booking-creation flow + insert `log_booking(...)` calls so Revenue Forecast lights up automatically.
+3. Add `lead_score_delta` write whenever `pt_leads.score` changes (currently only score-decay path writes history; signal-driven score bumps don't yet).
+4. Multi-touch tracking — extend `pt_leads` ingest to `$addToSet` to `source_channels[]`.
+5. ICP Drift modal — `/api/dashboard/b2b-founder/icp-drift-detail` returning channel × ICP cross-tab.
+
+---
+
+
 ## Iter 149b — Workspace Switcher "Reset demo data" button (Feb 5, 2026)
 
 UI follow-up to iter149's `/api/demo/reset` endpoint. Founder no longer

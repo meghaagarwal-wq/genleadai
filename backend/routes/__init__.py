@@ -196,6 +196,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter149 — Demo workspace reset (master_admin only, ten_demo only)
     from .demo_reset import router as demo_reset_router
 
+    # iter150 — Dashboards (B2C / B2B Founder / B2B Sales)
+    from .dashboards import router as dashboards_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -262,5 +265,6 @@ def register_all_routes(app: FastAPI) -> None:
         lead_counts_router,
         voice_seeds_router,
         demo_reset_router,
+        dashboards_router,
     ):
         app.include_router(router)

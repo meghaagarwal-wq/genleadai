@@ -54,6 +54,7 @@ import AdminLayout from './admin/AdminLayout';
 // Client app shell + pages (the unified /app/* tree)
 import AppLayout from './components/AppLayout';
 import CommandCenter from './workspace/pages/CommandCenter';
+import { B2CDashboard, B2BFounderDashboard, B2BSalesDashboard } from './workspace/pages/Dashboards';
 import LeadFeed from './workspace/pages/LeadFeed';
 import LeadDetail from './workspace/pages/LeadDetail';
 import Lead360 from './workspace/pages/Lead360';
@@ -258,6 +259,10 @@ function App() {
                         <AppLayout>
                           <Routes>
                             <Route path="/" element={<CommandCenter />} />
+                            <Route path="/dashboard/automation" element={<B2CDashboard />} />
+                            <Route path="/dashboard/founder" element={<B2BFounderDashboard />} />
+                            <Route path="/dashboard/sales" element={<B2BSalesDashboard />} />
+                            <Route path="/sales-view" element={<B2BSalesDashboard />} />
                             <Route path="/instinct" element={<IntelligenceFeed />} />
                             <Route path="/intelligence" element={<Navigate to="/app/instinct" replace />} />
                             <Route path="/automation" element={<Automation />} />
