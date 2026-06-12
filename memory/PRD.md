@@ -1,3 +1,34 @@
+## Iter 150-B — Phase B Step 1: SALES_COACH Top 3 Actions + DashboardRouter wiring (Feb 12, 2026)
+
+User: "A. Proceed top to bottom." (resumed Phase B Step 1 after fork)
+
+### Shipped
+- **Claude SALES_COACH (Haiku) wired** in `routes/dashboards.py::_sales_coach_top3` — returns 3 named-lead actions for the day, cached per `(tenant_id, user_email, date)`. Bust via `POST /api/dashboard/top-actions/regenerate`.
+  - Guard: returns `{coming_soon: True, rows: []}` when there are 0 hot leads AND 0 deal risks AND 0 pending approvals (skips Claude call).
+  - claude_call kwargs corrected (`system=`, `prompt=` — matches `services/claude_service.py` signature).
+  - Errors logged with full stack at WARNING; client gets friendly `coming_soon` payload.
+- **Frontend `TopActionsCard`** in `Dashboards.js` renders the 3 ordered actions with lead · company · why_now and a Regenerate button (`data-testid="top-3-regenerate"`) hitting the regenerate endpoint and refreshing the panel.
+- **`/app` is now `<DashboardRouter />`** — picks B2C / B2B-Founder based on tenant mode (hybrid → B2BFounder by default). Legacy `<CommandCenter />` preserved at `/app/command-center-legacy`.
+- **Sidebar "Sales View" entry** (`data-testid="nav-sales-view"`) added to NAV_PRIMARY, visible for `b2b` and `hybrid` tenants. Routes to `/app/sales-view`.
+
+### Verified (testing agent iter 150, 100% pass)
+- `_mode` returns correct {tenant_id, mode, currency, hourly_rate} for both Pietential (INR/3500) and Demo (USD/45).
+- B2B Sales `top_actions` returns 3 Claude-generated rows with `{action, lead, company, why_now}`. First call `cache:"miss"`, second call `cache:"hit"`. Regenerate clears cache → next call `cache:"miss"` again.
+- Tenant isolation intact — no Pietential leads leak into Demo dashboards (or vice versa).
+- Backend tests: `/app/backend/tests/test_iter150_dashboard_router.py` (9 tests, all pass).
+
+### Known follow-ups (P1)
+- Onboarding tour modal overlays sidebar on first login → consider auto-dismiss for returning users so the new "Sales View" nav entry is reachable on first click.
+- `dashboards.py` is ~860 lines — split B2C / B2B-Founder / B2B-Sales into separate route modules for maintainability.
+- `attribution_top3 or {coming_soon: True, rows: []} if not attribution_top3 else attribution_top3` is convoluted (line 742) — simplify.
+
+### Pending Phase B
+- Step 4 (skipped per user) — multi-touch channel data tracking
+- Step 5 (skipped per user) — ICP Drift Modal UI
+
+---
+
+
 ## Iter 150 — Phase A foundation + Phase C dashboard skeletons (Feb 6, 2026)
 
 User: "A first, then C — one session, two phases, back to back. Don't stop."
