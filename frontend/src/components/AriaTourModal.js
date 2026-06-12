@@ -14,7 +14,7 @@
  *
  * No backend — purely a client-side guided walkthrough overlay.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Sparkle, ArrowRight, ArrowLeft, X, House, MapTrifold,
@@ -81,6 +81,10 @@ const AriaTourModal = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const forceTour = searchParams.get('tour') === '1';
+  // Capture forceTour at mount — once true, stays true for the lifetime of this
+  // modal session so the URL-strip effect can't accidentally re-trigger the
+  // auto-dismiss path (iter151 race fix).
+  const forceTourLockedRef = useRef(forceTour);
   // iter150-B (P1) — gate first on the backend-persisted `tour_completed_at`
   // so returning founders (fresh browser/device, no localStorage) don't see
   // the welcome modal again and have the sidebar blocked. localStorage stays
@@ -95,15 +99,16 @@ const AriaTourModal = () => {
 
   // When the auth context hydrates, close the tour if the backend says it
   // was already completed (covers fresh-browser logins where localStorage
-  // is empty but the user finished the tour previously).
+  // is empty but the user finished the tour previously). Skipped when the
+  // tour was force-launched via ?tour=1 — the user explicitly wants to re-run.
   useEffect(() => {
-    if (forceTour) return;
+    if (forceTourLockedRef.current) return;
     if (user?.tour_completed_at) {
       localStorage.setItem(STORAGE_KEY, '1');
       localStorage.setItem(STORAGE_KEY_ALIAS, 'true');
       setOpen(false);
     }
-  }, [user?.tour_completed_at, forceTour]);
+  }, [user?.tour_completed_at]);
 
   // Strip ?tour=1 from URL once we open it, so refresh doesn't re-trigger
   useEffect(() => {
