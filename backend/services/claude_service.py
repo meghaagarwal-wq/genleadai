@@ -72,6 +72,7 @@ class TaskType(str, Enum):
     SUMMARY                = "summary"                 # → sonnet, 60s
     TOUCHPOINT_GENERATION  = "touchpoint_generation"   # → sonnet, 60s
     KNOWLEDGE_RETRIEVAL    = "knowledge_retrieval"     # → haiku,  30s
+    SALES_COACH            = "sales_coach"             # → haiku,  30s · iter150-B
 
 
 _TASK_ROUTING: Dict[TaskType, Dict[str, Any]] = {
@@ -85,6 +86,7 @@ _TASK_ROUTING: Dict[TaskType, Dict[str, Any]] = {
     TaskType.SUMMARY:               {"model": MODEL_SONNET, "timeout": 60},
     TaskType.TOUCHPOINT_GENERATION: {"model": MODEL_SONNET, "timeout": 60},
     TaskType.KNOWLEDGE_RETRIEVAL:   {"model": MODEL_HAIKU,  "timeout": 30},
+    TaskType.SALES_COACH:           {"model": MODEL_HAIKU,  "timeout": 30},
 }
 
 

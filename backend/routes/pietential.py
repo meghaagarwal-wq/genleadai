@@ -492,6 +492,7 @@ def _ingest_event(event_type: str, lead_lookup: dict, metadata: dict, current_us
 
     new_score = max(-100, (lead.get("score") or 0) + score_change)
     new_stage = classify_stage(new_score)
+    prev_score = lead.get("score") or 0  # iter150-B — capture for log_score_change
 
     company = _ensure_company(lead.get("company_name"), lead)
     company_id = (company or {}).get("id")
@@ -527,6 +528,24 @@ def _ingest_event(event_type: str, lead_lookup: dict, metadata: dict, current_us
         "created_at": _now_iso(),
     }
     events_col.insert_one(event_doc)
+
+    # iter150-B — write to score_history + booking_events for the dashboards.
+    from .dashboard_data import log_score_change, log_booking
+    if score_change != 0:
+        log_score_change(
+            lead.get("tenant_id"), lead["id"], new_score,
+            prev_score=prev_score,
+            reason=f"{event_type}: {rule.get('label')}",
+            source=rule.get("source") or "signal",
+        )
+    if new_stage == "session_pilot" and lead.get("stage") != "session_pilot":
+        log_booking(
+            lead.get("tenant_id"), lead["id"],
+            when_iso=_now_iso(),
+            channel=lead.get("source") or "lemlist",
+            deal_value=lead.get("deal_value"),
+            booked_by=current_user_email,
+        )
 
     # Cascade to company + tasks
     if company_id:

@@ -725,7 +725,7 @@ async def dashboard_b2b_sales(current_user: dict = Depends(get_current_user)):
             "mode": "Sales View",
             "last_refresh": _iso(now),
         },
-        "top_actions": {"coming_soon": True, "rows": []},  # Claude call deferred (Phase B)
+        "top_actions": await _sales_coach_top3(tenant_id, current_user.get("email") or "anon", hot_lead_cards, _deal_risk(tenant_id, now), approval_queue, agenda_meetings, score_changes),
         "kpis": {
             "followups_today": followups_today,
             "meetings_today": meetings_today,
@@ -757,6 +757,94 @@ def _classify_pipeline_stage(lead: Dict[str, Any], bookings_col, now: datetime) 
     return "Cold"
 
 
+# ───────────────────────── SALES_COACH (Top 3 Actions) ───────────
+# iter150-B — Claude Haiku generates 3 specific actions for today,
+# cached per (tenant_id, user_email, date). Regenerate via the
+# /top-actions/regenerate endpoint.
+_sales_coach_cache = db["sales_coach_cache"]
+try:
+    _sales_coach_cache.create_index([("tenant_id", 1), ("user_email", 1), ("date", 1)], unique=True)
+except Exception:
+    pass
+
+
+async def _sales_coach_top3(tenant_id: str, user_email: str, hot_leads, deal_risks, approvals, agenda, why_now):
+    """Returns {rows: [...]} from Claude. Cache hit: returns the same rows for the rest of today."""
+    if not hot_leads and not deal_risks and not approvals:
+        return {"coming_soon": True, "reason": "Need ≥1 hot lead OR deal risk OR pending approval to generate actions.", "rows": []}
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cached = _sales_coach_cache.find_one(
+        {"tenant_id": tenant_id, "user_email": user_email, "date": today},
+        {"_id": 0, "rows": 1, "generated_at": 1},
+    )
+    if cached:
+        return {"rows": cached["rows"], "generated_at": cached["generated_at"], "cache": "hit"}
+
+    # Build a compact context summary for Claude.
+    summary_lines = []
+    for lead in (hot_leads or [])[:5]:
+        summary_lines.append(f"HOT · {lead.get('name')} · {lead.get('company')} · score {lead.get('score')} · signal {lead.get('signal_type') or 'n/a'}")
+    for d in (deal_risks or [])[:5]:
+        summary_lines.append(f"AT-RISK · {d.get('name')} · {d.get('company')} · {d.get('risk_type')} · {d.get('days_silent')}d silent")
+    for a in (approvals or [])[:3]:
+        summary_lines.append(f"APPROVAL · {a.get('prospect_name')} · {(a.get('suggested_message') or '')[:80]}")
+    for m in (agenda or [])[:3]:
+        summary_lines.append(f"MEETING TODAY · {m.get('lead_name')} · {m.get('company')} · {m.get('when')}")
+    for w in (why_now or [])[:3]:
+        summary_lines.append(f"WHY-NOW · score moved {w.get('prev_score')}→{w.get('new_score')}")
+    pipeline_text = "\n".join(summary_lines) or "Empty pipeline."
+
+    prompt = f"""You are a B2B sales coach. Based on this pipeline snapshot, give EXACTLY 3 specific actions for today, ordered by revenue impact.
+
+Each action must be ONE concrete next step tied to a NAMED lead/deal in the data below. Do not invent leads or companies — only reference names actually present in the snapshot.
+
+Output STRICT JSON array of 3 objects, no prose:
+[
+  {{"action": "Send the signed proposal v3 to ...", "lead": "Lead Name", "company": "Company Name", "why_now": "One short sentence."}}
+]
+
+Pipeline snapshot:
+{pipeline_text}
+"""
+    try:
+        from services.claude_service import claude_call, TaskType
+        rows = await claude_call(
+            task_type=TaskType.SALES_COACH,
+            tenant_id=tenant_id,
+            session_id=f"sales-coach-{user_email}-{today}",
+            user_prompt=prompt,
+            system_prompt="You are a precise B2B sales coach. Output strict JSON only.",
+            response_format="json",
+        )
+        if isinstance(rows, dict):
+            rows = rows.get("actions") or rows.get("rows") or [rows]
+        if not isinstance(rows, list):
+            rows = []
+        rows = rows[:3]
+    except Exception:
+        return {"coming_soon": True, "reason": "Claude call failed — try regenerate.", "rows": []}
+
+    _sales_coach_cache.update_one(
+        {"tenant_id": tenant_id, "user_email": user_email, "date": today},
+        {"$set": {"rows": rows, "generated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"rows": rows, "cache": "miss"}
+
+
+@router.post("/top-actions/regenerate")
+async def regenerate_top_actions(current_user: dict = Depends(get_current_user)):
+    """Bust the daily cache so the next /b2b-sales call fetches fresh rows."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _sales_coach_cache.delete_one({
+        "tenant_id": current_user.get("tenant_id"),
+        "user_email": current_user.get("email"),
+        "date": today,
+    })
+    return {"ok": True, "cache_cleared": True}
+
+
 # ───────────────────────── Misc helpers ──────────────────────────
 @router.get("/_mode")
 async def dashboard_mode(current_user: dict = Depends(get_current_user)):
@@ -768,3 +856,6 @@ async def dashboard_mode(current_user: dict = Depends(get_current_user)):
         "currency": get_tenant_currency(tenant_id),
         "hourly_rate": get_tenant_hourly_rate(tenant_id),
     }
+
+
+def _classify_pipeline_stage(lead: Dict[str, Any], bookings_col, now: datetime) -> str:

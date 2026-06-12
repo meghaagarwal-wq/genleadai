@@ -858,10 +858,20 @@ def _recompute_lead_score(lead_id: str) -> Optional[Dict[str, Any]]:
         return None
     intel = _prospect_intel.find_one({"tenant_id": PT_TENANT_ID, "lead_id": lead_id}, {"_id": 0})
     score, tier, flag = _compute_score_tier_flag(lead, intel)
+    prev_score = lead.get("lead_score") or lead.get("score") or 0
     _leads.update_one(
         {"tenant_id": PT_TENANT_ID, "id": lead_id},
         {"$set": {"lead_score": score, "account_tier": tier, "founder_flag": flag}},
     )
+    # iter150-B — surface score movement on the Why-Now Feed.
+    if score != prev_score:
+        from .dashboard_data import log_score_change
+        log_score_change(
+            PT_TENANT_ID, lead_id, score,
+            prev_score=prev_score,
+            reason="signal_classification_recompute",
+            source="pietential_engine",
+        )
     return {"lead_score": score, "account_tier": tier, "founder_flag": flag}
 
 
