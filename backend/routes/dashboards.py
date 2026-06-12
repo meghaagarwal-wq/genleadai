@@ -813,8 +813,8 @@ Pipeline snapshot:
             task_type=TaskType.SALES_COACH,
             tenant_id=tenant_id,
             session_id=f"sales-coach-{user_email}-{today}",
-            user_prompt=prompt,
-            system_prompt="You are a precise B2B sales coach. Output strict JSON only.",
+            prompt=prompt,
+            system="You are a precise B2B sales coach. Output strict JSON only.",
             response_format="json",
         )
         if isinstance(rows, dict):
@@ -822,8 +822,10 @@ Pipeline snapshot:
         if not isinstance(rows, list):
             rows = []
         rows = rows[:3]
-    except Exception:
-        return {"coming_soon": True, "reason": "Claude call failed — try regenerate.", "rows": []}
+    except Exception as e:  # noqa: BLE001
+        import logging
+        logging.getLogger("dashboards").warning("sales_coach claude_call failed: %s", e, exc_info=True)
+        return {"coming_soon": True, "reason": f"Claude call failed: {e}", "rows": []}
 
     _sales_coach_cache.update_one(
         {"tenant_id": tenant_id, "user_email": user_email, "date": today},
@@ -856,6 +858,3 @@ async def dashboard_mode(current_user: dict = Depends(get_current_user)):
         "currency": get_tenant_currency(tenant_id),
         "hourly_rate": get_tenant_hourly_rate(tenant_id),
     }
-
-
-def _classify_pipeline_stage(lead: Dict[str, Any], bookings_col, now: datetime) -> str:

@@ -41,6 +41,7 @@ import api from '../config/api';
 // Approvals is rendered SEPARATELY (V11) — only shown when pending > 0.
 const NAV_PRIMARY = [
   { to: '/app',                label: 'Command Center', icon: House },
+  { to: '/app/sales-view',     label: 'Sales View',     icon: ChartLineUp,  modes: ['b2b', 'hybrid'] },
   { to: '/app/instinct',       label: 'Instinct Feed',  icon: Brain,        modes: ['b2b', 'hybrid'] },
   { to: '/app/automation',     label: 'Automation',     icon: Lightning,    modes: ['b2c', 'hybrid'] },
   { to: '/app/conversations',  label: 'Conversations',  icon: ChatCircle },

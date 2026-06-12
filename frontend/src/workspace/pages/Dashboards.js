@@ -443,6 +443,64 @@ const HealthBadge = ({ h }) => {
 };
 
 // ───────────────────────── B2B SALES ─────────────────────────────
+const TopActionsCard = ({ top, onRegenerate }) => {
+  const [regenerating, setRegenerating] = useState(false);
+  const rows = Array.isArray(top?.rows) ? top.rows : [];
+  const hasRows = rows.length > 0;
+  const cacheTag = top?.cache === 'hit' ? 'cached today' : top?.cache === 'miss' ? 'just generated' : null;
+
+  const handleRegen = async () => {
+    setRegenerating(true);
+    try {
+      await api.post('/api/dashboard/top-actions/regenerate');
+      toast.success('Regenerating today’s plan…');
+      await onRegenerate?.();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Could not regenerate.');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  return (
+    <SectionCard
+      title="ARIA's top 3 things for you to do today"
+      sub={cacheTag ? `Claude Haiku · ${cacheTag}` : 'Generated daily by ARIA'}
+      testid="top-3-actions"
+      action={
+        <button
+          onClick={handleRegen}
+          disabled={regenerating}
+          className="text-[11px] px-2.5 py-1 rounded-md flex items-center gap-1 disabled:opacity-50"
+          style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}
+          data-testid="top-3-regenerate"
+        >
+          <ArrowsClockwise size={11} weight="bold" /> {regenerating ? 'Regenerating…' : 'Regenerate'}
+        </button>
+      }
+    >
+      {top?.coming_soon || !hasRows ? (
+        <ComingSoon what="Claude-generated daily plan" why={top?.reason || 'Need ≥1 hot lead OR deal risk OR pending approval to generate actions.'} />
+      ) : (
+        <ol className="space-y-2.5">
+          {rows.map((r, i) => (
+            <li key={i} className="flex gap-3 items-start" data-testid={`top-action-${i + 1}`}>
+              <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}>{i + 1}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>{r.action}</div>
+                <div className="text-[11px] mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+                  {r.lead && <span><strong style={{ color: 'var(--theme-text)' }}>{r.lead}</strong>{r.company ? ` · ${r.company}` : ''}</span>}
+                  {r.why_now && <span className="ml-2 italic">— {r.why_now}</span>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </SectionCard>
+  );
+};
+
 export const B2BSalesDashboard = () => {
   const { data, loading, refresh } = useDashboard('/api/dashboard/b2b-sales');
   if (loading || !data) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading Sales dashboard…</div>;
@@ -461,9 +519,7 @@ export const B2BSalesDashboard = () => {
       </div>
 
       {/* Top 3 actions */}
-      <SectionCard title="ARIA's top 3 things for you to do today" testid="top-3-actions">
-        {data.top_actions?.coming_soon ? <ComingSoon what="Claude-generated daily plan" why="Wiring Claude SALES_COACH task — coming in Phase B." /> : null}
-      </SectionCard>
+      <TopActionsCard top={data.top_actions} onRegenerate={refresh} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
