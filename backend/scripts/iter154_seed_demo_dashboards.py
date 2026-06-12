@@ -325,7 +325,9 @@ def _seeded_pending_outreach(leads: list[dict]) -> list[dict]:
     for i, (lead, channel, draft) in enumerate(drafts):
         rows.append({
             "tenant_id": TENANT, "lead_id": lead["id"],
-            "channel": channel, "draft": draft, "draft_preview": draft[:120],
+            "channel": channel,
+            "body": draft, "draft": draft, "draft_preview": draft[:120],
+            "subject": "Pilot intro — quick read" if channel == "email" else None,
             "status": "awaiting_owner_approval",
             "confidence": 0.62 + (i * 0.07),
             "reason_for_review": "First-touch to enterprise account — needs founder sign-off.",

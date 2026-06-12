@@ -1,3 +1,43 @@
+## Iter 154–155 — Rich demo seed (no "Coming soon") + dashboard backend completers (Feb 12, 2026)
+
+User: "Remove all coming soon options and make them like, and add real 6-10 leads in all demo dashboards (b2b, b2c, hybrid) and in all stages. The demo dashboard needs to look like a working dashboard - even in the sidebar, options need 6-10 fake leads."
+
+### Shipped
+- **New seed `iter154_seed_demo_dashboards.py`** — idempotent, tagged `_seed_source: demo_seed_v154`. Populates `ten_demo` with:
+  - **10 pt_leads + 10 legacy leads (dual-write)** across stages (new → session_pilot), scores 22→92, multi-channel `source_channels` arrays, mixed sentiment (1 NEGATIVE → deal_risk), 2 leads created today, 3 leads >14d silent (ghost candidates).
+  - **12 pt_insights** (≥3 per signal_type so attribution unlocks) — 4 with `founder_flag: True`, 2 with `status: pending`.
+  - **3 pending_outreach drafts** with `body` text → /api/approvals sidebar page lights up.
+  - **6 outbound_log + 4 inbound_messages** → Live Conversations + Funnel "Replied" stage.
+  - **5 booking_events** (3 this month, 2 last month) with `deal_value` → Revenue Forecast + Agenda.
+  - **8 score_history rows** (last 24h, mix of +/− delta) → Why-Now + Momentum.
+  - **38 asset_clicks** across 6 assets → Asset Performance widget.
+  - **3 lemlist_sequences** + **4 ad_spend rows** → Sequences + Cost-per-Qualified-Lead widgets.
+
+- **Backend completers in `dashboards.py`**:
+  - New `_channel_overlap()` — aggregates pt_leads by `source_channels` arrays; returns conv-rate per combo.
+  - New `_cost_per_qualified_lead()` — reads `ad_spend` collection × qualified-lead count per channel.
+  - New `_signal_attribution()` — replaces blanket `coming_soon: True` with real data when ≥3 signal-sourced leads exist.
+  - `_b2b_founder` + `_b2b_sales` `why_now` now **dedupe by lead_id** — silences React duplicate-key warnings from accumulated decay-job score_history rows.
+
+- **Frontend `Dashboards.js`** — Multi-touch Leads widget and Signal Attribution widget now render real rows when data is present (previously hardcoded ComingSoon).
+
+- **`POST /api/demo/reset`** now also runs the iter154 seeder (fail-soft via try/except → `purged.iter154_error`).
+
+### Verified (iter154 backend 100%, iter155 backend + frontend 100%)
+- B2C: zero `coming_soon=True`; revenue_forecast=$712.5K, asset_performance 5 rows, channel_overlap 5 rows, cost_per_qualified_lead 4 rows, ghost_leads 4, conversations 6, sequences 3, kpis.leads_today=2, kpis.bookings_week=2.
+- B2B Founder: signal_attribution 3 rows with conv_rate %, why_now 7 unique entries, founder_flags 5, deal_risk_flags 3, channel_performance 6.
+- B2B Sales: hot_leads 3, pipeline 50, agenda 2, approval_queue 2, top_actions 3 Claude rows.
+- Sidebar: /app/leads shows all 10 demo names, /app/approvals shows 3 cards with full body text, /app/conversations shows 10/10 expected leads, zero console errors.
+- Pietential tenant isolation intact (none of Sarah Chen / Arjun Mehta / etc. leak into Pietential dashboards).
+
+### Known follow-ups (P2)
+- `Dashboards.js` now ~830 lines — split per dashboard into separate files.
+- `/api/conversations/threads` still reads legacy `leads` collection; iter154 dual-writes to both. Plan migration to consolidate on `pt_leads`.
+- Extract `_dedupe_by(rows, key)` helper to DRY up the two why_now callsites.
+
+---
+
+
 ## Iter 153 — Pietential B2B mode + Instinct widget + Demo sales-call mode switcher (Feb 12, 2026)
 
 User: "I want the Pietential workspace frontend dashboard to look like b2b dashboard (with the instinct feature/widget on the dashboard), and in the demo dashboard I need option of b2b demo dashboard, b2c demo dashboard and hybrid demo dashboard so that i can show all 3 to the clients on sales calls."
