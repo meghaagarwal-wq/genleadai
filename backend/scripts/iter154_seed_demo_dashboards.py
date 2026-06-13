@@ -376,6 +376,7 @@ def _seeded_ad_spend() -> list[dict]:
 def main() -> None:
     random.seed(42)
     print(f"=== iter154 demo seed @ {NOW.isoformat()} ===")
+    seed_run_at_iso = _iso(NOW)
 
     # 1. Wipe any prior seeded rows for `ten_demo` matching SOURCE_TAG.
     targets = {
@@ -440,6 +441,10 @@ def main() -> None:
     ]
     for col, rows in inserts:
         if rows:
+            # Tag every row with the seed run timestamp so the startup
+            # bootstrap can detect when the demo has rolled to "yesterday".
+            for r in rows:
+                r["_seed_run_at"] = seed_run_at_iso
             db[col].insert_many(rows)
             print(f"  inserted {col}: {len(rows)}")
 

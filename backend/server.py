@@ -138,6 +138,48 @@ def _auto_migrate_multi_tenant():
     except Exception as e:
         print(f"[Startup] integration-config encryption migration skipped: {e}")
 
+    # iter156 — bootstrap the GenLeadAI Demo workspace on every cold boot so
+    # production environments have rich demo data ready for sales calls. The
+    # seeder is idempotent (deletes its own previously-tagged rows before
+    # re-inserting). Re-run also when the seed is stale (>24h old) so demo
+    # timestamps stay relative to "now" — important for KPIs like "leads
+    # today" and "bookings this week" that filter by date.
+    try:
+        from datetime import datetime, timezone, timedelta as _td
+        from deps import db as _db
+        demo_tenant = _db["tenants"].find_one({"id": "ten_demo"})
+        if not demo_tenant:
+            print("[Startup] iter154 demo seed skipped — ten_demo tenant not present yet")
+        else:
+            newest = _db["pt_leads"].find_one(
+                {"tenant_id": "ten_demo", "_seed_source": "demo_seed_v154"},
+                sort=[("_seed_run_at", -1)],
+            )
+            existing_count = _db["pt_leads"].count_documents({
+                "tenant_id": "ten_demo", "_seed_source": "demo_seed_v154",
+            })
+            # Re-seed when the demo's last run rolled into a prior UTC day —
+            # keeps KPIs like leads_today / bookings_week aligned with the
+            # system clock for every cold boot.
+            now_utc = datetime.now(timezone.utc)
+            today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+            stale = True
+            if newest and newest.get("_seed_run_at"):
+                try:
+                    last = datetime.fromisoformat(newest["_seed_run_at"].replace("Z", "+00:00"))
+                    stale = last < today_start
+                except Exception:
+                    stale = True
+            if existing_count >= 10 and not stale:
+                print(f"[Startup] iter154 demo seed fresh ({existing_count} leads) — skipping refresh")
+            else:
+                from scripts.iter154_seed_demo_dashboards import main as run_demo_seed
+                run_demo_seed()
+                print(f"[Startup] iter154 demo seed: bootstrapped ten_demo "
+                      f"(existing={existing_count}, stale={stale})")
+    except Exception as e:  # noqa: BLE001 — never block boot
+        print(f"[Startup] iter154 demo seed skipped due to error: {e}")
+
 # Resend Email
 resend.api_key = os.getenv("RESEND_API_KEY")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")

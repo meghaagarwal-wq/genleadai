@@ -1,3 +1,28 @@
+## Iter 156 — Auto-bootstrap demo seed on backend startup (Feb 12, 2026)
+
+User: "i can not see them in production" (referring to the demo leads from iter154)
+
+### Root cause
+Production has its own MongoDB; the iter154 seed only ran against the preview DB during dev. No automatic bootstrap meant the demo workspace on production stayed empty after redeploy.
+
+### Shipped
+- **Startup hook in `server.py`** runs `iter154_seed_demo_dashboards.main()` on every cold boot when:
+  - `ten_demo` tenant exists (skip if multi-tenant migration hasn't run yet)
+  - AND (no seeded leads exist OR newest `_seed_run_at` is from a prior UTC calendar day)
+- **`_seed_run_at` field** added to every seeded row at insert time so the staleness check is unambiguous (previous heuristic on `updated_at` got corrupted by background jobs like the score-decay loop).
+- **Fail-soft**: any seed error prints a warning but never blocks app startup.
+
+### Verified
+- Preview backend: startup log shows `iter154 demo seed: bootstrapped ten_demo (existing=10, stale=True)` after first restart of day, then `iter154 demo seed fresh (10 leads) — skipping refresh` on subsequent boots same day.
+- Demo dashboards: leads_today=2, bookings_week=2, signal_attribution 3 rows, top_actions 3 Claude rows, hot_leads 3.
+- Pietential isolation intact (no demo names in Pietential's why_now feed).
+
+### Deploy note for user
+After redeploy of this change to production, the demo seed will run automatically on first cold boot. No manual trigger needed — `app.genleadai.com` will populate the demo workspace within ~3 seconds of FastAPI starting up.
+
+---
+
+
 ## Iter 154–155 — Rich demo seed (no "Coming soon") + dashboard backend completers (Feb 12, 2026)
 
 User: "Remove all coming soon options and make them like, and add real 6-10 leads in all demo dashboards (b2b, b2c, hybrid) and in all stages. The demo dashboard needs to look like a working dashboard - even in the sidebar, options need 6-10 fake leads."
