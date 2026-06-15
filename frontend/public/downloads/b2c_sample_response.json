@@ -1,0 +1,314 @@
+{
+    "header": {
+        "workspace_name": "GenLeadAI Demo",
+        "owner_name": "Megha Agarwal",
+        "greeting": "Good morning",
+        "mode": "B2C Automation",
+        "currency": "USD",
+        "last_refresh": "2026-06-15T07:22:04.570325+00:00"
+    },
+    "kpis": {
+        "leads_today": {
+            "value": 2,
+            "trend": {
+                "direction": "flat",
+                "pct": 0.0
+            }
+        },
+        "active_convos": {
+            "value": 4,
+            "label": "ARIA is handling all of them"
+        },
+        "bookings_week": {
+            "value": 2,
+            "trend": {
+                "direction": "flat",
+                "pct": null
+            }
+        },
+        "conversion_rate": {
+            "value": 33.3,
+            "unit": "%",
+            "trend": {
+                "direction": "flat",
+                "pct": 0.0
+            }
+        },
+        "revenue_pipeline": {
+            "value": 490000,
+            "currency": "USD"
+        }
+    },
+    "aria_time_saved": {
+        "hours": 6.2,
+        "money_equivalent": 279,
+        "breakdown": {
+            "conversations": 0,
+            "drafts": 12,
+            "insights": 15,
+            "researched": 0
+        },
+        "days": 7
+    },
+    "momentum": {
+        "score": 80,
+        "label": "Accelerating",
+        "direction": "up",
+        "driver_text": "Driven by stronger lead volume this fortnight."
+    },
+    "revenue_forecast": {
+        "currency": "USD",
+        "actual_to_date": 285000,
+        "projected_end_of_month": 570000,
+        "last_month_actual": 115000,
+        "pct_of_last_month": 247.8,
+        "coming_soon": false
+    },
+    "conversations": [
+        {
+            "lead_id": "ptl_demo_sarah_chen",
+            "name": "Sarah Chen",
+            "initials": "SC",
+            "status": "qualified",
+            "snippet": "Sounds good \u2014 what time on Thursday works for the demo?",
+            "minutes_ago": 63
+        },
+        {
+            "lead_id": "ptl_demo_arjun_mehta",
+            "name": "Arjun Mehta",
+            "initials": "AM",
+            "status": "qualified",
+            "snippet": "Yes, share the case study. Especially the retention metrics.",
+            "minutes_ago": 81
+        },
+        {
+            "lead_id": "ptl_demo_james_whitfield",
+            "name": "James Whitfield",
+            "initials": "JW",
+            "status": "waiting",
+            "snippet": "Booking the call for Wed 3pm IST \u2014 sending invite shortly.",
+            "minutes_ago": 99
+        },
+        {
+            "lead_id": "ptl_demo_priya_sharma",
+            "name": "Priya Sharma",
+            "initials": "PS",
+            "status": "waiting",
+            "snippet": "Thanks for the resource pack. Sharing with my team.",
+            "minutes_ago": 117
+        },
+        {
+            "lead_id": "ptl_demo_marcus_obrien",
+            "name": "Marcus O'Brien",
+            "initials": "MO",
+            "status": "waiting",
+            "snippet": "Have a question about the methodology \u2014 call me when free.",
+            "minutes_ago": 135
+        },
+        {
+            "lead_id": "ptl_demo_aisha_patel",
+            "name": "Aisha Patel",
+            "initials": "AP",
+            "status": "qualified",
+            "snippet": "Connecting \u2014 talked to your team last quarter. Open to revisit.",
+            "minutes_ago": 153
+        }
+    ],
+    "lead_sources": [
+        {
+            "channel": "whatsapp",
+            "count": 1,
+            "colour": "#7C35DC"
+        },
+        {
+            "channel": "instagram",
+            "count": 1,
+            "colour": "#0E9F86"
+        }
+    ],
+    "asset_performance": {
+        "coming_soon": false,
+        "rows": [
+            {
+                "name": "ICP Diagnostic Playbook",
+                "clicks": 12
+            },
+            {
+                "name": "Retention ROI Calculator",
+                "clicks": 9
+            },
+            {
+                "name": "Culture Index Sample Report",
+                "clicks": 7
+            },
+            {
+                "name": "CHRO 90-Day Plan PDF",
+                "clicks": 5
+            },
+            {
+                "name": "Wellbeing Benchmark 2026",
+                "clicks": 3
+            }
+        ]
+    },
+    "funnel": [
+        {
+            "stage": "Lead entered",
+            "count": 2,
+            "pct_of_prev": 100,
+            "drop_flag": false
+        },
+        {
+            "stage": "Replied to ARIA",
+            "count": 4,
+            "pct_of_prev": 200.0,
+            "drop_flag": false
+        },
+        {
+            "stage": "Qualified",
+            "count": 0,
+            "pct_of_prev": 0.0,
+            "drop_flag": true
+        },
+        {
+            "stage": "Booking offered",
+            "count": 0,
+            "pct_of_prev": 0,
+            "drop_flag": 0
+        },
+        {
+            "stage": "Booked",
+            "count": 2,
+            "pct_of_prev": 0,
+            "drop_flag": 0
+        }
+    ],
+    "biggest_drop": {
+        "from": "Replied to ARIA",
+        "to": "Qualified",
+        "loss_pct": 100.0
+    },
+    "sequences": [
+        {
+            "name": "demo-CPO-Q2",
+            "active": 1,
+            "booked": 0,
+            "rate": 0.0
+        },
+        {
+            "name": "demo-analytics-Q2",
+            "active": 1,
+            "booked": 0,
+            "rate": 0.0
+        },
+        {
+            "name": "Pilot-Q1",
+            "active": 5,
+            "booked": 1,
+            "rate": 20.0
+        },
+        {
+            "name": "demo-VPpeople-Q2",
+            "active": 1,
+            "booked": 0,
+            "rate": 0.0
+        },
+        {
+            "name": "Enterprise-Founder",
+            "active": 3,
+            "booked": 0,
+            "rate": 0.0
+        }
+    ],
+    "channel_overlap": {
+        "coming_soon": false,
+        "rows": [
+            {
+                "channels": "email + linkedin",
+                "leads": 1,
+                "meetings": 1,
+                "conv_rate": 100.0
+            },
+            {
+                "channels": "linkedin + website",
+                "leads": 1,
+                "meetings": 1,
+                "conv_rate": 100.0
+            },
+            {
+                "channels": "email + linkedin + referral",
+                "leads": 1,
+                "meetings": 1,
+                "conv_rate": 100.0
+            },
+            {
+                "channels": "email + whatsapp",
+                "leads": 1,
+                "meetings": 1,
+                "conv_rate": 100.0
+            },
+            {
+                "channels": "email + lemlist",
+                "leads": 1,
+                "meetings": 0,
+                "conv_rate": 0.0
+            }
+        ]
+    },
+    "ghost_leads": [
+        {
+            "id": "ptl_demo_priya_sharma",
+            "name": "Priya Sharma",
+            "company": "FinSecure Bank",
+            "days_silent": 15,
+            "trigger": "Returned to your channel \u00b7 score > 40"
+        },
+        {
+            "id": "ptl_demo_marcus_obrien",
+            "name": "Marcus O'Brien",
+            "company": "Helix Pharma",
+            "days_silent": 17,
+            "trigger": "Returned to your channel \u00b7 score > 40"
+        },
+        {
+            "id": "ptl_demo_aisha_patel",
+            "name": "Aisha Patel",
+            "company": "Quantum Logistics",
+            "days_silent": 22,
+            "trigger": "Returned to your channel \u00b7 score > 40"
+        }
+    ],
+    "cost_per_qualified_lead": {
+        "coming_soon": false,
+        "rows": [
+            {
+                "channel": "linkedin",
+                "spend": 4500,
+                "qualified": 1,
+                "cpql": 4500.0,
+                "currency": "USD"
+            },
+            {
+                "channel": "google",
+                "spend": 2200,
+                "qualified": 0,
+                "cpql": null,
+                "currency": "USD"
+            },
+            {
+                "channel": "instagram",
+                "spend": 900,
+                "qualified": 0,
+                "cpql": null,
+                "currency": "USD"
+            },
+            {
+                "channel": "facebook",
+                "spend": 1800,
+                "qualified": 0,
+                "cpql": null,
+                "currency": "USD"
+            }
+        ]
+    }
+}
