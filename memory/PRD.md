@@ -1,3 +1,228 @@
+## Iter 156 — Auto-bootstrap demo seed on backend startup (Feb 12, 2026)
+
+User: "i can not see them in production" (referring to the demo leads from iter154)
+
+### Root cause
+Production has its own MongoDB; the iter154 seed only ran against the preview DB during dev. No automatic bootstrap meant the demo workspace on production stayed empty after redeploy.
+
+### Shipped
+- **Startup hook in `server.py`** runs `iter154_seed_demo_dashboards.main()` on every cold boot when:
+  - `ten_demo` tenant exists (skip if multi-tenant migration hasn't run yet)
+  - AND (no seeded leads exist OR newest `_seed_run_at` is from a prior UTC calendar day)
+- **`_seed_run_at` field** added to every seeded row at insert time so the staleness check is unambiguous (previous heuristic on `updated_at` got corrupted by background jobs like the score-decay loop).
+- **Fail-soft**: any seed error prints a warning but never blocks app startup.
+
+### Verified
+- Preview backend: startup log shows `iter154 demo seed: bootstrapped ten_demo (existing=10, stale=True)` after first restart of day, then `iter154 demo seed fresh (10 leads) — skipping refresh` on subsequent boots same day.
+- Demo dashboards: leads_today=2, bookings_week=2, signal_attribution 3 rows, top_actions 3 Claude rows, hot_leads 3.
+- Pietential isolation intact (no demo names in Pietential's why_now feed).
+
+### Deploy note for user
+After redeploy of this change to production, the demo seed will run automatically on first cold boot. No manual trigger needed — `app.genleadai.com` will populate the demo workspace within ~3 seconds of FastAPI starting up.
+
+---
+
+
+## Iter 154–155 — Rich demo seed (no "Coming soon") + dashboard backend completers (Feb 12, 2026)
+
+User: "Remove all coming soon options and make them like, and add real 6-10 leads in all demo dashboards (b2b, b2c, hybrid) and in all stages. The demo dashboard needs to look like a working dashboard - even in the sidebar, options need 6-10 fake leads."
+
+### Shipped
+- **New seed `iter154_seed_demo_dashboards.py`** — idempotent, tagged `_seed_source: demo_seed_v154`. Populates `ten_demo` with:
+  - **10 pt_leads + 10 legacy leads (dual-write)** across stages (new → session_pilot), scores 22→92, multi-channel `source_channels` arrays, mixed sentiment (1 NEGATIVE → deal_risk), 2 leads created today, 3 leads >14d silent (ghost candidates).
+  - **12 pt_insights** (≥3 per signal_type so attribution unlocks) — 4 with `founder_flag: True`, 2 with `status: pending`.
+  - **3 pending_outreach drafts** with `body` text → /api/approvals sidebar page lights up.
+  - **6 outbound_log + 4 inbound_messages** → Live Conversations + Funnel "Replied" stage.
+  - **5 booking_events** (3 this month, 2 last month) with `deal_value` → Revenue Forecast + Agenda.
+  - **8 score_history rows** (last 24h, mix of +/− delta) → Why-Now + Momentum.
+  - **38 asset_clicks** across 6 assets → Asset Performance widget.
+  - **3 lemlist_sequences** + **4 ad_spend rows** → Sequences + Cost-per-Qualified-Lead widgets.
+
+- **Backend completers in `dashboards.py`**:
+  - New `_channel_overlap()` — aggregates pt_leads by `source_channels` arrays; returns conv-rate per combo.
+  - New `_cost_per_qualified_lead()` — reads `ad_spend` collection × qualified-lead count per channel.
+  - New `_signal_attribution()` — replaces blanket `coming_soon: True` with real data when ≥3 signal-sourced leads exist.
+  - `_b2b_founder` + `_b2b_sales` `why_now` now **dedupe by lead_id** — silences React duplicate-key warnings from accumulated decay-job score_history rows.
+
+- **Frontend `Dashboards.js`** — Multi-touch Leads widget and Signal Attribution widget now render real rows when data is present (previously hardcoded ComingSoon).
+
+- **`POST /api/demo/reset`** now also runs the iter154 seeder (fail-soft via try/except → `purged.iter154_error`).
+
+### Verified (iter154 backend 100%, iter155 backend + frontend 100%)
+- B2C: zero `coming_soon=True`; revenue_forecast=$712.5K, asset_performance 5 rows, channel_overlap 5 rows, cost_per_qualified_lead 4 rows, ghost_leads 4, conversations 6, sequences 3, kpis.leads_today=2, kpis.bookings_week=2.
+- B2B Founder: signal_attribution 3 rows with conv_rate %, why_now 7 unique entries, founder_flags 5, deal_risk_flags 3, channel_performance 6.
+- B2B Sales: hot_leads 3, pipeline 50, agenda 2, approval_queue 2, top_actions 3 Claude rows.
+- Sidebar: /app/leads shows all 10 demo names, /app/approvals shows 3 cards with full body text, /app/conversations shows 10/10 expected leads, zero console errors.
+- Pietential tenant isolation intact (none of Sarah Chen / Arjun Mehta / etc. leak into Pietential dashboards).
+
+### Known follow-ups (P2)
+- `Dashboards.js` now ~830 lines — split per dashboard into separate files.
+- `/api/conversations/threads` still reads legacy `leads` collection; iter154 dual-writes to both. Plan migration to consolidate on `pt_leads`.
+- Extract `_dedupe_by(rows, key)` helper to DRY up the two why_now callsites.
+
+---
+
+
+## Iter 153 — Pietential B2B mode + Instinct widget + Demo sales-call mode switcher (Feb 12, 2026)
+
+User: "I want the Pietential workspace frontend dashboard to look like b2b dashboard (with the instinct feature/widget on the dashboard), and in the demo dashboard I need option of b2b demo dashboard, b2c demo dashboard and hybrid demo dashboard so that i can show all 3 to the clients on sales calls."
+
+### Shipped
+- **Pietential tenant mode: `hybrid` → `b2b`** (direct MongoDB update) so `/app` locks to B2BFounderDashboard.
+- **InstinctFeedWidget** on B2BFounderDashboard — fetches `GET /api/pt/insights/feed?status=new`, displays top 5 cards.
+  - Mobile (<md): compact list with signal_type badge + 1-line summary.
+  - Desktop (md/lg): responsive card grid (2-col md, 3-col lg) showing signal_type, confidence %, prospect, summary, ARIA suggested message.
+  - Both link through to `/app/instinct?card_id=<id>` for full detail.
+- **DemoModeSwitcher** on `/app` for `ten_demo` only — 4 pills (B2C / B2B Founder / B2B Sales / Hybrid). Selection persists in `localStorage['aria.demo.dashboard.mode']` so sales-call refreshes don't lose context. Switcher overrides client-side rendering only — tenant mode in DB stays `hybrid`.
+
+### Verified (iter153, 100% pass)
+- Pietential `_mode` → b2b ✅
+- Pietential dashboard renders InstinctFeedWidget with 5 cards on desktop; demo switcher absent ✅
+- Demo `_mode` returns `ten_demo`/hybrid; switcher visible with all 4 pills ✅
+- Pill clicks render correct dashboards; localStorage persists; reload restores selection ✅
+- Tenant isolation intact — Demo's Instinct widget shows only `ins_demo_*` cards, no Pietential leak ✅
+
+### Known follow-up (P2)
+- `Dashboards.js` now ~810 lines — split B2C / B2BFounder / B2BSales / widgets into separate files for maintainability.
+
+---
+
+
+## Iter 151–152 — Onboarding tour auto-dismiss for returning users (Feb 12, 2026)
+
+User: "Auto-dismiss onboarding tour modal so first-time users can click 'Sales View' without skipping the tour (P1, found in iter150 testing)"
+
+### Shipped
+- **Backend persistence** — new `tour_completed_at` field on the user document. Endpoint `POST /api/auth/me/tour-complete` (auth required) sets it to ISO timestamp. `GET /api/auth/me` and login response now include the field.
+- **Backfill** — all 44 existing users (accounts > 24h old) had `tour_completed_at` set to "<now> (backfilled)" so returning founders never see the welcome modal again, regardless of browser/device.
+- **Frontend `AriaTourModal`** — gates open state on `user.tour_completed_at` from `useAuth()`. localStorage stays as the fast secondary gate to avoid flicker before /auth/me hydrates. `complete()` now POSTs to the new endpoint (fire-and-forget) so completion persists across browsers.
+- **`?tour=1` re-run preserved** — `forceTourLockedRef = useRef(forceTour)` captures the value at mount so the URL-strip effect can't accidentally trip the auto-dismiss path for users who explicitly request a tour re-run.
+
+### Verified (iter151 + iter152, 100% pass)
+- Backend: 7 pytest cases — `_safe_user`, login response, `POST /me/tour-complete` persistence + auth gate.
+- Frontend: Logging in as Pietential owner & Demo viewer with backfilled `tour_completed_at` shows NO `aria-tour-modal`; `nav-sales-view` is clickable on first render.
+- `/app?tour=1` re-run path keeps modal visible for the entire session (20/20 polls); skip click fires `POST /api/auth/me/tour-complete` and closes.
+
+### Minor follow-ups (P2)
+- `api.post('/api/auth/me/tour-complete').catch(() => {})` swallows errors — consider `console.warn` for observability.
+- `auth.py` mixes naive `_utc_now()` and tz-aware `datetime.now(timezone.utc).isoformat()` — pick one helper for consistency.
+
+---
+
+
+## Iter 150-B — Phase B Step 1: SALES_COACH Top 3 Actions + DashboardRouter wiring (Feb 12, 2026)
+
+User: "A. Proceed top to bottom." (resumed Phase B Step 1 after fork)
+
+### Shipped
+- **Claude SALES_COACH (Haiku) wired** in `routes/dashboards.py::_sales_coach_top3` — returns 3 named-lead actions for the day, cached per `(tenant_id, user_email, date)`. Bust via `POST /api/dashboard/top-actions/regenerate`.
+  - Guard: returns `{coming_soon: True, rows: []}` when there are 0 hot leads AND 0 deal risks AND 0 pending approvals (skips Claude call).
+  - claude_call kwargs corrected (`system=`, `prompt=` — matches `services/claude_service.py` signature).
+  - Errors logged with full stack at WARNING; client gets friendly `coming_soon` payload.
+- **Frontend `TopActionsCard`** in `Dashboards.js` renders the 3 ordered actions with lead · company · why_now and a Regenerate button (`data-testid="top-3-regenerate"`) hitting the regenerate endpoint and refreshing the panel.
+- **`/app` is now `<DashboardRouter />`** — picks B2C / B2B-Founder based on tenant mode (hybrid → B2BFounder by default). Legacy `<CommandCenter />` preserved at `/app/command-center-legacy`.
+- **Sidebar "Sales View" entry** (`data-testid="nav-sales-view"`) added to NAV_PRIMARY, visible for `b2b` and `hybrid` tenants. Routes to `/app/sales-view`.
+
+### Verified (testing agent iter 150, 100% pass)
+- `_mode` returns correct {tenant_id, mode, currency, hourly_rate} for both Pietential (INR/3500) and Demo (USD/45).
+- B2B Sales `top_actions` returns 3 Claude-generated rows with `{action, lead, company, why_now}`. First call `cache:"miss"`, second call `cache:"hit"`. Regenerate clears cache → next call `cache:"miss"` again.
+- Tenant isolation intact — no Pietential leads leak into Demo dashboards (or vice versa).
+- Backend tests: `/app/backend/tests/test_iter150_dashboard_router.py` (9 tests, all pass).
+
+### Known follow-ups (P1)
+- Onboarding tour modal overlays sidebar on first login → consider auto-dismiss for returning users so the new "Sales View" nav entry is reachable on first click.
+- `dashboards.py` is ~860 lines — split B2C / B2B-Founder / B2B-Sales into separate route modules for maintainability.
+- `attribution_top3 or {coming_soon: True, rows: []} if not attribution_top3 else attribution_top3` is convoluted (line 742) — simplify.
+
+### Pending Phase B
+- Step 4 (skipped per user) — multi-touch channel data tracking
+- Step 5 (skipped per user) — ICP Drift Modal UI
+
+---
+
+
+## Iter 150 — Phase A foundation + Phase C dashboard skeletons (Feb 6, 2026)
+
+User: "A first, then C — one session, two phases, back to back. Don't stop."
+
+### Phase A — Data foundation (plumbing) ✅
+- **New tenant fields** (backfilled on all 6 existing tenants):
+  - `mode` ∈ {`b2c`, `b2b`, `hybrid`} — defaults to `settings.workspace_type` or `hybrid`
+  - `currency` ∈ {INR, USD, GBP, AED, EUR} — Pietential→INR, rest→USD
+  - `hourly_rate_assumption` — INR ₹3500 / USD $45 / GBP £38 / AED د.إ165 / EUR €42
+- **New collections** (with indexes):
+  - `score_history` — every score change writes a delta row (lead_id, prev, new, delta, reason, source). Backfilled with 34 baseline rows for existing pt_leads.
+  - `booking_events` — meeting log (when, channel, deal_value, booked_by). Empty in production until your booking flow writes here.
+  - `asset_clicks` — lead-magnet click telemetry (asset_id, lead_id, channel). Empty until tracked-link wiring.
+- **`pt_leads` new fields**: `lead_score_delta`, `next_followup_at` (defaulted on 31 rows).
+- **Write hooks**: `_run_score_decay` (30/60-day) now calls `log_score_change` so the Why-Now-Feed has real data on day one.
+- **Helper module** `/app/backend/routes/dashboard_data.py` with `get_tenant_mode`, `get_tenant_currency`, `get_tenant_hourly_rate`, `log_score_change`, `log_booking`, `log_asset_click`, `latest_score_changes`, `ensure_indexes`.
+- **Migration script**: `/app/backend/scripts/iter150_phase_a_migrations.py` (idempotent, re-runnable).
+
+### Phase C — 3 dashboard skeletons ✅
+- **New router** `/app/backend/routes/dashboards.py` registered at `/api/dashboard/*`:
+  - `GET /_mode` — returns active tenant's mode + currency + hourly_rate
+  - `GET /b2c` — KPIs · ARIA Time Saved · Momentum · Revenue Forecast · Live Conversations · Lead Sources · Asset Performance · Booking Funnel (w/ biggest drop) · Sequences · Ghost Leads · Multi-Touch (coming_soon) · Cost-per-Qualified (coming_soon)
+  - `GET /b2b-founder` — KPIs · Momentum · Time Saved · ICP Drift · Channel Performance Table · Signal Attribution (gated 90d) · Why-Now · Founder Flags · Buying Committee Radar · Deal Risk · Ghost Leads · Monday Brief Preview
+  - `GET /b2b-sales` — Top 3 actions (coming_soon — Phase B Claude) · KPIs · Hot Leads (3 cards) · Pipeline Table · Today's Agenda · Approval Queue · Deal Risk · Ghost Leads · Attribution top 3 · Why-Now
+- **Frontend page** `/app/frontend/src/workspace/pages/Dashboards.js` exports `B2CDashboard`, `B2BFounderDashboard`, `B2BSalesDashboard`, `DashboardRouter`.
+- **Routes mounted** in `App.js`:
+  - `/app/dashboard/automation` → B2C
+  - `/app/dashboard/founder` → B2B Founder
+  - `/app/dashboard/sales` + `/app/sales-view` → B2B Sales
+  - Existing `/app` still serves the legacy `<CommandCenter />` — zero regression.
+
+### Currently live on data (real, populated)
+- KPIs (leads / high-intent / meetings / signals / conversion / pipeline value)
+- ARIA Time Saved (real conv + draft + insight + research counts × hourly rate)
+- Momentum score (real 14-day vs prior 14-day deltas across 3 inputs)
+- Live Conversations feed (real outbound_log + lead lookups)
+- Booking Funnel (real counts at each stage from existing collections)
+- Channel Performance Table (real lead/meeting/health rollups)
+- ICP Drift detection (real distribution vs primary ICP)
+- Why-Now Feed (driven by `score_history` from now on)
+- Founder Flags (real pt_insights with founder_flag=true)
+- Buying Committee Radar (real pt_leads grouped by company × role keywords)
+- Deal Risk Flags · Ghost Lead Recovery · Today's Agenda · Approval Queue · Pipeline Table · Hot Lead cards
+
+### Showing "Coming soon" empty states (data sources empty in prod)
+- **Revenue Forecast** — needs `booking_events.deal_value` writes from your booking flow
+- **Asset Performance** — needs tracked-link writes calling `log_asset_click`
+- **Multi-Touch Channel Overlap** — needs `pt_leads.source_channels[]` array tracking
+- **Cost per Qualified Lead** — needs Meta/Google Ads integration + spend data
+- **Signal-to-Revenue Attribution** — auto-unhides once workspace has 90 days of data + ≥3 booked meetings tied to signals
+- **B2B Sales Top 3 Actions** — Phase B work (Claude `SALES_COACH` task_type — needs adding to `task_types.py`)
+- **B2C Sequences** — only Lemlist `lemlist_data.campaign` campaigns are surfaced today; expand when Saleshandy/Instantly track campaign IDs
+
+### Files added
+- **NEW** `/app/backend/routes/dashboard_data.py` (helper module)
+- **NEW** `/app/backend/routes/dashboards.py` (3 endpoints + _mode)
+- **NEW** `/app/backend/scripts/iter150_phase_a_migrations.py` (idempotent)
+- **NEW** `/app/frontend/src/workspace/pages/Dashboards.js` (3 dashboards in one file)
+- Modified: `routes/__init__.py` (registered `dashboards_router`)
+- Modified: `routes/pietential.py` (score decay → `log_score_change`)
+- Modified: `App.js` (4 new routes, 0 deletions)
+
+### Verification
+- Phase A migrations ran cleanly: indexes created · 6 tenants backfilled · 34 score_history rows · 31 pt_leads delta fields.
+- Backend boots clean · all 4 endpoints respond 200 · payload shape verified.
+- `yarn build` clean (0 errors, 11 pre-existing warnings from other files).
+- Live screenshot of B2C dashboard at `/app/dashboard/automation` shows full render with real data + clean coming-soon states.
+- iter148 isolation suite (10/10) still PASS — no regression on existing flows.
+
+### Status
+**READY**. Both new collections + tenant fields live on preview Mongo. After redeploy, run `python -m scripts.iter150_phase_a_migrations` against production Mongo (idempotent — safe).
+
+### Carry-over (Phase B candidates, prioritised)
+1. Add `SALES_COACH` task_type to `task_types.py` + wire Top-3-Actions Claude call (cached per user/day).
+2. Find the existing booking-creation flow + insert `log_booking(...)` calls so Revenue Forecast lights up automatically.
+3. Add `lead_score_delta` write whenever `pt_leads.score` changes (currently only score-decay path writes history; signal-driven score bumps don't yet).
+4. Multi-touch tracking — extend `pt_leads` ingest to `$addToSet` to `source_channels[]`.
+5. ICP Drift modal — `/api/dashboard/b2b-founder/icp-drift-detail` returning channel × ICP cross-tab.
+
+---
+
+
 ## Iter 149b — Workspace Switcher "Reset demo data" button (Feb 5, 2026)
 
 UI follow-up to iter149's `/api/demo/reset` endpoint. Founder no longer

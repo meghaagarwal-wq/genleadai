@@ -55,6 +55,20 @@ async def reset_demo_workspace(current_user: dict = Depends(get_current_user)):
         "activities":         db["activities"].delete_many({"tenant_id": DEMO_TENANT, "seed_source": "iter148"}).deleted_count,
     }
 
+    # iter154 — also re-run the dashboard-rich seed so every widget on the
+    # B2C/B2B/Sales/Hybrid demo dashboards renders real numbers (not
+    # "Coming soon" placeholders). The iter154 seeder is idempotent —
+    # it deletes its own prior rows before inserting fresh ones.
+    try:
+        import importlib
+        from scripts import iter154_seed_demo_dashboards as ds_seeder
+        importlib.reload(ds_seeder)
+        ds_seeder.main()
+    except Exception as e:  # noqa: BLE001
+        # Don't fail the entire reset if the dashboard seed has an issue —
+        # the iter148 seed below still gets us a workable demo.
+        purged["iter154_error"] = str(e)[:200]
+
     # ── 2. Re-seed via the iter148 seeder module ─────────────────────
     # Import lazily so the script's __main__ block doesn't fire at app
     # startup. Reuse the dict constants + seed helpers from iter148.
