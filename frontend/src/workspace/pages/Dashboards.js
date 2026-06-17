@@ -26,6 +26,7 @@ import {
 import api from '../../config/api';
 import { Sparkline, RadialGauge, TaperedFunnel, HBars, MiniBarChart } from './dashboard_charts';
 import { ICPDriftModal } from './ICPDriftModal';
+import { WinningCombos } from './WinningCombos';
 import {
   KpiTile, ComingSoon, SectionCard, StatusPill, HealthBadge, useDashboard, fmtMoney, DashboardSkeleton,
 } from './dashboard_shared';
@@ -163,6 +164,9 @@ export const B2CDashboard = () => {
           </div>
         )}
       </SectionCard>
+
+      {/* Winning Channel Combos — leaderboard with "duplicate sequence" CTA */}
+      <WinningCombos combos={data.winning_combos} onDuplicate={refresh} />
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

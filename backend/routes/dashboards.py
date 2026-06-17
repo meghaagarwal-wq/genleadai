@@ -339,6 +339,7 @@ async def dashboard_b2c(current_user: dict = Depends(get_current_user)):
         "biggest_drop": biggest_drop,
         "sequences": sequences,
         "channel_overlap": _channel_overlap(tenant_id),
+        "winning_combos": _winning_channel_combos(tenant_id),
         "ghost_leads": ghost_leads,
         "cost_per_qualified_lead": _cost_per_qualified_lead(tenant_id, currency, month_start),
     }
@@ -372,6 +373,38 @@ def _channel_overlap(tenant_id: str) -> Dict[str, Any]:
         key=lambda r: r["leads"], reverse=True,
     )[:5]
     return {"coming_soon": False, "rows": out_rows}
+
+
+def _winning_channel_combos(tenant_id: str) -> Dict[str, Any]:
+    """Top 3 channel combinations by REAL booked-meeting count
+    (joins pt_leads.source_channels × booking_events.lead_id).
+    Powers the 'Winning Channel Combos' leaderboard on the B2C dashboard."""
+    pipeline = [
+        {"$match": {"tenant_id": tenant_id, "source_channels": {"$exists": True, "$ne": [], "$type": "array"}}},
+        {"$lookup": {"from": "booking_events", "localField": "id", "foreignField": "lead_id", "as": "bookings"}},
+        {"$project": {"_id": 0, "channels": "$source_channels", "bookings_count": {"$size": "$bookings"}}},
+    ]
+    rows = list(pt_leads_col.aggregate(pipeline))
+    if not rows:
+        return {"coming_soon": True, "rows": []}
+    bucket: Dict[str, Dict[str, int]] = {}
+    for r in rows:
+        chs = sorted(set((c or "").strip().lower() for c in (r.get("channels") or []) if c))
+        if len(chs) < 2:
+            continue
+        key = " + ".join(chs[:3])
+        b = bucket.setdefault(key, {"leads": 0, "bookings": 0})
+        b["leads"] += 1
+        b["bookings"] += r.get("bookings_count") or 0
+    if not bucket:
+        return {"coming_soon": True, "rows": []}
+    out = []
+    for key, v in bucket.items():
+        close_rate = round((v["bookings"] / v["leads"]) * 100, 1) if v["leads"] else 0
+        out.append({"combo": key, "leads": v["leads"], "bookings": v["bookings"], "close_rate": close_rate})
+    # Sort by bookings DESC then close_rate DESC then leads DESC.
+    out.sort(key=lambda r: (-r["bookings"], -r["close_rate"], -r["leads"]))
+    return {"coming_soon": False, "rows": out[:3]}
 
 
 def _cost_per_qualified_lead(tenant_id: str, currency: str, month_start: str) -> Dict[str, Any]:
@@ -1014,6 +1047,36 @@ async def regenerate_top_actions(current_user: dict = Depends(get_current_user))
         "date": today,
     })
     return {"ok": True, "cache_cleared": True}
+
+
+@router.post("/sequences/duplicate-from-combo")
+async def duplicate_from_combo(payload: dict, current_user: dict = Depends(get_current_user)):
+    """iter159 — create a sequence skeleton seeded from a winning channel combo.
+    The actual outreach engine is still in Lemlist — this just inserts a row
+    that the founder can finish wiring up there. Returns the new row.
+
+    Body: {"combo": "linkedin + whatsapp"}
+    """
+    tenant_id = current_user.get("tenant_id") or ""
+    combo = (payload or {}).get("combo")
+    if not tenant_id or not combo:
+        return {"ok": False, "error": "tenant_id and combo are required"}
+    channels = [c.strip().lower() for c in combo.split("+") if c.strip()]
+    name = f"Auto · {combo.title()} (replicated)"
+    row = {
+        "id": f"seq_combo_{int(datetime.now(timezone.utc).timestamp())}",
+        "tenant_id": tenant_id,
+        "name": name,
+        "channels": channels,
+        "active": 0, "booked": 0, "rate": 0,
+        "status": "draft",
+        "created_by": current_user.get("email"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "winning_combo_duplicate",
+    }
+    db["lemlist_sequences"].insert_one(row)
+    row.pop("_id", None)
+    return {"ok": True, "sequence": row}
 
 
 # ───────────────────────── Misc helpers ──────────────────────────

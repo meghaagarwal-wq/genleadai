@@ -15,23 +15,42 @@ import {
 
 // ───────────────────────── Sparkline ─────────────────────────────
 // Tiny area-line that sits inside a KPI tile. `data` is a list of numbers
-// (oldest → newest). Color picks itself from the last-vs-first delta.
-export const Sparkline = ({ data, color, height = 32 }) => {
+// (oldest → newest) OR a list of {date, value} points. Tooltip shows
+// the per-bucket date + value on hover.
+export const Sparkline = ({ data, color, height = 32, valueLabel = '' }) => {
   if (!data || data.length < 2) return null;
-  const points = data.map((v, i) => ({ i, v }));
-  const delta = data[data.length - 1] - data[0];
+  // Normalise — accept both number[] and {date, value}[].
+  const points = data.map((d, i) => {
+    if (typeof d === 'number') {
+      const dt = new Date();
+      dt.setUTCDate(dt.getUTCDate() - (data.length - 1 - i));
+      return { i, v: d, date: dt.toISOString().slice(0, 10) };
+    }
+    return { i, v: d.value ?? d.v ?? 0, date: d.date };
+  });
+  const delta = points[points.length - 1].v - points[0].v;
   const stroke = color || (delta > 0 ? '#10B981' : delta < 0 ? '#EF4444' : '#94A3B8');
+  const gradId = `spk-${stroke.replace('#', '')}-${Math.floor(Math.random() * 1000)}`;
   return (
     <div style={{ width: '100%', height }} data-testid="sparkline">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <defs>
-            <linearGradient id={`spk-${stroke.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%"  stopColor={stroke} stopOpacity={0.35} />
               <stop offset="100%" stopColor={stroke} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={1.75} fill={`url(#spk-${stroke.replace('#', '')})`} dot={false} isAnimationActive />
+          <Tooltip
+            cursor={{ stroke, strokeWidth: 1, strokeDasharray: '3 3', opacity: 0.4 }}
+            contentStyle={{ fontSize: 10, padding: '4px 8px', background: 'var(--theme-surface, #fff)', border: '1px solid var(--theme-border, #E5E7EB)', borderRadius: 4 }}
+            labelStyle={{ display: 'none' }}
+            formatter={(value, _name, ctx) => [
+              <span key="v"><strong style={{ color: stroke }}>{value}{valueLabel ? ` ${valueLabel}` : ''}</strong> on <span style={{ color: 'var(--theme-text-muted)' }}>{ctx?.payload?.date}</span></span>,
+              '',
+            ]}
+          />
+          <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={1.75} fill={`url(#${gradId})`} dot={false} isAnimationActive />
         </AreaChart>
       </ResponsiveContainer>
     </div>
