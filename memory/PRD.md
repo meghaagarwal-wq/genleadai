@@ -1,3 +1,36 @@
+## Iter 157 — Chart-first dashboard upgrade (no redundancy) (Feb 12, 2026)
+
+User: "add graphical representation on genleadai demo dashboard for easy understanding where every you can and also remember we dont want redundancy in information just something that would make the user wanna come back on this again and agin"
+
+### Design rule applied
+Charts **REPLACE** text/numbers (never sit alongside). Tiny inline indicators (e.g. the +/-N% delta in a KPI tile's top-right) are kept because they read different info than the sparkline trajectory.
+
+### Shipped
+- **Backend** `_timeseries_count` + `_timeseries_sum` helpers (single $bucket aggregate; reusable across B2C + B2B Founder KPIs). Added `spark: number[7]` to:
+  - B2C KPIs: `leads_today`, `active_convos`, `bookings_week`, `revenue_pipeline`
+  - B2B Founder KPIs: `leads_month`, `high_intent`, `meetings`, `signals`
+- **Frontend** new `dashboard_charts.js` module exports:
+  - `Sparkline` (area chart, 28px) — embedded in every KPI tile with `spark` data; color shifts on delta direction.
+  - `RadialGauge` (recharts RadialBar 0–100) — replaces Momentum's emoji+text on B2C + B2B Founder.
+  - `TaperedFunnel` (SVG-ish CSS) — replaces the 5-column equal-box grid; trapezoid bars taper to actual volume per stage.
+  - `HBars` (gradient horizontal bars) — replaces text rows in **Sequences, Asset Performance, Multi-touch Leads, Signal Attribution**.
+  - `MiniBarChart` (recharts vertical bars + tooltip) — replaces the Channel Performance HTML table on B2B Founder.
+  - `InlineSparkline` (raw SVG polyline, ~56×18px) — available for inline-row use (not yet wired).
+
+### Verified (iter157, 100% backend + 100% frontend)
+- All `spark` arrays return exactly 7 numerics for both dashboards.
+- All chart components render without recharts `ResponsiveContainer width(0)` warnings.
+- Console: 0 errors, 0 warnings after switching pills between B2C / B2B Founder / B2B Sales / Hybrid.
+- Pietential tenant unaffected — `/api/dashboard/b2b-founder` returns 200.
+- No "vs prev N%" or duplicate trend text remains.
+
+### Known follow-ups (P2)
+- B2B Sales KPI tiles don't yet show sparklines (out of scope this iter; data shape supports easy addition next).
+- `Dashboards.js` now ~840 lines — overdue for split into per-mode files.
+
+---
+
+
 ## Iter 156 — Auto-bootstrap demo seed on backend startup (Feb 12, 2026)
 
 User: "i can not see them in production" (referring to the demo leads from iter154)
