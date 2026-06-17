@@ -79,15 +79,15 @@ export const ICPDriftModal = ({ open, onClose, drift, onSnoozed }) => {
       style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
       data-testid="icp-drift-modal-backdrop"
       onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="icp-drift-title"
     >
       <div
         className="relative rounded-2xl border max-w-3xl w-full max-h-[90vh] overflow-auto shadow-2xl"
         style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
         data-testid="icp-drift-modal"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="icp-drift-title"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 p-6 border-b" style={{ borderColor: 'var(--theme-border)' }}>

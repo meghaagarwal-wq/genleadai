@@ -1,3 +1,42 @@
+## Iter 158 — Four-backlog drop: Sales sparklines + Multi-touch tracking + ICP Drift modal + shared split + UX sweep (Feb 12, 2026)
+
+User: "do this" (all 4 items + (e) all three UX sweep lanes)
+
+### Shipped
+- **B2B Sales KPI sparklines** — `followups_today`, `meetings_today`, `approvals_pending`, `pipeline_value` now return `{value, spark[7]}`; frontend tiles render the inline area chart.
+- **Phase B Step 4 — Multi-touch channel tracking**:
+  - `services/lead_channels.py::register_channel_touch(tenant_id, lead_id, channel)` → `$addToSet` on `pt_leads.source_channels` AND `leads.source_channels` (dual write for legacy compat). Case-folds via `.strip().lower()`.
+  - Called from `services/outreach_dispatch.py` after every outbound_log insert (even logged-only attempts count as a touch).
+  - Called from `routes/inbound_reply.py` after every inbound_messages insert.
+  - Idempotent — re-firing for the same channel is a no-op.
+- **Phase B Step 5 — ICP Drift Modal** (`workspace/pages/ICPDriftModal.js`):
+  - 30-day ICP distribution as a recharts donut (PieChart + Legend + Tooltip).
+  - Per-channel drift breakdown via shared `HBars` (red ≥50%, amber ≥25%, green otherwise).
+  - "ARIA recommends" callout for any channel ≥30% unknown with ≥3 leads.
+  - Snooze button → `POST /api/dashboard/icp-drift/snooze?days=7` (clamped 1–30; stored on tenant doc with `icp_drift_snoozed_by` audit). While snoozed, `drift_detected` returns false regardless of actual numbers.
+  - a11y: `role=dialog`, `aria-modal`, `aria-labelledby`, Escape-key close, body-scroll lock.
+- **Shared split** — `dashboard_shared.js` exports `KpiTile`, `ComingSoon`, `SectionCard`, `StatusPill`, `HealthBadge`, `useDashboard`, `fmtMoney`, `DashboardSkeleton`. `Dashboards.js` shrunk from 824 → 738 lines (saves ~100 LOC; further per-mode split deferred — high risk, low payoff vs current cleanup).
+- **UX Sweep (all three lanes)**:
+  - **a11y**: every KPI tile has `role=group` + `aria-label`; KPI strips wrapped in labeled groups; demo-mode-switcher is `role=tablist` with `aria-selected` per pill; all icon-only buttons have `aria-label`; ICP modal has `role=dialog` on the correct element + Escape close.
+  - **Mobile**: KPI grids changed from `grid-cols-2 md:grid-cols-5` to `grid-cols-2 sm:grid-cols-3 lg:grid-cols-5` so the 375px breakpoint shows clean 2-cols (was squished 5-cols). Demo pills wrap with `flex-wrap`, min-height 32px for touch.
+  - **Micro-interactions**: hover lift on KPI tiles (`hover:-translate-y-0.5`); `active:scale-95` press feedback on all buttons; focus rings via `focus:ring-2 focus:ring-purple-400`; new `DashboardSkeleton` replaces static "Loading…" text with animated pulse skeleton (`aria-busy=true`).
+- **Bonus fixes**: React duplicate-key warning eliminated — switched 5 list keys from `lead_id` to `${lead_id}_${index}` composite (ghost leads, deal-risk, agenda, attribution_top3 on both B2B Founder and B2B Sales).
+
+### Verified (iter158, 100% backend + 100% frontend)
+- 6 backend pytests pass.
+- B2B Sales tiles all show sparklines, demo-mode-switcher tabs work with keyboard.
+- ICP drift modal opens / Escape closes / snooze flow flips `drift_detected` to false.
+- Multi-touch `$addToSet` dedups + case-folds correctly.
+- 2-col mobile layout verified at 375×667.
+- No console warnings.
+- Tenant isolation regression-clean.
+
+### Known follow-ups
+- Full per-mode split (B2CDashboard.js / B2BFounderDashboard.js / B2BSalesDashboard.js as separate files instead of one Dashboards.js) — deferred. Saves ~600 more lines but pure cosmetic, no behaviour change.
+
+---
+
+
 ## Iter 157 — Chart-first dashboard upgrade (no redundancy) (Feb 12, 2026)
 
 User: "add graphical representation on genleadai demo dashboard for easy understanding where every you can and also remember we dont want redundancy in information just something that would make the user wanna come back on this again and agin"

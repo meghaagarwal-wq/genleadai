@@ -350,16 +350,16 @@ export const B2BFounderDashboard = () => {
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SectionCard title="Ghost lead recovery" testid="founder-ghost-leads">
-          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghost leads — nice.</div> : data.ghost_leads.map((g) => (
-            <Link to={`/app/leads/${g.lead_id}`} key={g.lead_id} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghost leads — nice.</div> : data.ghost_leads.map((g, i) => (
+            <Link to={`/app/leads/${g.lead_id}`} key={`${g.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{g.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{g.company} · {g.days_silent}d silent · score {g.score}</div>
             </Link>
           ))}
         </SectionCard>
         <SectionCard title="Deals at risk" testid="deal-risk-flags">
-          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No at-risk deals.</div> : data.deal_risk_flags.map((d) => (
-            <Link to={`/app/leads/${d.lead_id}`} key={d.lead_id} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No at-risk deals.</div> : data.deal_risk_flags.map((d, i) => (
+            <Link to={`/app/leads/${d.lead_id}`} key={`${d.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{d.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{d.company} · {d.risk_type === 'negative_reply' ? '⚠ Negative reply' : `${d.days_silent}d silent`} · score {d.score}</div>
             </Link>
@@ -506,8 +506,8 @@ export const B2BSalesDashboard = () => {
         </div>
         <div className="lg:col-span-2 space-y-4">
           <SectionCard title="Today's agenda" testid="agenda">
-            {data.agenda.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No meetings or follow-ups today.</div> : data.agenda.map((a) => (
-              <div key={a.lead_id + a.when} className="py-1.5 text-xs">
+            {data.agenda.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No meetings or follow-ups today.</div> : data.agenda.map((a, i) => (
+              <div key={`${a.lead_id}_${a.when}_${i}`} className="py-1.5 text-xs">
                 <span className="font-bold mr-2" style={{ color: 'var(--theme-purple-light)' }}>{new Date(a.when).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
                 <span style={{ color: 'var(--theme-text)' }}>{a.lead_name}</span>
                 <span style={{ color: 'var(--theme-text-muted)' }}> · {a.company}</span>
@@ -528,8 +528,8 @@ export const B2BSalesDashboard = () => {
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SectionCard title="Deal risk flags" testid="sales-deal-risk">
-          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No flagged deals.</div> : data.deal_risk_flags.map((d) => (
-            <Link to={`/app/leads/${d.lead_id}`} key={d.lead_id} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No flagged deals.</div> : data.deal_risk_flags.map((d, i) => (
+            <Link to={`/app/leads/${d.lead_id}`} key={`${d.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{d.name} · <span style={{ color: 'var(--theme-text-muted)' }}>{d.company}</span></div>
               <div className="text-[11px]" style={{ color: '#EF4444' }}>{d.days_silent}d silent</div>
             </Link>
@@ -539,14 +539,14 @@ export const B2BSalesDashboard = () => {
           {Array.isArray(data.attribution_top3) && data.attribution_top3.length > 0 ? (
             <div className="space-y-1.5">
               {data.attribution_top3.map((a, i) => (
-                <div key={a.signal_type} className="flex justify-between text-xs"><span style={{ color: 'var(--theme-text)' }}>{i + 1}. {a.signal_type}</span><span className="font-bold" style={{ color: '#7C35DC' }}>{a.conv_rate}%</span></div>
+                <div key={`${a.signal_type}_${i}`} className="flex justify-between text-xs"><span style={{ color: 'var(--theme-text)' }}>{i + 1}. {a.signal_type}</span><span className="font-bold" style={{ color: '#7C35DC' }}>{a.conv_rate}%</span></div>
               ))}
             </div>
           ) : <ComingSoon what="signal attribution" why="Need ≥3 leads per signal type with booked meetings." />}
         </SectionCard>
         <SectionCard title="Ghost lead recovery" testid="sales-ghost-leads">
-          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghosts.</div> : data.ghost_leads.map((g) => (
-            <Link to={`/app/leads/${g.lead_id}`} key={g.lead_id} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghosts.</div> : data.ghost_leads.map((g, i) => (
+            <Link to={`/app/leads/${g.lead_id}`} key={`${g.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{g.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{g.company} · {g.days_silent}d</div>
             </Link>
