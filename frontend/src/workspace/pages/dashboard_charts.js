@@ -44,13 +44,13 @@ export const Sparkline = ({ data, color, height = 32, valueLabel = '' }) => {
           <Tooltip
             cursor={{ stroke, strokeWidth: 1, strokeDasharray: '3 3', opacity: 0.4 }}
             contentStyle={{ fontSize: 10, padding: '4px 8px', background: 'var(--theme-surface, #fff)', border: '1px solid var(--theme-border, #E5E7EB)', borderRadius: 4 }}
-            labelStyle={{ display: 'none' }}
-            formatter={(value, _name, ctx) => [
-              <span key="v"><strong style={{ color: stroke }}>{value}{valueLabel ? ` ${valueLabel}` : ''}</strong> on <span style={{ color: 'var(--theme-text-muted)' }}>{ctx?.payload?.date}</span></span>,
-              '',
-            ]}
+            labelFormatter={(_label, payload) => payload?.[0]?.payload?.date || ''}
+            formatter={(value) => [`${value}${valueLabel ? ` ${valueLabel}` : ''}`, '']}
+            separator=""
+            itemStyle={{ color: stroke, fontWeight: 600 }}
+            labelStyle={{ color: 'var(--theme-text-muted, #6B7280)', fontSize: 9 }}
           />
-          <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={1.75} fill={`url(#${gradId})`} dot={false} isAnimationActive />
+          <Area type="monotone" dataKey="v" name="" stroke={stroke} strokeWidth={1.75} fill={`url(#${gradId})`} dot={false} isAnimationActive />
         </AreaChart>
       </ResponsiveContainer>
     </div>

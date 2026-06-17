@@ -1,3 +1,33 @@
+## Iter 159 — Final 4-backlog drop: Winning Combos + Sparkline tooltip + Conversations migration + Per-mode aliases (Feb 12, 2026)
+
+User: "do this" (all 4 remaining backlog items)
+
+### Shipped
+- **Winning Channel Combos leaderboard (B2C dashboard)**
+  - Backend `_winning_channel_combos()` — joins `pt_leads.source_channels` × `booking_events.lead_id` to compute the top-3 channel combos by real booked-meeting count. Sorts by bookings desc → close_rate desc → leads desc.
+  - New endpoint `POST /api/dashboard/sequences/duplicate-from-combo` — inserts a draft `lemlist_sequences` row with the channel mix, status='draft', source='winning_combo_duplicate', author email.
+  - Frontend `WinningCombos.js` — 3-card ranked grid (gold/silver/lavender) with channel name, close-rate %, bookings/leads count, and "Duplicate to sequence" button per card. Sonner toast on success.
+- **Sparkline hover-popover** (`dashboard_charts.js::Sparkline`)
+  - Accepts both `number[]` and `{date,value}[]` inputs (auto-fills dates as today-(N-i) days).
+  - Recharts `<Tooltip>` shows "<value> on YYYY-MM-DD" via `labelFormatter` (date) + `formatter` (value); suppressed series name + separator for clean output.
+- **Conversations migration** (`routes/conversations.py`)
+  - New `_merge_leads_for_threads()` helper unions `pt_leads` + legacy `leads` deduped by `id`. Legacy rows win for conversation-specific fields (latest_sentiment, aria_active, etc); pt_leads fills gaps.
+  - All 10 demo leads now appear on `/api/conversations/threads` without losing any legacy Pietential thread data.
+- **Per-mode alias files** (`B2CDashboard.js`, `B2BFounderDashboard.js`, `B2BSalesDashboard.js`)
+  - Each is a 3-line re-export from `./Dashboards`. Callers can now `import B2CDashboard from './B2CDashboard'` (sub-module style) without the physical-split risk.
+
+### Verified (iter159, 100% backend + 100% frontend)
+- 4 backend pytests pass (`/app/backend/tests/test_iter159_backlog.py`).
+- Frontend: Winning Combos cards render with all 3 duplicate buttons, sparkline tooltip shows clean "<value> on YYYY-MM-DD", Conversations page shows all 10 demo names + Pietential isolation intact.
+- Sparkline tooltip cosmetic polish applied post-test (suppress "name :" prefix that initially leaked through).
+
+### Known follow-ups
+- Physical per-mode file split (move B2CDashboard body out of Dashboards.js) — still deferred. Alias files satisfy the import API today.
+- The carry-over React duplicate-key warning from earlier iters is now resolved as of iter158 composite-key fixes.
+
+---
+
+
 ## Iter 158 — Four-backlog drop: Sales sparklines + Multi-touch tracking + ICP Drift modal + shared split + UX sweep (Feb 12, 2026)
 
 User: "do this" (all 4 items + (e) all three UX sweep lanes)
