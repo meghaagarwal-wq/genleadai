@@ -24,27 +24,34 @@ import {
   Buildings, ArrowRight, Warning, Robot, Brain, Lightbulb,
 } from '@phosphor-icons/react';
 import api from '../../config/api';
+import { Sparkline, RadialGauge, TaperedFunnel, HBars, MiniBarChart } from './dashboard_charts';
 
 // ─── Shared tiny components ───────────────────────────────────────
-const KpiTile = ({ label, value, trend, unit, sub, testid }) => {
+const KpiTile = ({ label, value, trend, unit, sub, spark, testid }) => {
   const dir = trend?.direction;
+  const sparkColor = dir === 'up' ? '#10B981' : dir === 'down' ? '#EF4444' : '#7C35DC';
   return (
-    <div className="rounded-xl border p-4" data-testid={testid}
+    <div className="rounded-xl border p-4 group hover:border-[var(--theme-purple-light)] transition-colors" data-testid={testid}
       style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
       <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'var(--theme-text-muted)' }}>{label}</div>
       <div className="mt-1.5 flex items-baseline gap-1.5">
         <div className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{value ?? '—'}</div>
         {unit && <div className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{unit}</div>}
+        {trend?.pct != null && (
+          <span className={`ml-auto inline-flex items-center gap-0.5 text-[10px] font-semibold ${
+            dir === 'up' ? 'text-emerald-500' : dir === 'down' ? 'text-rose-500' : 'text-slate-400'
+          }`}>
+            {dir === 'up' ? <TrendUp size={11} weight="bold" /> : dir === 'down' ? <TrendDown size={11} weight="bold" /> : null}
+            {Math.abs(trend.pct)}%
+          </span>
+        )}
       </div>
-      {trend?.pct != null && (
-        <div className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold ${
-          dir === 'up' ? 'text-emerald-500' : dir === 'down' ? 'text-rose-500' : 'text-slate-400'
-        }`}>
-          {dir === 'up' ? <TrendUp size={12} weight="bold" /> : dir === 'down' ? <TrendDown size={12} weight="bold" /> : null}
-          {Math.abs(trend.pct)}% vs prev
-        </div>
-      )}
-      {sub && <div className="mt-1 text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>}
+      {/* Sparkline REPLACES the "vs prev" text — actual trajectory visible at a glance */}
+      {spark?.length >= 2 ? (
+        <div className="mt-1.5"><Sparkline data={spark} color={sparkColor} height={28} /></div>
+      ) : sub ? (
+        <div className="mt-1 text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>
+      ) : null}
     </div>
   );
 };
@@ -120,11 +127,11 @@ export const B2CDashboard = () => {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiTile label="Leads today" value={data.kpis.leads_today.value} trend={data.kpis.leads_today.trend} testid="kpi-leads-today" />
-        <KpiTile label="Active conversations" value={data.kpis.active_convos.value} sub={data.kpis.active_convos.label} testid="kpi-active-convos" />
-        <KpiTile label="Bookings this week" value={data.kpis.bookings_week.value} trend={data.kpis.bookings_week.trend} testid="kpi-bookings-week" />
+        <KpiTile label="Leads today" value={data.kpis.leads_today.value} trend={data.kpis.leads_today.trend} spark={data.kpis.leads_today.spark} testid="kpi-leads-today" />
+        <KpiTile label="Active conversations" value={data.kpis.active_convos.value} sub={data.kpis.active_convos.label} spark={data.kpis.active_convos.spark} testid="kpi-active-convos" />
+        <KpiTile label="Bookings this week" value={data.kpis.bookings_week.value} trend={data.kpis.bookings_week.trend} spark={data.kpis.bookings_week.spark} testid="kpi-bookings-week" />
         <KpiTile label="Lead → booking" value={data.kpis.conversion_rate.value} unit="%" trend={data.kpis.conversion_rate.trend} testid="kpi-conv-rate" />
-        <KpiTile label="Pipeline value" value={fmtMoney(data.kpis.revenue_pipeline.value, c)} testid="kpi-pipeline-value" />
+        <KpiTile label="Pipeline value" value={fmtMoney(data.kpis.revenue_pipeline.value, c)} spark={data.kpis.revenue_pipeline.spark} testid="kpi-pipeline-value" />
       </div>
 
       {/* ARIA Time Saved banner */}
@@ -148,15 +155,7 @@ export const B2CDashboard = () => {
       {/* Momentum + Revenue Forecast */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Momentum" sub={data.momentum.driver_text} testid="momentum-card">
-          <div className="flex items-center gap-4">
-            <div className="text-5xl">
-              {data.momentum.direction === 'up' ? '🚀' : data.momentum.direction === 'down' ? '🔻' : '→'}
-            </div>
-            <div>
-              <div className="text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.momentum.score}<span className="text-base" style={{ color: 'var(--theme-text-muted)' }}> / 100</span></div>
-              <div className="text-sm mt-0.5 font-semibold" style={{ color: data.momentum.direction === 'up' ? '#10B981' : data.momentum.direction === 'down' ? '#EF4444' : '#94A3B8' }}>{data.momentum.label}</div>
-            </div>
-          </div>
+          <RadialGauge score={data.momentum.score} label={data.momentum.label} sub={`Direction: ${data.momentum.direction}`} />
         </SectionCard>
         <SectionCard title="Revenue Forecast" testid="revenue-forecast">
           {data.revenue_forecast.coming_soon ? (
@@ -216,11 +215,7 @@ export const B2CDashboard = () => {
           </SectionCard>
           <SectionCard title="Asset performance" testid="asset-performance">
             {data.asset_performance.coming_soon ? <ComingSoon what="asset tracking" why="Add tracked links to your lead magnets to see clicks here." /> : (
-              <div className="space-y-2">
-                {data.asset_performance.rows.map((a) => (
-                  <div key={a.name} className="flex justify-between text-xs"><span className="truncate" style={{ color: 'var(--theme-text)' }}>{a.name}</span><span className="font-semibold" style={{ color: 'var(--theme-purple-light)' }}>{a.clicks}</span></div>
-                ))}
-              </div>
+              <HBars rows={data.asset_performance.rows.map(a => ({ label: a.name, value: a.clicks }))} unit="" color="#7C35DC" />
             )}
           </SectionCard>
         </div>
@@ -228,18 +223,7 @@ export const B2CDashboard = () => {
 
       {/* Funnel */}
       <SectionCard title="Booking Funnel — This Week" sub={`${data.funnel[0]?.count ?? 0} leads entered top of funnel`} testid="booking-funnel">
-        <div className="grid grid-cols-5 gap-2">
-          {data.funnel.map((step, i) => {
-            const palette = ['#6366F1', '#7C35DC', '#0E9F86', '#F59E0B', '#10B981'];
-            return (
-              <div key={step.stage} className="rounded-md p-3 text-center" style={{ background: palette[i], color: 'white' }}>
-                <div className="text-2xl font-bold">{step.count}</div>
-                <div className="text-[10px] opacity-90 mt-0.5">{step.stage}</div>
-                {i > 0 && <div className="text-[10px] mt-1 opacity-80">{step.pct_of_prev}% of prev</div>}
-              </div>
-            );
-          })}
-        </div>
+        <TaperedFunnel steps={data.funnel} />
         {data.biggest_drop && (
           <div className="mt-3 text-xs rounded-md px-3 py-2" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>
             ⚠ Biggest drop-off: {data.biggest_drop.from} → {data.biggest_drop.to} ({data.biggest_drop.loss_pct}% lost)
@@ -249,31 +233,34 @@ export const B2CDashboard = () => {
 
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SectionCard title="Active sequences" testid="sequences">
+        <SectionCard title="Active sequences" sub="Booked / Active conversion" testid="sequences">
           {data.sequences.length === 0 ? <ComingSoon what="sequence data" why="Connect Lemlist to populate." /> : (
-            <table className="w-full text-xs">
-              <thead><tr style={{ color: 'var(--theme-text-muted)' }}><th className="text-left font-semibold pb-1">Name</th><th className="text-right font-semibold pb-1">Active</th><th className="text-right font-semibold pb-1">Booked</th><th className="text-right font-semibold pb-1">Rate</th></tr></thead>
-              <tbody>
-                {data.sequences.map((s) => (
-                  <tr key={s.name}><td className="py-1 truncate" style={{ color: 'var(--theme-text)' }}>{s.name}</td><td className="text-right" style={{ color: 'var(--theme-text)' }}>{s.active}</td><td className="text-right" style={{ color: 'var(--theme-text)' }}>{s.booked}</td><td className="text-right font-bold" style={{ color: s.rate >= 15 ? '#10B981' : s.rate >= 5 ? '#F59E0B' : '#EF4444' }}>{s.rate}%</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <HBars
+              rows={data.sequences.map(s => ({
+                label: s.name,
+                value: s.rate,
+                sub: `${s.booked} booked of ${s.active} active`,
+                color: s.rate >= 15 ? '#10B981' : s.rate >= 5 ? '#F59E0B' : '#EF4444',
+              }))}
+              unit="%"
+              maxValue={Math.max(25, ...data.sequences.map(s => s.rate))}
+            />
           )}
         </SectionCard>
         <SectionCard title="Multi-touch leads" sub="Leads from 2+ channels convert higher" testid="channel-overlap">
           {data.channel_overlap?.coming_soon || !(data.channel_overlap?.rows?.length) ? (
             <ComingSoon what="multi-touch tracking" why="Tag lead source on every channel to see overlap." />
           ) : (
-            <div className="space-y-2">
-              {data.channel_overlap.rows.map((r) => (
-                <div key={r.channels} className="flex items-center justify-between text-xs gap-2">
-                  <span className="capitalize font-semibold truncate flex-1" style={{ color: 'var(--theme-text)' }}>{r.channels}</span>
-                  <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads</span>
-                  <span className="font-bold" style={{ color: r.conv_rate >= 30 ? '#10B981' : r.conv_rate >= 10 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
-                </div>
-              ))}
-            </div>
+            <HBars
+              rows={data.channel_overlap.rows.map(r => ({
+                label: r.channels,
+                value: r.conv_rate,
+                sub: `${r.leads} leads · ${r.meetings} meetings`,
+                color: r.conv_rate >= 30 ? '#10B981' : r.conv_rate >= 10 ? '#F59E0B' : '#94A3B8',
+              }))}
+              unit="%"
+              maxValue={Math.max(50, ...data.channel_overlap.rows.map(r => r.conv_rate))}
+            />
           )}
         </SectionCard>
         <SectionCard title="Leads to recover" sub={`${data.ghost_leads.length} warm leads gone quiet`} testid="ghost-leads">
@@ -320,10 +307,10 @@ export const B2BFounderDashboard = () => {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiTile label="Leads this month" value={data.kpis.leads_month.value} trend={data.kpis.leads_month.trend} testid="kpi-leads-month" />
-        <KpiTile label="High intent (≥70)" value={data.kpis.high_intent.value} trend={data.kpis.high_intent.trend} testid="kpi-high-intent" />
-        <KpiTile label="Meetings" value={data.kpis.meetings.value} trend={data.kpis.meetings.trend} testid="kpi-meetings" />
-        <KpiTile label="Signals" value={data.kpis.signals.value} trend={data.kpis.signals.trend} testid="kpi-signals" />
+        <KpiTile label="Leads this month" value={data.kpis.leads_month.value} trend={data.kpis.leads_month.trend} spark={data.kpis.leads_month.spark} testid="kpi-leads-month" />
+        <KpiTile label="High intent (≥70)" value={data.kpis.high_intent.value} trend={data.kpis.high_intent.trend} spark={data.kpis.high_intent.spark} testid="kpi-high-intent" />
+        <KpiTile label="Meetings" value={data.kpis.meetings.value} trend={data.kpis.meetings.trend} spark={data.kpis.meetings.spark} testid="kpi-meetings" />
+        <KpiTile label="Signals" value={data.kpis.signals.value} trend={data.kpis.signals.trend} spark={data.kpis.signals.spark} testid="kpi-signals" />
         <KpiTile label="Conversion" value={data.kpis.conv_rate.value} unit="%" trend={data.kpis.conv_rate.trend} testid="kpi-b2b-conv" />
       </div>
 
@@ -331,13 +318,7 @@ export const B2BFounderDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="md:col-span-3">
           <SectionCard title="Momentum" sub={data.momentum.driver_text} testid="b2b-momentum">
-            <div className="flex items-center gap-4">
-              <div className="text-5xl">{data.momentum.direction === 'up' ? '🚀' : data.momentum.direction === 'down' ? '🔻' : '→'}</div>
-              <div>
-                <div className="text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.momentum.score}<span className="text-base" style={{ color: 'var(--theme-text-muted)' }}> / 100</span></div>
-                <div className="text-sm mt-0.5 font-semibold" style={{ color: data.momentum.direction === 'up' ? '#10B981' : data.momentum.direction === 'down' ? '#EF4444' : '#94A3B8' }}>{data.momentum.label}</div>
-              </div>
-            </div>
+            <RadialGauge score={data.momentum.score} label={data.momentum.label} sub={`Direction: ${data.momentum.direction}`} />
           </SectionCard>
         </div>
         <div className="md:col-span-2">
@@ -363,45 +344,47 @@ export const B2BFounderDashboard = () => {
         </div>
       )}
 
-      {/* Channel Performance Table */}
-      <SectionCard title="Channel Performance" sub="Which channels are working — and which aren't" testid="channel-performance-table">
+      {/* Channel Performance — visual: leads per channel + conv rate badges */}
+      <SectionCard title="Channel Performance" sub="Bar height = leads · color = health · % = conversion to meeting" testid="channel-performance-table">
         {data.channel_performance.length === 0 ? <ComingSoon what="channel data" why="Connect a lead source to populate." /> : (
-          <table className="w-full text-xs">
-            <thead><tr style={{ color: 'var(--theme-text-muted)' }}>
-              <th className="text-left font-semibold pb-2">Channel</th><th className="text-right font-semibold">Leads</th>
-              <th className="text-right font-semibold">High %</th><th className="text-right font-semibold">Meetings</th>
-              <th className="text-right font-semibold">Conv %</th><th className="text-center font-semibold">Health</th>
-            </tr></thead>
-            <tbody>
-              {data.channel_performance.map((ch) => (
-                <tr key={ch.channel} className="border-t" style={{ borderColor: 'var(--theme-border)' }}>
-                  <td className="py-2 font-semibold capitalize" style={{ color: 'var(--theme-text)' }}><span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: ch.colour }} />{ch.channel}</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.leads}</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.high_pct}%</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.meetings}</td>
-                  <td className="text-right font-bold" style={{ color: ch.conv_rate >= 10 ? '#10B981' : ch.conv_rate >= 5 ? '#F59E0B' : '#EF4444' }}>{ch.conv_rate}%</td>
-                  <td className="text-center"><HealthBadge h={ch.health} /></td>
-                </tr>
+          <>
+            <MiniBarChart
+              data={data.channel_performance.map(ch => ({
+                name: ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1),
+                value: ch.leads,
+                color: ch.health === 'healthy' ? '#10B981' : ch.health === 'warning' ? '#F59E0B' : ch.health === 'critical' ? '#EF4444' : ch.colour || '#7C35DC',
+              }))}
+              height={160}
+            />
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+              {data.channel_performance.map(ch => (
+                <div key={ch.channel} className="text-[11px] flex items-center justify-between px-2 py-1 rounded" style={{ background: 'var(--theme-surface2)' }}>
+                  <span className="capitalize font-semibold" style={{ color: 'var(--theme-text)' }}>{ch.channel}</span>
+                  <span className="tabular-nums font-bold" style={{ color: ch.conv_rate >= 10 ? '#10B981' : ch.conv_rate >= 5 ? '#F59E0B' : '#EF4444' }}>
+                    {ch.conv_rate}% · {ch.meetings} mtgs
+                  </span>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </SectionCard>
 
-      {/* Signal Attribution */}
-      <SectionCard title="What signals actually predict meetings" sub="Workspace-specific — needs 90+ days of data" testid="signal-attribution">
+      {/* Signal Attribution — horizontal bars (conv rate) */}
+      <SectionCard title="What signals actually predict meetings" sub="Bar width = meeting conversion rate" testid="signal-attribution">
         {data.signal_attribution.coming_soon || !(data.signal_attribution.rows?.length) ? (
           <ComingSoon what="attribution data" why="Need 90+ days of pipeline data + ≥3 meetings booked from signal-sourced leads." />
         ) : (
-          <div className="space-y-2">
-            {data.signal_attribution.rows.map((r) => (
-              <div key={r.signal_type} className="flex items-center justify-between text-xs">
-                <span className="font-semibold capitalize" style={{ color: 'var(--theme-text)' }}>{(r.signal_type || '').replace(/_/g, ' ')}</span>
-                <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads · {r.meetings} meetings</span>
-                <span className="font-bold" style={{ color: r.conv_rate >= 50 ? '#10B981' : r.conv_rate >= 20 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
-              </div>
-            ))}
-          </div>
+          <HBars
+            rows={data.signal_attribution.rows.map(r => ({
+              label: (r.signal_type || '').replace(/_/g, ' '),
+              value: r.conv_rate,
+              sub: `${r.leads} leads · ${r.meetings} meetings`,
+              color: r.conv_rate >= 50 ? '#10B981' : r.conv_rate >= 20 ? '#F59E0B' : '#94A3B8',
+            }))}
+            unit="%"
+            maxValue={Math.max(60, ...data.signal_attribution.rows.map(r => r.conv_rate))}
+          />
         )}
       </SectionCard>
 

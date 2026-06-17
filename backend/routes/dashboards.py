@@ -319,11 +319,15 @@ async def dashboard_b2c(current_user: dict = Depends(get_current_user)):
             "last_refresh": _iso(now),
         },
         "kpis": {
-            "leads_today": {"value": leads_today, "trend": _trend(leads_today, leads_same_day_last_week)},
-            "active_convos": {"value": active_convos, "label": "ARIA is handling all of them"},
-            "bookings_week": {"value": bookings_week, "trend": _trend(bookings_week, bookings_last_week)},
-            "conversion_rate": {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
-            "revenue_pipeline": {"value": round(pipeline_value), "currency": currency},
+            "leads_today":      {"value": leads_today,      "trend": _trend(leads_today, leads_same_day_last_week),
+                                 "spark": _timeseries_count(pt_leads_col, base, "created_at", now)},
+            "active_convos":    {"value": active_convos,    "label": "ARIA is handling all of them",
+                                 "spark": _timeseries_count(outbound_log, base, "created_at", now)},
+            "bookings_week":    {"value": bookings_week,    "trend": _trend(bookings_week, bookings_last_week),
+                                 "spark": _timeseries_count(booking_events, base, "when", now)},
+            "conversion_rate":  {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
+            "revenue_pipeline": {"value": round(pipeline_value), "currency": currency,
+                                 "spark": _timeseries_sum(booking_events, base, "when", "deal_value", now)},
         },
         "aria_time_saved": _aria_time_saved(tenant_id, 7, hourly),
         "momentum": _momentum(tenant_id, {"leads": 0.4, "high_intent": 0.4, "bookings": 0.2}),
@@ -428,6 +432,41 @@ def _asset_performance(tenant_id: str, day_start_iso: str):
     if not rows:
         return {"coming_soon": True, "rows": []}
     return {"coming_soon": False, "rows": [{"name": r["_id"], "clicks": r["clicks"]} for r in rows]}
+
+
+def _timeseries_count(collection, base_filter: Dict[str, Any], date_field: str, now: datetime, days: int = 7) -> list[int]:
+    """Return a list of daily counts for the last `days` days (oldest → newest).
+    Used to feed KPI sparkline charts. Reads cheap via single $bucket aggregate."""
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    boundaries = [(start + timedelta(days=i)).isoformat() for i in range(days + 1)]
+    pipeline = [
+        {"$match": {**base_filter, date_field: {"$gte": boundaries[0]}}},
+        {"$bucket": {
+            "groupBy": f"${date_field}",
+            "boundaries": boundaries,
+            "default": "other",
+            "output": {"count": {"$sum": 1}},
+        }},
+    ]
+    rows = {r["_id"]: r["count"] for r in collection.aggregate(pipeline)}
+    return [rows.get(boundaries[i], 0) for i in range(days)]
+
+
+def _timeseries_sum(collection, base_filter: Dict[str, Any], date_field: str, value_field: str, now: datetime, days: int = 7) -> list[float]:
+    """Same as _timeseries_count but sums `value_field` per day. Used for $-tracking."""
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    boundaries = [(start + timedelta(days=i)).isoformat() for i in range(days + 1)]
+    pipeline = [
+        {"$match": {**base_filter, date_field: {"$gte": boundaries[0]}}},
+        {"$bucket": {
+            "groupBy": f"${date_field}",
+            "boundaries": boundaries,
+            "default": "other",
+            "output": {"total": {"$sum": f"${value_field}"}},
+        }},
+    ]
+    rows = {r["_id"]: r["total"] for r in collection.aggregate(pipeline)}
+    return [round(rows.get(boundaries[i], 0) or 0) for i in range(days)]
 
 
 def _signal_attribution(tenant_id: str, days_present: int) -> Dict[str, Any]:
@@ -603,10 +642,14 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "last_refresh": _iso(now),
         },
         "kpis": {
-            "leads_month": {"value": leads_month, "trend": _trend(leads_month, leads_last_month)},
-            "high_intent": {"value": high_intent, "trend": _trend(high_intent, high_intent_last)},
-            "meetings": {"value": meetings, "trend": _trend(meetings, meetings_last)},
-            "signals": {"value": signals, "trend": _trend(signals, signals_last)},
+            "leads_month": {"value": leads_month, "trend": _trend(leads_month, leads_last_month),
+                             "spark": _timeseries_count(pt_leads_col, base, "created_at", now)},
+            "high_intent": {"value": high_intent, "trend": _trend(high_intent, high_intent_last),
+                             "spark": _timeseries_count(pt_leads_col, {**base, "score": {"$gte": 70}}, "rescored_at", now)},
+            "meetings": {"value": meetings, "trend": _trend(meetings, meetings_last),
+                          "spark": _timeseries_count(booking_events, base, "when", now)},
+            "signals": {"value": signals, "trend": _trend(signals, signals_last),
+                         "spark": _timeseries_count(pt_insights_col, base, "created_at", now)},
             "conv_rate": {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
         },
         "aria_time_saved": _aria_time_saved(tenant_id, 30, hourly),
