@@ -530,8 +530,40 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
     icp_dist = {r["_id"] or "icp_unknown": r["count"] for r in icp_pipeline}
     unknown_pct = round(((icp_dist.get("icp_unknown", 0) + icp_dist.get("icp_not_fit", 0)) / total) * 100, 1)
     primary_pct = round(((icp_dist.get("icp_a", 0) + icp_dist.get("icp_b", 0)) / total) * 100, 1)
-    drift_detected = unknown_pct > 30 or primary_pct < 40
+    drift_detected_raw = unknown_pct > 30 or primary_pct < 40
     primary_label = max(icp_dist, key=icp_dist.get) if icp_dist else "icp_a"
+
+    # iter158 Phase B Step 5 — snooze: if tenant has a non-expired
+    # icp_drift_snooze_until timestamp, suppress the banner regardless of
+    # underlying numbers. Lets founders dismiss the alert for 7 days.
+    tenant_doc = db["tenants"].find_one({"id": tenant_id}, {"_id": 0, "icp_drift_snooze_until": 1}) or {}
+    snooze_until = tenant_doc.get("icp_drift_snooze_until")
+    snoozed = False
+    if snooze_until:
+        try:
+            snoozed = datetime.fromisoformat(snooze_until.replace("Z", "+00:00")) > now
+        except Exception:
+            snoozed = False
+    drift_detected = drift_detected_raw and not snoozed
+
+    # iter158 Phase B Step 5 — drift breakdown by channel (which sources are
+    # bringing in unknown-ICP leads). Powers the ICP Drift Modal drill-down.
+    by_channel_rows = list(pt_leads_col.aggregate([
+        {"$match": {**base, "created_at": {"$gte": (now - timedelta(days=30)).isoformat()}}},
+        {"$group": {
+            "_id": "$source",
+            "total":   {"$sum": 1},
+            "unknown": {"$sum": {"$cond": [{"$in": ["$icp_segment", [None, "", "icp_unknown", "icp_not_fit"]]}, 1, 0]}},
+        }},
+        {"$sort": {"total": -1}},
+    ]))
+    by_channel = [{
+        "channel": r["_id"] or "manual",
+        "total":   r["total"],
+        "unknown": r["unknown"],
+        "unknown_pct": round((r["unknown"] / r["total"]) * 100, 1) if r["total"] else 0,
+    } for r in by_channel_rows]
+
 
     # Channel performance.
     channel_rows = list(pt_leads_col.aggregate([
@@ -660,6 +692,8 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "primary_pct": primary_pct,
             "actual_primary": primary_label,
             "icp_distribution": [{"icp": k, "count": v, "pct": round(v / total * 100, 1)} for k, v in icp_dist.items()],
+            "by_channel": by_channel,
+            "snoozed_until": snooze_until if snoozed else None,
         },
         "channel_performance": channel_perf,
         "signal_attribution": _signal_attribution(tenant_id, days_present),
@@ -861,10 +895,11 @@ async def dashboard_b2b_sales(current_user: dict = Depends(get_current_user)):
         },
         "top_actions": await _sales_coach_top3(tenant_id, current_user.get("email") or "anon", hot_lead_cards, _deal_risk(tenant_id, now), approval_queue, agenda_meetings, score_changes),
         "kpis": {
-            "followups_today": followups_today,
-            "meetings_today": meetings_today,
-            "approvals_pending": approvals,
-            "pipeline_value": {"value": round(pipeline_value), "trend": _trend(int(pipeline_value), int(pipeline_value_last))},
+            "followups_today":   {"value": followups_today,  "spark": _timeseries_count(pt_leads_col,     base, "next_followup_at", now)},
+            "meetings_today":    {"value": meetings_today,   "spark": _timeseries_count(booking_events,    base, "when",             now)},
+            "approvals_pending": {"value": approvals,        "spark": _timeseries_count(pt_insights_col,   {**base, "status": "pending"}, "created_at", now)},
+            "pipeline_value":    {"value": round(pipeline_value), "trend": _trend(int(pipeline_value), int(pipeline_value_last)),
+                                  "spark": _timeseries_sum(booking_events, base, "when", "deal_value", now)},
         },
         "hot_leads": hot_lead_cards,
         "pipeline": pipeline_rows,
@@ -982,6 +1017,23 @@ async def regenerate_top_actions(current_user: dict = Depends(get_current_user))
 
 
 # ───────────────────────── Misc helpers ──────────────────────────
+@router.post("/icp-drift/snooze")
+async def snooze_icp_drift(days: int = 7, current_user: dict = Depends(get_current_user)):
+    """iter158 Phase B Step 5 — snooze the ICP drift banner for N days
+    (default 7). Stored on the tenant doc so all team members see the same
+    snoozed state."""
+    tenant_id = current_user.get("tenant_id") or ""
+    if not tenant_id:
+        return {"ok": False, "error": "no tenant"}
+    days = max(1, min(int(days or 7), 30))
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    db["tenants"].update_one(
+        {"id": tenant_id},
+        {"$set": {"icp_drift_snooze_until": until, "icp_drift_snoozed_by": current_user.get("email")}},
+    )
+    return {"ok": True, "snoozed_until": until, "days": days}
+
+
 @router.get("/_mode")
 async def dashboard_mode(current_user: dict = Depends(get_current_user)):
     """Tells the frontend which dashboard to load based on tenant.mode."""

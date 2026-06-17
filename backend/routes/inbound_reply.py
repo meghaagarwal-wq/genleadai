@@ -249,6 +249,14 @@ async def _process_inbound(
         "raw": raw,
     })
 
+    # iter158 Phase B Step 4 — register this channel as a "touch" on the
+    # lead so multi-touch attribution stays accurate.
+    try:
+        from services.lead_channels import register_channel_touch
+        register_channel_touch(tenant_id, lead_id, channel)
+    except Exception:  # noqa: BLE001
+        pass
+
     # 2) Activity / timeline event (pietential workspace pattern)
     activities_col.insert_one({
         "tenant_id": tenant_id,

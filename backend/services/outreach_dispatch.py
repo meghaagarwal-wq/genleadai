@@ -300,6 +300,14 @@ async def dispatch_outreach(
         "created_at": _now_iso(),
     })
 
+    # iter158 Phase B Step 4 — multi-touch channel tracking. Even logged-only
+    # attempts count as a "touch" on this channel for attribution purposes.
+    try:
+        from services.lead_channels import register_channel_touch
+        register_channel_touch(tenant_id, lead_id, channel)
+    except Exception:  # noqa: BLE001 — never fail outreach on this side-effect
+        pass
+
     return result
 
 

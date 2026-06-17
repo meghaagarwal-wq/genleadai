@@ -20,113 +20,46 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  TrendUp, TrendDown, Sparkle, Clock, ChartLine, Lightning, ArrowsClockwise,
+  Sparkle, Clock, ChartLine, Lightning, ArrowsClockwise,
   Buildings, ArrowRight, Warning, Robot, Brain, Lightbulb,
 } from '@phosphor-icons/react';
 import api from '../../config/api';
 import { Sparkline, RadialGauge, TaperedFunnel, HBars, MiniBarChart } from './dashboard_charts';
-
-// ─── Shared tiny components ───────────────────────────────────────
-const KpiTile = ({ label, value, trend, unit, sub, spark, testid }) => {
-  const dir = trend?.direction;
-  const sparkColor = dir === 'up' ? '#10B981' : dir === 'down' ? '#EF4444' : '#7C35DC';
-  return (
-    <div className="rounded-xl border p-4 group hover:border-[var(--theme-purple-light)] transition-colors" data-testid={testid}
-      style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-      <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'var(--theme-text-muted)' }}>{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-1.5">
-        <div className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{value ?? '—'}</div>
-        {unit && <div className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{unit}</div>}
-        {trend?.pct != null && (
-          <span className={`ml-auto inline-flex items-center gap-0.5 text-[10px] font-semibold ${
-            dir === 'up' ? 'text-emerald-500' : dir === 'down' ? 'text-rose-500' : 'text-slate-400'
-          }`}>
-            {dir === 'up' ? <TrendUp size={11} weight="bold" /> : dir === 'down' ? <TrendDown size={11} weight="bold" /> : null}
-            {Math.abs(trend.pct)}%
-          </span>
-        )}
-      </div>
-      {/* Sparkline REPLACES the "vs prev" text — actual trajectory visible at a glance */}
-      {spark?.length >= 2 ? (
-        <div className="mt-1.5"><Sparkline data={spark} color={sparkColor} height={28} /></div>
-      ) : sub ? (
-        <div className="mt-1 text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>
-      ) : null}
-    </div>
-  );
-};
-
-const ComingSoon = ({ what, why }) => (
-  <div className="rounded-xl border-2 border-dashed p-6 text-center"
-    style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-surface)' }}>
-    <Sparkle size={20} weight="duotone" className="mx-auto mb-2" style={{ color: 'var(--theme-purple-light)' }} />
-    <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>Coming soon — {what}</div>
-    {why && <div className="mt-1 text-xs" style={{ color: 'var(--theme-text-muted)' }}>{why}</div>}
-  </div>
-);
-
-const SectionCard = ({ title, sub, action, children, testid }) => (
-  <div className="rounded-xl border p-5" data-testid={testid}
-    style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-    <div className="flex items-start justify-between gap-3 mb-4">
-      <div>
-        <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{title}</h3>
-        {sub && <div className="text-[11px] mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>}
-      </div>
-      {action}
-    </div>
-    {children}
-  </div>
-);
-
-const useDashboard = (endpoint) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.get(endpoint);
-      setData(r.data);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint]);
-  useEffect(() => { load(); }, [load]);
-  return { data, loading, refresh: load };
-};
-
-const fmtMoney = (v, currency) => {
-  if (v == null) return '—';
-  const symbol = { INR: '₹', USD: '$', GBP: '£', AED: 'د.إ', EUR: '€' }[currency] || '$';
-  return `${symbol}${Number(v).toLocaleString()}`;
-};
+import { ICPDriftModal } from './ICPDriftModal';
+import {
+  KpiTile, ComingSoon, SectionCard, StatusPill, HealthBadge, useDashboard, fmtMoney, DashboardSkeleton,
+} from './dashboard_shared';
 
 // ───────────────────────── B2C DASHBOARD ──────────────────────────
 export const B2CDashboard = () => {
   const { data, loading, refresh } = useDashboard('/api/dashboard/b2c');
-  if (loading || !data) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading B2C dashboard…</div>;
+  if (loading || !data) return <DashboardSkeleton title="Loading B2C dashboard…" />;
   const c = data.header.currency;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2c-dashboard">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.greeting}, {data.header.owner_name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.greeting}, {data.header.owner_name}</h1>
           <div className="text-sm mt-1" style={{ color: 'var(--theme-text-muted)' }}>{data.header.workspace_name}</div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(14,159,134,0.15)', color: '#0E9F86' }}>B2C Automation</span>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2c-refresh">
+          <button
+            onClick={refresh}
+            className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-400"
+            style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}
+            data-testid="b2c-refresh"
+            aria-label="Refresh dashboard data"
+          >
             <ArrowsClockwise size={12} /> Refresh
           </button>
         </div>
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="group" aria-label="Key metrics">
         <KpiTile label="Leads today" value={data.kpis.leads_today.value} trend={data.kpis.leads_today.trend} spark={data.kpis.leads_today.spark} testid="kpi-leads-today" />
         <KpiTile label="Active conversations" value={data.kpis.active_convos.value} sub={data.kpis.active_convos.label} spark={data.kpis.active_convos.spark} testid="kpi-active-convos" />
         <KpiTile label="Bookings this week" value={data.kpis.bookings_week.value} trend={data.kpis.bookings_week.trend} spark={data.kpis.bookings_week.spark} testid="kpi-bookings-week" />
@@ -276,19 +209,12 @@ export const B2CDashboard = () => {
   );
 };
 
-const StatusPill = ({ status }) => {
-  const cfg = {
-    live: { bg: 'rgba(236,72,153,0.15)', color: '#EC4899', text: '● Live' },
-    waiting: { bg: 'rgba(245,158,11,0.15)', color: '#F59E0B', text: 'Waiting' },
-    booked: { bg: 'rgba(16,185,129,0.15)', color: '#10B981', text: '✓ Booked' },
-    qualified: { bg: 'rgba(59,130,246,0.15)', color: '#3B82F6', text: 'Qualified' },
-  }[status] || { bg: 'var(--theme-surface2)', color: 'var(--theme-text-muted)', text: status };
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: cfg.bg, color: cfg.color }}>{cfg.text}</span>;
-};
+// StatusPill now imported from dashboard_shared (iter158)
 
 // ───────────────────────── B2B FOUNDER ────────────────────────────
 export const B2BFounderDashboard = () => {
   const { data, loading, refresh } = useDashboard('/api/dashboard/b2b-founder');
+  const [driftOpen, setDriftOpen] = useState(false);
   if (loading || !data) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading B2B Founder dashboard…</div>;
   const c = data.header.currency;
   return (
@@ -306,7 +232,7 @@ export const B2BFounderDashboard = () => {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="group" aria-label="Founder metrics">
         <KpiTile label="Leads this month" value={data.kpis.leads_month.value} trend={data.kpis.leads_month.trend} spark={data.kpis.leads_month.spark} testid="kpi-leads-month" />
         <KpiTile label="High intent (≥70)" value={data.kpis.high_intent.value} trend={data.kpis.high_intent.trend} spark={data.kpis.high_intent.spark} testid="kpi-high-intent" />
         <KpiTile label="Meetings" value={data.kpis.meetings.value} trend={data.kpis.meetings.trend} spark={data.kpis.meetings.spark} testid="kpi-meetings" />
@@ -335,14 +261,21 @@ export const B2BFounderDashboard = () => {
 
       {/* ICP Drift */}
       {data.icp_drift.drift_detected && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.12)', color: '#D97706', border: '1px solid rgba(245,158,11,0.3)' }} data-testid="icp-drift-banner">
+        <button
+          type="button"
+          onClick={() => setDriftOpen(true)}
+          className="w-full text-left rounded-xl px-4 py-3 text-sm flex items-center gap-3 hover:brightness-110 transition"
+          style={{ background: 'rgba(245,158,11,0.12)', color: '#D97706', border: '1px solid rgba(245,158,11,0.3)' }}
+          data-testid="icp-drift-banner"
+        >
           <Warning size={20} weight="bold" />
           <div className="flex-1">
             <strong>ICP Drift detected.</strong> Your last 30 days of leads are {data.icp_drift.primary_pct}% primary ICP / {data.icp_drift.unknown_pct}% unknown. Channel targeting may have shifted.
           </div>
-          <Link to="/app/integrations" className="text-xs font-semibold underline">Review channel settings →</Link>
-        </div>
+          <span className="text-xs font-bold underline">Open drill-down →</span>
+        </button>
       )}
+      <ICPDriftModal open={driftOpen} onClose={() => setDriftOpen(false)} drift={data.icp_drift} onSnoozed={refresh} />
 
       {/* Channel Performance — visual: leads per channel + conv rate badges */}
       <SectionCard title="Channel Performance" sub="Bar height = leads · color = health · % = conversion to meeting" testid="channel-performance-table">
@@ -442,15 +375,7 @@ export const B2BFounderDashboard = () => {
   );
 };
 
-const HealthBadge = ({ h }) => {
-  const cfg = {
-    working_well: { color: '#10B981', label: 'Working' },
-    moderate: { color: '#F59E0B', label: 'Moderate' },
-    needs_attention: { color: '#EF4444', label: 'Attention' },
-    inactive: { color: '#94A3B8', label: 'Inactive' },
-  }[h] || { color: '#94A3B8', label: h };
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: `${cfg.color}22`, color: cfg.color }}>{cfg.label}</span>;
-};
+// HealthBadge moved to dashboard_shared.js (iter158)
 
 // ───────────────────────── B2B SALES ─────────────────────────────
 const TopActionsCard = ({ top, onRegenerate }) => {
@@ -532,11 +457,11 @@ export const B2BSalesDashboard = () => {
       <TopActionsCard top={data.top_actions} onRegenerate={refresh} />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiTile label="Follow-ups due" value={data.kpis.followups_today} testid="kpi-followups" />
-        <KpiTile label="Meetings today" value={data.kpis.meetings_today} testid="kpi-meetings-today" />
-        <KpiTile label="Approvals pending" value={data.kpis.approvals_pending} testid="kpi-approvals" />
-        <KpiTile label="Pipeline value" value={`$${(data.kpis.pipeline_value.value || 0).toLocaleString()}`} trend={data.kpis.pipeline_value.trend} testid="kpi-sales-pipeline" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="group" aria-label="Sales metrics">
+        <KpiTile label="Follow-ups due"    value={data.kpis.followups_today.value}   spark={data.kpis.followups_today.spark}   testid="kpi-followups" />
+        <KpiTile label="Meetings today"    value={data.kpis.meetings_today.value}    spark={data.kpis.meetings_today.spark}    testid="kpi-meetings-today" />
+        <KpiTile label="Approvals pending" value={data.kpis.approvals_pending.value} spark={data.kpis.approvals_pending.spark} testid="kpi-approvals" />
+        <KpiTile label="Pipeline value"    value={`$${(data.kpis.pipeline_value.value || 0).toLocaleString()}`} trend={data.kpis.pipeline_value.trend} spark={data.kpis.pipeline_value.spark} testid="kpi-sales-pipeline" />
       </div>
 
       {/* Hot leads */}
@@ -747,22 +672,30 @@ const DemoModeSwitcher = ({ value, onChange }) => {
     { key: 'hybrid',       label: 'Hybrid Demo',      color: '#6366F1' },
   ];
   return (
-    <div className="px-6 pt-4" data-testid="demo-mode-switcher">
-      <div className="max-w-[1600px] mx-auto rounded-xl border p-3 flex flex-wrap items-center gap-2"
-        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
+    <div className="px-4 sm:px-6 pt-4" data-testid="demo-mode-switcher">
+      <div
+        className="max-w-[1600px] mx-auto rounded-xl border p-3 flex flex-wrap items-center gap-2"
+        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+        role="tablist"
+        aria-label="Demo dashboard mode switcher"
+      >
         <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] mr-2" style={{ color: 'var(--theme-text-muted)' }}>Demo Mode</span>
         {pills.map((p) => {
           const active = value === p.key;
           return (
             <button
               key={p.key}
+              role="tab"
+              aria-selected={active}
+              aria-controls="demo-dashboard-panel"
               onClick={() => onChange(p.key)}
               data-testid={`demo-mode-${p.key}`}
-              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-1"
               style={{
                 background: active ? p.color : 'var(--theme-surface2)',
                 color: active ? '#fff' : 'var(--theme-text)',
                 boxShadow: active ? `0 2px 12px ${p.color}66` : 'none',
+                minHeight: 32,
               }}
             >
               {p.label}
