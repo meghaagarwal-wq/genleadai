@@ -1,3 +1,32 @@
+## Iter 160 — Integration Showcase widget on demo dashboards (Feb 12, 2026)
+
+User: "now in Genleadai demo dashboard i wanna show all the backend integration options we have in each of these sub sections — check the backend integrations setup and tell me what all options we have! I need for all b2b, b2c and hybrid"
+
+### Shipped
+- **Audit of live + planned integrations** — pulled the catalog from `routes/integrations_hub.SUPPORTED_TYPES` (live truth) and combined with the future-roadmap items into a single curated list of **54 integrations** across 9 marketing-facing categories.
+- **Backend** `routes/integration_showcase.py` — `GET /api/dashboard/integration-showcase[?category=...]` returns `{categories[], integrations[], counts}` with per-integration status `live` (connected for this tenant) / `available` (supported but not connected) / `coming_soon` (future). Routes registered via `routes/__init__.py`.
+- **Frontend** `IntegrationShowcase.js` — pill-filtered grid matching the user's mockup. Categories: All · Outreach · Ads · Messaging · Enrichment · Scheduling · Productivity · Social · Email · Payments. Each card shows brand-colored initials avatar, name, and status badge. Live integrations get a green check.
+- **Wired into all 3 demo dashboards** (B2C, B2B Founder, B2B Sales) at the bottom — same data, same widget. Hybrid demo automatically inherits via the existing demo-mode-switcher.
+
+### Coverage by category
+- **Outreach** (9): Apollo, Instantly, Lemlist, Saleshandy, Smartlead, PhantomBuster, Sales Navigator, Snov.io, Hunter.io
+- **Ads** (7): Google Ads, Meta CAPI, Meta Pixel, LinkedIn Insight, Meta Lead Ads, GA4
+- **Messaging** (7): WhatsApp Business, Twilio SMS, MSG91, Website Chat, Telegram, Slack, MS Teams
+- **Enrichment** (6): Apollo, Snov.io, Hunter.io, Clearbit, ZoomInfo, RocketReach
+- **Scheduling** (7): Calendly, Google Calendar, Outlook Calendar, Cal.com, Zoom, Google Meet, MS Teams
+- **Productivity** (11): Notion, Google Sheets, Airtable, Zapier, Make.com, n8n, HubSpot, Salesforce, Zoho CRM, Pipedrive, Slack
+- **Social** (7): LinkedIn Lead Gen, Sales Navigator, Meta Lead Ads, LinkedIn Insight, Twitter/X, Instagram, PhantomBuster
+- **Email** (12): Gmail, Outlook, Zoho Mail, SendGrid, Resend, Mailchimp, Lemlist, Smartlead, Instantly, Snov.io, Hunter.io, Saleshandy
+- **Payments** (4): Stripe, Razorpay, PayPal, Square (all coming-soon for now)
+
+### Verified
+- Backend smoke: `/integration-showcase` returns 54 integrations with correct counts per pill.
+- Frontend smoke: rendered + screenshotted on all 3 demo dashboards; Payments filter narrows to 4 cards as expected.
+- Updated marketing screenshot pack at `/downloads/genleadai_dashboard_screenshots.zip` now includes 4 new integration-section captures.
+
+---
+
+
 ## Iter 159 — Final 4-backlog drop: Winning Combos + Sparkline tooltip + Conversations migration + Per-mode aliases (Feb 12, 2026)
 
 User: "do this" (all 4 remaining backlog items)

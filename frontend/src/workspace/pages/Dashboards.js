@@ -27,6 +27,7 @@ import api from '../../config/api';
 import { Sparkline, RadialGauge, TaperedFunnel, HBars, MiniBarChart } from './dashboard_charts';
 import { ICPDriftModal } from './ICPDriftModal';
 import { WinningCombos } from './WinningCombos';
+import { IntegrationShowcase } from './IntegrationShowcase';
 import {
   KpiTile, ComingSoon, SectionCard, StatusPill, HealthBadge, useDashboard, fmtMoney, DashboardSkeleton,
 } from './dashboard_shared';
@@ -209,6 +210,9 @@ export const B2CDashboard = () => {
           ))}
         </SectionCard>
       </div>
+
+      {/* What ARIA plugs into — full integration catalog */}
+      <IntegrationShowcase />
     </div>
   );
 };
@@ -375,6 +379,9 @@ export const B2BFounderDashboard = () => {
           ))}
         </SectionCard>
       </div>
+
+      {/* What ARIA plugs into — full integration catalog */}
+      <IntegrationShowcase />
     </div>
   );
 };
@@ -557,6 +564,9 @@ export const B2BSalesDashboard = () => {
           ))}
         </SectionCard>
       </div>
+
+      {/* What ARIA plugs into — full integration catalog */}
+      <IntegrationShowcase />
     </div>
   );
 };
