@@ -1,3 +1,42 @@
+## Iter 162 — OAuth callback URL blocker fixed (Feb 2026)
+
+User: "OAuth callback URL blocker in oauth_integrations.py still open from the previous session — may block redeploy."
+
+### Root cause
+`_api_base()` in `/app/backend/routes/oauth_integrations.py` previously
+gave `PUBLIC_API_BASE_URL` env-var **priority over** the request-derived
+URL. Since `backend/.env` has `PUBLIC_API_BASE_URL=https://app.genleadai.com`
+hardcoded, every preview deploy was building OAuth callback URLs pointing
+to the production domain. Deployer Agent flagged this.
+
+### Shipped
+- **`_api_base(request)`** refactored to derive backend origin from
+  incoming request's `X-Forwarded-Proto` + `X-Forwarded-Host` headers
+  (set by Kubernetes ingress) **first**, then fall back to `request.base_url`,
+  then env vars (`PUBLIC_API_BASE_URL` → `BACKEND_URL` → `FRONTEND_URL`)
+  only when no request is available (e.g., background token-refresh loop).
+- **`_redirect_uri(provider, request)`** and
+  **`_calendly_register_webhooks(tenant_id, access_token, request)`**
+  updated to thread the request through.
+- **`oauth_callback`** endpoint now takes `request: Request` and passes
+  it to `_redirect_uri` for the token-exchange step (Meta GET + others POST).
+
+### Verified (testing_agent iter161 report)
+- 15/16 backend tests pass. Preview requests → preview callback URLs;
+  production requests → production callback URLs; no env-var leakage.
+- 6 provider `/connect` endpoints return HTTP 503 with correct
+  "not configured" messages (signatures work post-refactor).
+- Regression: login, tenants/me, integration-showcase, dashboard/b2c
+  all still work.
+- The 1 failure is an UNRELATED pre-existing route conflict on
+  `DELETE /api/integrations/{provider}` between `oauth_integrations.py`
+  and `oauth_providers.py` — documented for future cleanup, not a
+  blocker for redeploy.
+
+---
+
+
+
 ## Iter 161 — Retire Pietential tenant (Feb 2026)
 
 User: "i want to delete pitential dashboard - and all its data (i just want genleadai demo dashboard to be there)"
