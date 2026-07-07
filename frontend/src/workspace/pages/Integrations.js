@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import api from '../../config/api';
 import { INTEGRATIONS, CATEGORIES, getIntegration } from '../../config/integrations';
+import { IntegrationShowcase } from './IntegrationShowcase';
 
 const STATUS_TONE = {
   connected:     { color: '#22c55e', label: 'Connected',     dot: '●' },
@@ -167,6 +168,11 @@ const IntegrationsPage = () => {
             No integrations match.
           </div>
         )}
+      </div>
+
+      {/* iter161 — "What ARIA plugs into" showcase moved from demo dashboards */}
+      <div className="mt-10" data-testid="integrations-showcase-section">
+        <IntegrationShowcase />
       </div>
 
       {activeProvider && (
