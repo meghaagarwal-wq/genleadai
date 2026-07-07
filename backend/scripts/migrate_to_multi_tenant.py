@@ -146,15 +146,23 @@ def main():
 
     # 1. Create tenants
     upsert(tenants_col, {"id": DEMO_TENANT["id"]}, DEMO_TENANT)
-    upsert(tenants_col, {"id": PIETENTIAL_TENANT["id"]}, PIETENTIAL_TENANT)
-    print(f"[Migrate] Tenants ensured: {DEMO_TENANT['id']}, {PIETENTIAL_TENANT['id']}")
+    print(f"[Migrate] Tenants ensured: {DEMO_TENANT['id']}")
+
+    # iter160 — permanently retire the legacy `ten_pietential` workspace on
+    # every boot. Any stray data or memberships that slip in via legacy code
+    # paths gets purged automatically so the workspace never resurrects.
+    _purge = tenants_col.delete_one({"id": "ten_pietential"}).deleted_count
+    memberships_col.delete_many({"tenant_id": "ten_pietential"})
+    onboarding_col.delete_many({"tenant_id": "ten_pietential"})
+    for _c in db.list_collection_names():
+        try:
+            db[_c].delete_many({"tenant_id": "ten_pietential"})
+        except Exception:
+            pass
+    if _purge:
+        print("[Migrate] Retired legacy ten_pietential tenant + all associated data")
 
     # 1b. Default workspace_type — iter92 v2 master prompt schema.
-    # PART E (v3.0): Pietential is B2B Instinct mode (was hybrid pre-iter95).
-    tenants_col.update_one(
-        {"id": "ten_pietential", "settings.workspace_type": {"$exists": False}},
-        {"$set": {"settings.workspace_type": "b2b"}},
-    )
     tenants_col.update_one(
         {"id": "ten_demo", "settings.workspace_type": {"$exists": False}},
         {"$set": {"settings.workspace_type": "hybrid"}},
@@ -164,85 +172,16 @@ def main():
         {"settings.workspace_type": {"$exists": False}},
         {"$set": {"settings.workspace_type": "hybrid"}},
     )
-    print("[Migrate] workspace_type defaulted (Pietential=b2b, others=hybrid)")
+    print("[Migrate] workspace_type defaulted (all tenants → hybrid)")
 
-    # 1c. PART E v3.0 — Pre-seed 4 Pietential ICPs (idempotent: by label).
+    # iter160 — Pietential ICP seed retired (tenant no longer exists).
     icps_col = db["icps"]
-    PIETENTIAL_ICPS = [
-        {
-            "id": "icp_pt_chro_enterprise",
-            "tenant_id": "ten_pietential",
-            "label": "CHRO — Enterprise",
-            "industry": "HR Tech / Future of Work",
-            "title_targets": ["CHRO", "Chief People Officer", "Chief HR Officer"],
-            "company_size": "500+ employees",
-            "geography": "USA, EU, India",
-            "deal_size": "$80k-300k/year",
-            "pain_point": "Disengaged senior leaders, low retention, expensive talent ops",
-            "value_prop": "AI-driven engagement intelligence + executive HR workflows",
-            "tone": "Sharp, peer-to-peer, no fluff",
-            "created_at": NOW,
-            "updated_at": NOW,
-        },
-        {
-            "id": "icp_pt_cfo_midmarket",
-            "tenant_id": "ten_pietential",
-            "label": "CFO — Mid-Market SaaS",
-            "industry": "SaaS",
-            "title_targets": ["CFO", "Chief Financial Officer", "VP Finance"],
-            "company_size": "100-500 employees",
-            "geography": "USA, EU",
-            "deal_size": "$40k-120k/year",
-            "pain_point": "Workforce cost is largest line item with zero visibility into engagement ROI",
-            "value_prop": "Quantify the cost of disengagement, automate HR ops, reduce attrition spend",
-            "tone": "Numbers-first, ROI-led",
-            "created_at": NOW,
-            "updated_at": NOW,
-        },
-        {
-            "id": "icp_pt_people_analytics",
-            "tenant_id": "ten_pietential",
-            "label": "People Analytics Leader — Enterprise",
-            "industry": "Enterprise HR",
-            "title_targets": ["Head of People Analytics", "Director People Analytics", "VP People Analytics"],
-            "company_size": "1000+ employees",
-            "geography": "USA, EU",
-            "deal_size": "$60k-200k/year",
-            "pain_point": "Manual engagement reporting, no real-time signals, reports to CHRO with stale data",
-            "value_prop": "Real-time engagement signals + auto-generated executive reports",
-            "tone": "Data-driven, technical",
-            "created_at": NOW,
-            "updated_at": NOW,
-        },
-        {
-            "id": "icp_pt_vp_people_growth",
-            "tenant_id": "ten_pietential",
-            "label": "VP People / Head of HR — Growth-Stage",
-            "industry": "Growth-stage SaaS / Series B+",
-            "title_targets": ["VP People", "VP HR", "Head of HR", "Director of People"],
-            "company_size": "50-250 employees",
-            "geography": "USA, EU, India",
-            "deal_size": "$20k-60k/year",
-            "pain_point": "Scaling team fast, engagement dropping, no time for manual surveys",
-            "value_prop": "AI-powered pulse + automated coaching nudges to managers",
-            "tone": "Warm, fast-moving, founder-aware",
-            "created_at": NOW,
-            "updated_at": NOW,
-        },
-    ]
-    seeded_icps = 0
-    for icp in PIETENTIAL_ICPS:
-        existing = icps_col.find_one({"tenant_id": "ten_pietential", "label": icp["label"]})
-        if not existing:
-            icps_col.insert_one(icp.copy())
-            seeded_icps += 1
-    if seeded_icps:
-        print(f"[Migrate] Pietential ICPs seeded: {seeded_icps} new (PART E v3.0)")
+    icps_col.delete_many({"tenant_id": "ten_pietential"})
 
     # 2. Create memberships
     admin_email = "admin@demo.com"
     if users_col.find_one({"email": admin_email}):
-        for tid in (DEMO_TENANT["id"], PIETENTIAL_TENANT["id"]):
+        for tid in (DEMO_TENANT["id"],):
             upsert(
                 memberships_col,
                 {"tenant_id": tid, "user_email": admin_email},
@@ -254,7 +193,7 @@ def main():
                     "joined_at": NOW,
                 },
             )
-        print(f"[Migrate] {admin_email} → owner of demo + pietential")
+        print(f"[Migrate] {admin_email} → owner of demo")
 
     for email in ("sarah@demo.com", "james@demo.com"):
         if users_col.find_one({"email": email}):
@@ -271,62 +210,17 @@ def main():
             )
             print(f"[Migrate] {email} → member of demo")
 
-    # 2b. Pietential workspace owner (Megha) — idempotent seed.
-    # Production environments don't carry over the preview DB, so we
-    # provision the account here on every startup. Password is sourced
-    # from env (PIETENTIAL_OWNER_PASSWORD) with a documented default to
-    # keep onboarding zero-friction. If the user already exists, we never
-    # touch their password — they may have rotated it.
+    # 2b. iter160 — Pietential owner (megha@contentvista.com) permanently
+    # retired. Remove user + memberships if they still exist.
     try:
-        import uuid as _uuid
-        from deps import get_password_hash as _hash
-
         pt_email = "megha@contentvista.com"
-        pt_default_password = os.environ.get("PIETENTIAL_OWNER_PASSWORD", "Piet-4vRQ-lDa2-ttcO")
-        existing = users_col.find_one({"email": pt_email})
-        if not existing:
-            users_col.insert_one({
-                "id": f"usr_{_uuid.uuid4().hex[:12]}",
-                "email": pt_email,
-                "name": "Megha Agarwal",
-                "full_name": "Megha Agarwal",
-                "role": "pietential_owner",
-                "tenant_id": PIETENTIAL_TENANT["id"],
-                "is_active": True,
-                "password_hash": _hash(pt_default_password),
-                "created_at": NOW,
-            })
-            print(f"[Migrate] {pt_email} → provisioned as pietential_owner")
-        else:
-            # Backfill missing fields without overwriting the password.
-            patch = {}
-            if not existing.get("role"):
-                patch["role"] = "pietential_owner"
-            if not existing.get("tenant_id"):
-                patch["tenant_id"] = PIETENTIAL_TENANT["id"]
-            if existing.get("is_active") is None:
-                patch["is_active"] = True
-            if patch:
-                users_col.update_one({"email": pt_email}, {"$set": patch})
-
-        # Ensure owner membership exists (idempotent)
-        upsert(
-            memberships_col,
-            {"tenant_id": PIETENTIAL_TENANT["id"], "user_email": pt_email},
-            {
-                "id": f"mem_pt_{pt_email.replace('@', '_at_').replace('.', '_')}",
-                "tenant_id": PIETENTIAL_TENANT["id"],
-                "user_email": pt_email,
-                "role": "owner",
-                "joined_at": NOW,
-            },
-        )
+        users_col.delete_one({"email": pt_email})
+        memberships_col.delete_many({"user_email": pt_email})
     except Exception as _pt_e:
-        print(f"[Migrate] Pietential owner seed skipped: {_pt_e}")
+        print(f"[Migrate] Pietential owner cleanup skipped: {_pt_e}")
 
     # 3. Onboarding configs (sane defaults)
     upsert(onboarding_col, {"tenant_id": DEMO_TENANT["id"]}, DEMO_ONBOARDING)
-    upsert(onboarding_col, {"tenant_id": PIETENTIAL_TENANT["id"]}, PIETENTIAL_ONBOARDING)
     print("[Migrate] Onboarding configs seeded with defaults")
 
     # 4. Backfill tenant_id on existing collections
@@ -336,11 +230,6 @@ def main():
         total += n
         if n:
             print(f"[Migrate]   {c}: tagged {n} docs → demo tenant")
-    for c in PIETENTIAL_COLLECTIONS:
-        n = backfill(c, PIETENTIAL_TENANT["id"])
-        total += n
-        if n:
-            print(f"[Migrate]   {c}: tagged {n} docs → pietential tenant")
     print(f"[Migrate] Backfill complete: {total} docs tagged")
 
     # Backfill string `id` on leads documents that only have ObjectId _id.

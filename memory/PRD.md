@@ -1,3 +1,37 @@
+## Iter 161 — Retire Pietential tenant (Feb 2026)
+
+User: "i want to delete pitential dashboard - and all its data (i just want genleadai demo dashboard to be there)"
+
+### Shipped
+- **Full purge** of the `ten_pietential` tenant + owner user (`megha@contentvista.com`)
+  + all `tenant_id=ten_pietential` documents across every collection (leads,
+  insights, memberships, ICPs, onboarding, outbound/inbound logs, activities).
+- **`backend/scripts/migrate_to_multi_tenant.py`** — no longer seeds Pietential
+  on startup. Instead, on every boot it performs a defensive purge of any
+  stray `ten_pietential` docs so the workspace stays permanently retired.
+  Only `ten_demo` (GenLeadAI Demo) is ensured.
+- **`backend/scripts/iter148_seed_demo_accounts.py::setup_pietential_owner()`**
+  neutralized to a no-op — running the script standalone no longer recreates
+  the account.
+- **`/app/memory/test_credentials.md`** updated: removed `megha@contentvista.com`
+  entry, marked as retired.
+
+### Verified
+- `POST /api/auth/login` with `megha@contentvista.com/Pietential2026!` → **HTTP 401** (user removed).
+- `GET /api/tenants/me` as `admin@demo.com` → returns **1 tenant only** (`ten_demo` — GenLeadAI Demo).
+- `GET /api/dashboard/b2c` under `X-Tenant-Id: ten_demo` → still returns full B2C demo widgets.
+- Frontend `/login` renders cleanly.
+
+### Note on the Pietential Intelligence Engine
+- The **feature-level** engine (routes `pietential_intel.py`, `pt_insights`,
+  `pt_leads`, decay loop) is UNTOUCHED — it powers the B2B intelligence
+  widgets that work for GenLeadAI Demo and any future tenant.
+- Only the tenant/workspace "Pietential" was deleted, not the engine feature.
+
+---
+
+
+
 ## Iter 160 — Integration Showcase widget on demo dashboards (Feb 12, 2026)
 
 User: "now in Genleadai demo dashboard i wanna show all the backend integration options we have in each of these sub sections — check the backend integrations setup and tell me what all options we have! I need for all b2b, b2c and hybrid"

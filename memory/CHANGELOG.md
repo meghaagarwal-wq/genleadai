@@ -1,3 +1,20 @@
+## Iter 160 — Retire Pietential tenant (Feb 2026)
+- User request: delete the Pietential workspace + all its data; keep only
+  the GenLeadAI Demo dashboard.
+- Deleted the `ten_pietential` tenant document, all memberships, all
+  `tenant_id=ten_pietential` rows across every collection, and the owner
+  user `megha@contentvista.com`.
+- `backend/scripts/migrate_to_multi_tenant.py` no longer seeds Pietential
+  tenant / owner / ICPs / onboarding on startup — instead it purges any
+  legacy `ten_pietential` data on every boot (permanent retirement).
+- `backend/scripts/iter148_seed_demo_accounts.py::setup_pietential_owner()`
+  neutralized to a no-op so standalone runs don't recreate the account.
+- Verification:
+  * `POST /api/auth/login` with `megha@contentvista.com` → HTTP 401.
+  * `GET /api/tenants/me` as `admin@demo.com` → returns only `ten_demo`.
+  * `GET /api/dashboard/b2c` still serves GenLeadAI demo data.
+
+
 # Changelog
 
 ## iter132 — Auto-learn voice on edited send (2026-02-29) ✅
