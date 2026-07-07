@@ -17,8 +17,7 @@ import {
   Trash, Lightning, Eye, EyeSlash,
 } from '@phosphor-icons/react';
 import api from '../../config/api';
-import { INTEGRATIONS, CATEGORIES, getIntegration } from '../../config/integrations';
-import { IntegrationShowcase } from './IntegrationShowcase';
+import { INTEGRATIONS, getIntegration } from '../../config/integrations';
 
 const STATUS_TONE = {
   connected:     { color: '#22c55e', label: 'Connected',     dot: '●' },
@@ -35,6 +34,7 @@ const IntegrationsPage = () => {
   const [query, setQuery] = useState('');
   const [activeProvider, setActiveProvider] = useState(null);  // open modal
   const [refreshCount, setRefreshCount] = useState(0);
+  const [showcase, setShowcase] = useState(null);  // iter161 — unified catalog
 
   const refresh = async () => {
     setLoading(true);
@@ -49,6 +49,14 @@ const IntegrationsPage = () => {
   };
 
   useEffect(() => { refresh(); }, [refreshCount]);
+
+  // iter161 — fetch the full showcase catalog so we can render every
+  // integration (connectable + roadmap) inside one unified grid.
+  useEffect(() => {
+    api.get('/api/dashboard/integration-showcase')
+      .then((r) => setShowcase(r.data))
+      .catch(() => setShowcase({ categories: [], integrations: [], counts: {} }));
+  }, []);
 
   // Detect ?connected=<provider> on return from OAuth callback
   useEffect(() => {
@@ -70,14 +78,45 @@ const IntegrationsPage = () => {
     }
   }, []);
 
-  const filtered = useMemo(() => {
+  // iter161 — unified merge: showcase catalog augmented with live
+  // connect state from INTEGRATIONS registry. Every item shares one
+  // card style; only cards with a matching registry entry get action
+  // buttons (Connect / Test / Settings / Disconnect).
+  const providerById = useMemo(() => {
+    const m = {};
+    INTEGRATIONS.forEach((p) => { m[p.id] = p; });
+    return m;
+  }, []);
+
+  const unified = useMemo(() => {
+    if (!showcase) return [];
     const q = query.trim().toLowerCase();
-    return INTEGRATIONS.filter((p) => {
-      if (category !== 'all' && p.category !== category) return false;
-      if (q && !p.name.toLowerCase().includes(q) && !(p.services || []).some((s) => s.toLowerCase().includes(q))) return false;
-      return true;
+    return showcase.integrations
+      .map((row) => ({
+        ...row,
+        provider: providerById[row.id] || null,
+        status: statuses[row.id] || null,
+      }))
+      .filter((row) => {
+        if (category !== 'all' && !row.cats.includes(category)) return false;
+        if (q) {
+          const hay = `${row.label} ${row.cats.join(' ')} ${(row.provider?.services || []).join(' ')}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+  }, [showcase, query, category, statuses, providerById]);
+
+  // Counts per category — recomputed from showcase so pills reflect
+  // the union (registry + roadmap) not just the registry subset.
+  const counts = useMemo(() => {
+    if (!showcase) return { all: 0 };
+    const c = { all: showcase.integrations.length };
+    showcase.categories.forEach((cat) => {
+      c[cat.key] = showcase.integrations.filter((r) => r.cats.includes(cat.key)).length;
     });
-  }, [category, query]);
+    return c;
+  }, [showcase]);
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto" data-testid="integrations-page" style={{ color: 'var(--theme-text)' }}>
@@ -90,21 +129,20 @@ const IntegrationsPage = () => {
         </p>
       </header>
 
-      {/* Category filter + search */}
+      {/* Category pills + search (unified iter161) */}
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-5">
-        <div className="flex flex-wrap gap-1.5" data-testid="integrations-category-tabs">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setCategory(c.id)}
-              data-testid={`integrations-cat-${c.id}`}
-              className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors"
-              style={{
-                background: category === c.id ? 'var(--theme-purple-dim)' : 'var(--theme-surface)',
-                borderColor: category === c.id ? 'var(--theme-purple)' : 'var(--theme-border-strong)',
-                color: category === c.id ? 'var(--theme-purple-light)' : 'var(--theme-text-muted)',
-              }}
-            >{c.label}</button>
+        <div className="flex flex-wrap gap-2" data-testid="integrations-category-tabs">
+          <CategoryPill active={category === 'all'} onClick={() => setCategory('all')} label="All" count={counts.all} testid="integrations-cat-all" />
+          {(showcase?.categories || []).map((c) => (
+            <CategoryPill
+              key={c.key}
+              active={category === c.key}
+              onClick={() => setCategory(c.key)}
+              label={c.label}
+              count={counts[c.key] || 0}
+              color={c.color}
+              testid={`integrations-cat-${c.key}`}
+            />
           ))}
         </div>
         <div className="relative ml-auto w-full md:w-64">
@@ -114,7 +152,7 @@ const IntegrationsPage = () => {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search integrations…"
             data-testid="integrations-search"
-            className="w-full pl-8 pr-3 py-1.5 rounded-md text-sm outline-none border"
+            className="w-full pl-8 pr-3 py-1.5 rounded-full text-sm outline-none border"
             style={{
               background: 'var(--theme-surface)',
               borderColor: 'var(--theme-border-strong)',
@@ -124,36 +162,33 @@ const IntegrationsPage = () => {
         </div>
       </div>
 
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="integrations-grid">
-        {filtered.map((p) => (
-          <IntegrationCard
-            key={p.id}
-            provider={p}
-            status={statuses[p.id]}
+      {/* Unified cards grid (iter161) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="integrations-grid">
+        {unified.map((row) => (
+          <UnifiedIntegrationCard
+            key={row.id}
+            row={row}
             loading={loading}
-            onConnect={() => setActiveProvider(p)}
+            onConnect={() => row.provider && setActiveProvider(row.provider)}
             onDisconnect={async () => {
-              if (!window.confirm(`Disconnect ${p.name}?`)) return;
+              if (!row.provider) return;
+              if (!window.confirm(`Disconnect ${row.provider.name}?`)) return;
               try {
-                await api.delete(`/api/integrations/${p.id}`);
-                toast.success(`${p.name} disconnected`);
+                await api.delete(`/api/integrations/${row.provider.id}`);
+                toast.success(`${row.provider.name} disconnected`);
                 setRefreshCount((c) => c + 1);
               } catch (e) {
                 toast.error(`Disconnect failed: ${e?.response?.data?.detail || e.message}`);
               }
             }}
             onTest={async () => {
+              if (!row.provider) return;
               try {
-                const { data } = await api.post(`/api/integrations/${p.id}/test`);
-                // iter125 — backend returns { ok, message, warning? }.
-                // ok:true + warning:true → amber/info (could not verify, but key saved).
-                // ok:true            → green (provider responded 200).
-                // ok:false           → red (provider rejected key with 401/403).
+                const { data } = await api.post(`/api/integrations/${row.provider.id}/test`);
                 if (data.ok && data.warning) {
                   toast(data.message || 'Could not run a live test');
                 } else if (data.ok) {
-                  toast.success(data.message || `${p.name} OK`);
+                  toast.success(data.message || `${row.provider.name} OK`);
                 } else {
                   toast.error(data.message || 'Test failed');
                 }
@@ -163,16 +198,20 @@ const IntegrationsPage = () => {
             }}
           />
         ))}
-        {filtered.length === 0 && (
+        {unified.length === 0 && showcase && (
           <div className="col-span-full text-center py-12 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
             No integrations match.
           </div>
         )}
+        {!showcase && (
+          <div className="col-span-full text-center py-12 text-sm" style={{ color: 'var(--theme-text-muted)' }}>
+            Loading integrations…
+          </div>
+        )}
       </div>
 
-      {/* iter161 — "What ARIA plugs into" showcase moved from demo dashboards */}
-      <div className="mt-10" data-testid="integrations-showcase-section">
-        <IntegrationShowcase />
+      <div className="mt-6 text-[11px] text-center" style={{ color: 'var(--theme-text-muted)' }}>
+        Don&apos;t see one you need? Request it via <strong style={{ color: 'var(--theme-purple-light)' }}>Settings → Integrations</strong>.
       </div>
 
       {activeProvider && (
@@ -188,84 +227,138 @@ const IntegrationsPage = () => {
 };
 
 
-// ── IntegrationCard ─────────────────────────────────────────────────────
-const IntegrationCard = ({ provider, status, loading, onConnect, onDisconnect, onTest }) => {
-  const s = status || { status: 'not_connected' };
-  const tone = STATUS_TONE[s.status] || STATUS_TONE.not_connected;
-  const isConnected = s.status === 'connected';
-  const isConfigured = s.status === 'configured';
+// ── CategoryPill (iter161 — unified rounded pill with count) ─────────────
+const CategoryPill = ({ active, label, count, color = '#7C35DC', onClick, testid }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    data-testid={testid}
+    aria-pressed={active}
+    className="px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-1"
+    style={{
+      background: active ? color : 'var(--theme-surface2)',
+      color: active ? '#fff' : 'var(--theme-text)',
+      boxShadow: active ? `0 2px 12px ${color}66` : 'none',
+      border: active ? 'none' : '1px solid var(--theme-border)',
+    }}
+  >
+    {label} <span className="opacity-70 ml-1 tabular-nums">{count ?? ''}</span>
+  </button>
+);
+
+
+// ── UnifiedIntegrationCard (iter161) ─────────────────────────────────────
+// Single card style used for every integration:
+//  • Colored initials avatar + name + category tag
+//  • Status pill (Live / Available / Coming soon / Connected)
+//  • If provider is in INTEGRATIONS registry, inline mini action buttons
+//    (Connect / Test / Settings / Disconnect) — driven off real status
+const STATUS_PILL = {
+  live:         { bg: 'rgba(16,185,129,0.15)',  color: '#10B981', label: 'Live',        icon: '●' },
+  connected:    { bg: 'rgba(16,185,129,0.15)',  color: '#10B981', label: 'Connected',   icon: '●' },
+  configured:   { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B', label: 'Configured',  icon: '●' },
+  available:    { bg: 'rgba(124,53,220,0.15)',  color: '#7C35DC', label: 'Available',   icon: '⚡' },
+  coming_soon:  { bg: 'rgba(148,163,184,0.18)', color: '#94A3B8', label: 'Coming soon', icon: '✦' },
+  error:        { bg: 'rgba(239,68,68,0.15)',   color: '#EF4444', label: 'Error',       icon: '⚠' },
+  not_connected:{ bg: 'rgba(124,53,220,0.15)',  color: '#7C35DC', label: 'Available',   icon: '⚡' },
+};
+
+const UnifiedIntegrationCard = ({ row, loading, onConnect, onDisconnect, onTest }) => {
+  const { provider, status: liveStatus } = row;
+
+  // Determine effective status:
+  // - If we have a real registry provider with liveStatus, use that (connected/configured/error/not_connected)
+  // - Otherwise fall back to showcase status (live/available/coming_soon)
+  const effective = provider && liveStatus?.status
+    ? liveStatus.status
+    : row.status;
+  const pill = STATUS_PILL[effective] || STATUS_PILL.coming_soon;
+  const isConnected = effective === 'connected' || effective === 'live';
+  const isConfigured = effective === 'configured';
+  const isConnectable = !!provider && effective !== 'coming_soon';
+
+  const initials = row.label.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
   return (
     <div
-      className="rounded-lg border p-4 flex flex-col"
+      className="rounded-xl border p-3 flex flex-col gap-2.5 hover:-translate-y-0.5 hover:border-[var(--theme-purple-light)] transition-all"
       style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
-      data-testid={`integration-card-${provider.id}`}
+      data-testid={`integration-card-${row.id}`}
+      title={row.label}
     >
-      <div className="flex items-start gap-3 mb-2">
-        <div className="w-10 h-10 rounded-md flex items-center justify-center text-base font-bold flex-shrink-0"
-             style={{ background: 'var(--theme-surface2)', color: 'var(--theme-purple-light)' }}>
-          {provider.name[0]}
+      {/* Top: avatar + name + status pill */}
+      <div className="flex items-center gap-2.5">
+        <div
+          className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-xs font-extrabold text-white"
+          style={{ background: row.brand, boxShadow: `0 4px 12px ${row.brand}55` }}
+          aria-hidden="true"
+        >
+          {initials}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <div className="text-sm font-bold truncate" style={{ color: 'var(--theme-text)' }}>{provider.name}</div>
-            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded"
-                  style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text-muted)' }}>
-              {provider.category}
-            </span>
-          </div>
-          <div className="text-[11px] flex items-center gap-1.5" style={{ color: tone.color }}>
-            <span>{tone.dot}</span>
-            <span data-testid={`integration-status-${provider.id}`}>{tone.label}</span>
-            {s.last_sync_at && <span style={{ color: 'var(--theme-text-muted)' }}>· last sync {formatRel(s.last_sync_at)}</span>}
-          </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold truncate" style={{ color: 'var(--theme-text)' }}>{row.label}</div>
+          <span
+            className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+            style={{ background: pill.bg, color: pill.color }}
+            data-testid={`integration-status-${row.id}`}
+          >
+            <span>{pill.icon}</span> {pill.label}
+          </span>
         </div>
       </div>
-      <div className="text-[11px] mb-3 line-clamp-2 min-h-[28px]" style={{ color: 'var(--theme-text-muted)' }}>
-        {(provider.services || []).join(' · ')}
-      </div>
-      {/* iter109c Batch 2 — audit footer on connected cards */}
-      {s.connected && (
-        <div className="text-[10px] mb-2 italic" style={{ color: 'var(--theme-text-dim)' }} data-testid={`integration-audit-${provider.id}`}>
-          Connected by <strong style={{ color: 'var(--theme-text-muted)' }}>{s.connected_by_name || 'workspace owner'}</strong>
-          {s.connected_at && <> · {formatRel(s.connected_at)}</>}
+
+      {/* Services / category tags */}
+      {provider?.services?.length ? (
+        <div className="text-[10px] line-clamp-1" style={{ color: 'var(--theme-text-muted)' }}>
+          {provider.services.slice(0, 4).join(' · ')}
+        </div>
+      ) : (
+        <div className="text-[10px]" style={{ color: 'var(--theme-text-dim)' }}>
+          {row.cats.slice(0, 3).map((c) => c[0].toUpperCase() + c.slice(1)).join(' · ')}
         </div>
       )}
-      <div className="flex gap-1.5 mt-auto">
-        {!isConnected && !isConfigured && (
-          <button onClick={onConnect} data-testid={`integration-connect-${provider.id}`}
-                  className="flex-1 px-3 py-1.5 rounded-md text-xs font-bold text-white"
-                  style={{ background: 'var(--theme-purple)' }}>
-            <Plug size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Connect
-          </button>
-        )}
-        {isConfigured && !isConnected && (
-          <button onClick={onConnect} data-testid={`integration-resume-${provider.id}`}
-                  className="flex-1 px-3 py-1.5 rounded-md text-xs font-bold text-white"
-                  style={{ background: 'var(--theme-amber)' }}>
-            Continue setup
-          </button>
-        )}
-        {isConnected && (
-          <>
-            <button onClick={onTest} data-testid={`integration-test-${provider.id}`}
-                    className="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold border"
-                    style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}>
-              <Lightning size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Test
+
+      {/* Action row — only for cards with a real provider */}
+      {isConnectable && (
+        <div className="flex gap-1.5 mt-auto pt-1">
+          {!isConnected && !isConfigured && (
+            <button onClick={onConnect} data-testid={`integration-connect-${row.id}`}
+                    disabled={loading}
+                    className="flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold text-white disabled:opacity-50"
+                    style={{ background: 'var(--theme-purple)' }}>
+              <Plug size={10} weight="bold" className="inline -mt-0.5 mr-1" /> Connect
             </button>
-            <button onClick={onConnect} data-testid={`integration-settings-${provider.id}`}
-                    className="px-3 py-1.5 rounded-md text-xs font-semibold border"
-                    style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text-muted)' }}>
-              Settings
+          )}
+          {isConfigured && !isConnected && (
+            <button onClick={onConnect} data-testid={`integration-resume-${row.id}`}
+                    className="flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold text-white"
+                    style={{ background: 'var(--theme-amber, #F59E0B)' }}>
+              Continue setup
             </button>
-            <button onClick={onDisconnect} data-testid={`integration-disconnect-${provider.id}`}
-                    className="px-2 py-1.5 rounded-md text-xs font-semibold border"
-                    style={{ borderColor: 'var(--theme-border-strong)', color: '#ef4444' }}
-                    aria-label="Disconnect">
-              <Trash size={12} weight="bold" />
-            </button>
-          </>
-        )}
-      </div>
+          )}
+          {isConnected && (
+            <>
+              <button onClick={onTest} data-testid={`integration-test-${row.id}`}
+                      className="flex-1 px-2 py-1.5 rounded-md text-[11px] font-semibold border"
+                      style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}>
+                <Lightning size={10} weight="bold" className="inline -mt-0.5 mr-1" /> Test
+              </button>
+              <button onClick={onConnect} data-testid={`integration-settings-${row.id}`}
+                      className="px-2 py-1.5 rounded-md text-[11px] font-semibold border"
+                      style={{ borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text-muted)' }}
+                      aria-label="Settings">
+                ⚙
+              </button>
+              <button onClick={onDisconnect} data-testid={`integration-disconnect-${row.id}`}
+                      className="px-2 py-1.5 rounded-md text-[11px] font-semibold border"
+                      style={{ borderColor: 'var(--theme-border-strong)', color: '#ef4444' }}
+                      aria-label="Disconnect">
+                <Trash size={10} weight="bold" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };
