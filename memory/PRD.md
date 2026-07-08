@@ -1,3 +1,54 @@
+## Iter 164 — "Calm Intelligence" Chunk B (Feb 2026)
+
+User: "Credits Recharged. Please Continue." (green-light for Chunk B).
+
+### Shipped
+- **ARIA Companion Drawer** (`AriaCompanionDrawer.js` — new):
+  - Floating primary-green orb bottom-right on every workspace page.
+  - Cmd/Ctrl+J shortcut toggles the drawer; Escape closes.
+  - Right-side backdrop-blur drawer with cards feed sourced from
+    `/api/insights/founder-command-center`.
+  - Card types with accent border-left: coral 'Aria noticed', primary
+    green 'Aria drafted' and 'Aria suggests'. CTAs deep-link to
+    `/app/instinct`, `/app/approvals`, `/app/conversations`.
+  - State persists in `localStorage.aria.companion.open`.
+  - Auto-refresh every 5 minutes + on tenant switch.
+  - Wired into `AppLayout.js`.
+- **Leads page** (`LeadFeed.js`) — removed all hardcoded purple hex; now
+  uses `var(--theme-primary)` and theme borders. 'Scan engaged leads'
+  button renders in primary green (no purple gradient).
+- **Conversations page** (`Conversations.js`) — same purple → theme
+  migration, plus new Superhuman-inspired keyboard-hints strip
+  (J/K navigate · E archive · / search · ⌘J ask Aria) rendered as kbd
+  tags below the header. Sentiment pills → rounded-full. 'Aria says'
+  callout on primary-dim background.
+
+### Verified (testing_agent iter164)
+- 100% pass on both backend + frontend.
+- Orb visible on all 5 workspace pages.
+- Cards populate with real intelligence data (95% pipeline risk +
+  49 overdue follow-ups).
+- Cmd/Ctrl+J + Escape shortcuts work.
+- localStorage persistence across reload verified.
+- CTA navigation closes drawer.
+- Scan button computed bg = `rgb(15,76,58)` (primary green).
+- Conversations kbd hints strip renders (5 kbd tags).
+- 1 non-blocking observation: React duplicate-key warning in console
+  (not from ARIA drawer — traced elsewhere, low priority).
+
+### Deferred from Chunk B (Chunk C)
+- Full Attio-style spreadsheet + Kanban toggle on Leads (P2 — current
+  dense table already looks Attio-esque post-migration).
+- Full Superhuman-style split-pane inbox on Conversations (P2 — keyboard
+  hints strip added, but not a two-pane read/reply layout yet).
+- Command Center greeting card (P3 — ARIA drawer already provides the
+  founder-hook greeting via "Aria noticed" cards).
+- Onboarding wizard polish (P3).
+
+---
+
+
+
 ## Iter 163 — "Calm Intelligence" UI/UX overhaul (Chunk A) — Feb 2026
 
 User: "now work on UI UX of the demo dashboard and the app make it optimised
