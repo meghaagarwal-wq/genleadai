@@ -1,3 +1,50 @@
+## Iter 166-167 — Chunk C: Leads Kanban + Onboarding polish (Feb 2026)
+
+User: option (d) — Leads Kanban + Onboarding polish, skip read-only Conversations Inbox.
+
+### Shipped (iter166)
+- **Leads Kanban view toggle** on `/app/leads`:
+  - Table ⇄ Kanban pill toggle in the header (data-testid=leadfeed-view-toggle).
+  - HTML5 native drag-drop between columns.
+  - Drop triggers `PATCH /api/pt/leads/{id}` with new stage.
+  - View preference persists in `localStorage.leadfeed.view`.
+- **Onboarding wizard palette migration** on `/onboarding`:
+  - Replaced hardcoded purple (#7C35DC, #4C1D95) + old text colors
+    (#1A0A2E, #5A4A7A, #9B8AB0) + old surfaces (#F4F0FF, #E8E0F5) with
+    theme CSS variables (var(--theme-primary), var(--theme-text) etc.)
+    across all 464 lines.
+
+### Fixes (iter167 — from iter166 test agent findings)
+- **Missing Kanban columns FIXED**: KanbanBoard was hiding 5/13 leads
+  whose stage was `discovery_call`, `contacted`, or `qualified`.
+  Expanded KANBAN_STAGES to 9 columns matching full pipeline taxonomy
+  (New → Contacted → Discovery Call → Qualified → Engaged → Warm →
+  Hot → Session/Pilot → Cold). Added automatic 'Other' fallback
+  column for any unrecognised stage so nothing is ever silently
+  hidden.
+- **Silent stage-revert FIXED**: Drag-drop handler now trusts server
+  response — if backend auto-recomputes stage from score
+  (e.g. high-score leads get pinned to hot/session_pilot), the UI
+  reflects it truthfully with an informational toast
+  'Score-based rule kept stage at X' instead of a fake success.
+
+### Verified (testing_agent iter167)
+- 100% pass on backend + frontend.
+- All 13 leads visible in Kanban (exact expected distribution).
+- Drag-drop trust logic verified.
+- Regression: Table view, Reply Triage, ARIA drawer, Onboarding
+  palette, no console errors — all intact.
+
+### Deferred code-review notes
+- `LeadFeed.js` is 584 lines — extract KanbanBoard / AddLeadModal /
+  CsvModal into separate files (P3 refactor).
+- `/signup` marketing page still uses hardcoded purple — palette
+  migration was scoped to `/onboarding` wizard only per user request.
+
+---
+
+
+
 ## Iter 165 — Duplicate-key fix + Reply Triage Conversations (Feb 2026)
 
 User: "Fix the duplicate-key warning first. Then build the split-pane
