@@ -272,9 +272,17 @@ const LeadFeed = ({ embedded = false }) => {
       ) : viewMode === 'kanban' ? (
         <KanbanBoard leads={leads} onCard={(id) => navigate(`/app/leads/${id}`)} onStageChange={async (leadId, newStage) => {
           try {
-            await ptApi.patch(`/api/pt/leads/${leadId}`, { stage: newStage });
-            setLeads((xs) => xs.map((l) => l.id === leadId ? { ...l, stage: newStage } : l));
-            toast.success('Stage updated');
+            const { data } = await ptApi.patch(`/api/pt/leads/${leadId}`, { stage: newStage });
+            // iter167 — backend may auto-recompute stage from score. Trust
+            // the server response so any silent revert is immediately
+            // visible in the UI (not a fake success).
+            const effectiveStage = (data?.lead?.stage || data?.stage || newStage).toLowerCase();
+            setLeads((xs) => xs.map((l) => l.id === leadId ? { ...l, stage: effectiveStage } : l));
+            if (effectiveStage !== newStage) {
+              toast(`Score-based rule kept stage at "${effectiveStage}"`);
+            } else {
+              toast.success('Stage updated');
+            }
           } catch (e) {
             toast.error(e?.response?.data?.detail || 'Could not update stage');
           }
@@ -320,24 +328,39 @@ const LeadFeed = ({ embedded = false }) => {
 };
 
 // iter166 — KanbanBoard: HTML5 native drag-drop grouped by stage.
-// Columns: New · Engaged · Warm · Hot · Session/Pilot · Cold. Cards can
-// be dragged between columns to change stage — hits PATCH /api/pt/leads.
+// Column set matches the FULL sales pipeline stage taxonomy so no lead
+// disappears (iter167 fix — previously 'discovery_call', 'contacted',
+// 'qualified' leads were invisible). Ordering follows funnel flow:
+// New → Contacted → Discovery Call → Qualified → Engaged → Warm →
+// Hot → Session/Pilot → Cold. Any unrecognised stage falls back to
+// an "Other" column so nothing is ever silently hidden.
 const KANBAN_STAGES = [
-  { key: 'new',            label: 'New',           color: '#3B82F6', bg: 'rgba(59,130,246,0.08)' },
-  { key: 'engaged',        label: 'Engaged',       color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
-  { key: 'warm',           label: 'Warm',          color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' },
-  { key: 'hot',            label: 'Hot',           color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
-  { key: 'session_pilot',  label: 'Session/Pilot', color: '#0F4C3A', bg: 'rgba(15,76,58,0.10)' },
-  { key: 'cold',           label: 'Cold',          color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
+  { key: 'new',             label: 'New',            color: '#3B82F6', bg: 'rgba(59,130,246,0.08)' },
+  { key: 'contacted',       label: 'Contacted',      color: '#8B5CF6', bg: 'rgba(139,92,246,0.08)' },
+  { key: 'discovery_call',  label: 'Discovery Call', color: '#6366F1', bg: 'rgba(99,102,241,0.10)' },
+  { key: 'qualified',       label: 'Qualified',      color: '#14B8A6', bg: 'rgba(20,184,166,0.10)' },
+  { key: 'engaged',         label: 'Engaged',        color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  { key: 'warm',            label: 'Warm',           color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' },
+  { key: 'hot',             label: 'Hot',            color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
+  { key: 'session_pilot',   label: 'Session/Pilot',  color: '#0F4C3A', bg: 'rgba(15,76,58,0.10)' },
+  { key: 'cold',            label: 'Cold',           color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
 ];
+const KNOWN_STAGES = new Set(KANBAN_STAGES.map((s) => s.key));
 
 const KanbanBoard = ({ leads, onCard, onStageChange }) => {
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
+  // Build "Other" bucket for any stage we didn't hardcode
+  const otherItems = leads.filter((l) => !KNOWN_STAGES.has((l.stage || 'cold').toLowerCase()));
   const grouped = KANBAN_STAGES.map((s) => ({
     ...s,
     items: leads.filter((l) => (l.stage || 'cold').toLowerCase() === s.key),
   }));
+  if (otherItems.length > 0) {
+    grouped.push({
+      key: 'other', label: 'Other', color: '#78716C', bg: 'rgba(120,113,108,0.10)', items: otherItems,
+    });
+  }
   return (
     <div className="flex gap-3 overflow-x-auto pb-2" data-testid="pt-leadfeed-kanban" style={{ minHeight: 400 }}>
       {grouped.map((col) => (
