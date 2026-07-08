@@ -43,15 +43,17 @@ export const B2CDashboard = () => {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.greeting}, {data.header.owner_name}</h1>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-primary)' }}>B2C Automation</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            {data.header.greeting}, {data.header.owner_name}
+          </h1>
           <div className="text-sm mt-1" style={{ color: 'var(--theme-text-muted)' }}>{data.header.workspace_name}</div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(14,159,134,0.15)', color: '#0E9F86' }}>B2C Automation</span>
           <button
             onClick={refresh}
-            className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}
+            className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)] active:scale-95 focus:outline-none focus:ring-2"
+            style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
             data-testid="b2c-refresh"
             aria-label="Refresh dashboard data"
           >
@@ -227,13 +229,15 @@ export const B2BFounderDashboard = () => {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2b-founder-dashboard">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.workspace_name} · Intelligence Overview</h1>
-          <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>Last refresh: {new Date(data.header.last_refresh).toLocaleTimeString()}</div>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-primary)' }}>Good morning · B2B Founder</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            {data.header.workspace_name} <span style={{ color: 'var(--theme-text-muted)' }}>· intelligence overview</span>
+          </h1>
+          <div className="text-xs mt-1.5" style={{ color: 'var(--theme-text-muted)' }}>Last refresh: {new Date(data.header.last_refresh).toLocaleTimeString()}</div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(124,53,220,0.15)', color: '#7C35DC' }}>B2B Founder</span>
-          <Link to="/app/sales-view" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }}>Switch to Sales View →</Link>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2b-founder-refresh"><ArrowsClockwise size={12} /> Refresh</button>
+          <Link to="/app/sales-view" className="text-xs font-semibold" style={{ color: 'var(--theme-primary)' }}>Switch to Sales View →</Link>
+          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)]" style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }} data-testid="b2b-founder-refresh"><ArrowsClockwise size={12} /> Refresh</button>
         </div>
       </div>
 
@@ -450,13 +454,15 @@ export const B2BSalesDashboard = () => {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2b-sales-dashboard">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>Good morning, {data.header.first_name}</h1>
-          <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>{new Date(data.header.last_refresh).toDateString()}</div>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-secondary)' }}>B2B Sales</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            Good morning, {data.header.first_name}
+          </h1>
+          <div className="text-xs mt-1.5" style={{ color: 'var(--theme-text-muted)' }}>{new Date(data.header.last_refresh).toDateString()}</div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>Sales View</span>
-          <Link to="/app" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }}>Switch to Founder View →</Link>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2b-sales-refresh"><ArrowsClockwise size={12} /> Refresh</button>
+          <Link to="/app" className="text-xs font-semibold" style={{ color: 'var(--theme-primary)' }}>Switch to Founder View →</Link>
+          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)]" style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }} data-testid="b2b-sales-refresh"><ArrowsClockwise size={12} /> Refresh</button>
         </div>
       </div>
 
@@ -668,49 +674,56 @@ const InstinctFeedWidget = () => {
 };
 
 // ───────────────────────── Demo Mode Switcher ────────────────────
-// Renders 4 pill buttons at the top of /app for ten_demo only. Lets the
-// founder cycle B2C / B2B Founder / B2B Sales / Hybrid during sales calls.
-// Selection persists in localStorage so a refresh doesn't reset the demo.
+// Renders a Notion-style pill toggle at the top of /app for ten_demo only.
+// Framer Motion `layoutId` animates the active pill background between
+// options for a calm intelligence feel. iter163 palette (green/coral).
 const DEMO_MODE_KEY = 'aria.demo.dashboard.mode';
 const DemoModeSwitcher = ({ value, onChange }) => {
   const pills = [
-    { key: 'b2c',          label: 'B2C Demo',         color: '#0E9F86' },
-    { key: 'b2b-founder',  label: 'B2B Founder Demo', color: '#7C35DC' },
-    { key: 'b2b-sales',    label: 'B2B Sales Demo',   color: '#F59E0B' },
-    { key: 'hybrid',       label: 'Hybrid Demo',      color: '#6366F1' },
+    { key: 'b2c',          label: 'B2C' },
+    { key: 'b2b-founder',  label: 'B2B Founder' },
+    { key: 'b2b-sales',    label: 'B2B Sales' },
+    { key: 'hybrid',       label: 'Hybrid' },
   ];
   return (
-    <div className="px-4 sm:px-6 pt-4" data-testid="demo-mode-switcher">
+    <div className="px-4 sm:px-6 pt-6" data-testid="demo-mode-switcher">
       <div
-        className="max-w-[1600px] mx-auto rounded-xl border p-3 flex flex-wrap items-center gap-2"
-        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
-        role="tablist"
-        aria-label="Demo dashboard mode switcher"
+        className="max-w-[1600px] mx-auto flex flex-wrap items-center gap-3"
       >
-        <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] mr-2" style={{ color: 'var(--theme-text-muted)' }}>Demo Mode</span>
-        {pills.map((p) => {
-          const active = value === p.key;
-          return (
-            <button
-              key={p.key}
-              role="tab"
-              aria-selected={active}
-              aria-controls="demo-dashboard-panel"
-              onClick={() => onChange(p.key)}
-              data-testid={`demo-mode-${p.key}`}
-              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-1"
-              style={{
-                background: active ? p.color : 'var(--theme-surface2)',
-                color: active ? '#fff' : 'var(--theme-text)',
-                boxShadow: active ? `0 2px 12px ${p.color}66` : 'none',
-                minHeight: 32,
-              }}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-        <span className="ml-auto text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Sales-call preview · saved locally</span>
+        <span className="eyebrow mr-1" style={{ fontFamily: 'var(--font-display)' }}>Demo mode</span>
+        <div
+          className="inline-flex items-center gap-1 p-1 rounded-full border"
+          style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}
+          role="tablist"
+          aria-label="Demo dashboard mode switcher"
+        >
+          {pills.map((p) => {
+            const active = value === p.key;
+            return (
+              <button
+                key={p.key}
+                role="tab"
+                aria-selected={active}
+                aria-controls="demo-dashboard-panel"
+                onClick={() => onChange(p.key)}
+                data-testid={`demo-mode-${p.key}`}
+                className="relative px-4 py-1.5 rounded-full text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
+                style={{
+                  color: active ? 'var(--theme-primary)' : 'var(--theme-text-muted)',
+                  background: active ? 'var(--theme-surface)' : 'transparent',
+                  boxShadow: active ? '0 1px 3px rgba(28,25,23,0.08)' : 'none',
+                  minHeight: 30,
+                  fontFamily: 'var(--font-display)',
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+        <span className="ml-auto text-[11px]" style={{ color: 'var(--theme-text-muted)', fontFamily: 'var(--font-sans)' }}>
+          Sales-call preview · saved locally
+        </span>
       </div>
     </div>
   );

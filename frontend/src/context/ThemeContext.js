@@ -16,7 +16,7 @@ const readInitial = () => {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v === 'dark' || v === 'light') return v;
   } catch (_) { /* SSR / locked storage */ }
-  return 'dark';
+  return 'light';  // iter163 — default changed from dark to warm-cream light
 };
 
 export const ThemeProvider = ({ children }) => {

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -19,99 +19,149 @@ a[href*="emergent-badge"],
 
 
 :root {
-  /* Core Brand Gradient */
-  --gradient-brand: linear-gradient(135deg, #C044E0 0%, #7C35DC 50%, #5B28D4 100%);
-  --gradient-brand-horizontal: linear-gradient(90deg, #C044E0 0%, #5B28D4 100%);
-  --gradient-subtle: linear-gradient(135deg, rgba(192,68,224,0.08) 0%, rgba(91,40,212,0.08) 100%);
-  --gradient-aria-deep: linear-gradient(135deg, #0E0820 0%, #1A0F38 35%, #2B1860 75%, #7C35DC 100%);
-  --gradient-aria-glow: radial-gradient(120% 80% at 0% 0%, rgba(192,68,224,0.18) 0%, rgba(124,53,220,0.05) 40%, transparent 70%);
+  /* ─────────────────────────────────────────────────────────────────
+   * iter163 — "Calm Intelligence" redesign
+   * Warm founder-friendly palette inspired by Artisan / Notion / Attio.
+   * Light theme is the DEFAULT. Dark theme is a warm-neutral counterpart.
+   * ─────────────────────────────────────────────────────────────────
+   */
 
-  /* Purple Palette */
-  --color-primary: #7C35DC;
-  --color-primary-start: #C044E0;
-  --color-primary-end: #5B28D4;
-  --color-primary-hover: #6B28C8;
-  --color-primary-light: #A855F7;
-  --color-primary-subtle: rgba(124, 53, 220, 0.08);
-  --color-primary-border: rgba(124, 53, 220, 0.2);
+  /* Core Brand Gradient — retained for legacy landing/hero surfaces */
+  --gradient-brand: linear-gradient(135deg, #0F4C3A 0%, #1F6B5C 55%, #E06D53 100%);
+  --gradient-brand-horizontal: linear-gradient(90deg, #0F4C3A 0%, #E06D53 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(15,76,58,0.06) 0%, rgba(224,109,83,0.06) 100%);
+  --gradient-aria-deep: linear-gradient(135deg, #0A2A22 0%, #0F4C3A 45%, #1F6B5C 100%);
+  --gradient-aria-glow: radial-gradient(120% 80% at 0% 0%, rgba(15,76,58,0.14) 0%, rgba(224,109,83,0.05) 40%, transparent 70%);
 
-  /* White-based Surfaces */
-  --color-background: #FAFAFA;
+  /* Primary — Deep founder green (Artisan-inspired) */
+  --color-primary: #0F4C3A;
+  --color-primary-start: #0F4C3A;
+  --color-primary-end: #1F6B5C;
+  --color-primary-hover: #0A3B2C;
+  --color-primary-light: #34D399;
+  --color-primary-subtle: rgba(15, 76, 58, 0.08);
+  --color-primary-border: rgba(15, 76, 58, 0.2);
+
+  /* Secondary — Warm coral accent */
+  --color-secondary: #E06D53;
+  --color-secondary-hover: #C95A42;
+  --color-secondary-subtle: rgba(224, 109, 83, 0.10);
+
+  /* Warm Cream Surfaces (light mode defaults) */
+  --color-background: #FDFBF7;
   --color-surface: #FFFFFF;
-  --color-surface-raised: #F4F0FF;
-  --color-surface-overlay: rgba(124, 53, 220, 0.04);
-  --color-border: #E8E0F5;
-  --color-border-subtle: #F0ECF9;
+  --color-surface-raised: #F7F4EE;
+  --color-surface-overlay: rgba(15, 76, 58, 0.03);
+  --color-border: #E7E5E4;
+  --color-border-subtle: #F0EEE9;
 
-  /* Typography */
-  --color-text-primary: #1A0A2E;
-  --color-text-secondary: #5A4A7A;
-  --color-text-muted: #9B8AB0;
+  /* Typography colors */
+  --color-text-primary: #1C1917;
+  --color-text-secondary: #57534E;
+  --color-text-muted: #78716C;
 
-  /* Type system tokens — aligned with genleadai.com (Space Grotesk display + Inter body) */
-  --font-display: 'Space Grotesk', 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+  /* Type system — Outfit for headings, Manrope for body (Artisan-inspired) */
+  --font-display: 'Outfit', 'Space Grotesk', system-ui, sans-serif;
+  --font-sans: 'Manrope', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', monospace;
 
   /* Semantic */
-  --color-success: #16A34A;
-  --color-warning: #D97706;
-  --color-danger: #DC2626;
-  --color-info: #7C35DC;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #E06D53;
+  --color-info: #0F4C3A;
 
-  /* Shadows */
-  --shadow-card: 0 1px 3px rgba(124,53,220,0.08), 0 4px 16px rgba(124,53,220,0.04);
-  --shadow-hover: 0 4px 24px rgba(124,53,220,0.16);
-  --shadow-glow: 0 0 32px rgba(192,68,224,0.25);
-  --shadow-deep: 0 24px 64px -16px rgba(124,53,220,0.25), 0 8px 24px rgba(26,15,56,0.08);
+  /* Shadows — soft & calm, no purple glow */
+  --shadow-card: 0 1px 2px rgba(28,25,23,0.04), 0 4px 12px rgba(28,25,23,0.04);
+  --shadow-hover: 0 4px 20px rgba(28,25,23,0.08), 0 2px 6px rgba(28,25,23,0.04);
+  --shadow-glow: 0 0 40px rgba(15,76,58,0.10);
+  --shadow-deep: 0 20px 50px -12px rgba(28,25,23,0.12), 0 8px 20px rgba(28,25,23,0.06);
+  --shadow-drawer: 0 8px 40px rgba(28,25,23,0.10);
 
-  /* Premium Dark Sidebar (GenLeadAI brand) */
-  --sidebar-bg: #0E0820;
-  --sidebar-bg-end: #1A0F38;
-  --sidebar-text: #C5B7E0;
-  --sidebar-text-muted: #7B6D9C;
-  --sidebar-active-bg: rgba(192, 68, 224, 0.12);
-  --sidebar-active-border: #C044E0;
-  --sidebar-hover-bg: rgba(255,255,255,0.04);
-  --sidebar-divider: rgba(255,255,255,0.06);
+  /* Sidebar — matches app bg in light mode (Notion-calm), deep green in dark */
+  --sidebar-bg: #F7F4EE;
+  --sidebar-bg-end: #FDFBF7;
+  --sidebar-text: #1C1917;
+  --sidebar-text-muted: #78716C;
+  --sidebar-active-bg: rgba(15, 76, 58, 0.10);
+  --sidebar-active-border: #0F4C3A;
+  --sidebar-hover-bg: rgba(28, 25, 23, 0.04);
+  --sidebar-divider: rgba(28, 25, 23, 0.06);
 
-  /* ─── THEMED TOKENS (Aria Dashboard spec) ────────────────────────
-   * Use these (--theme-*) for any NEW dashboard component that
-   * needs to flip with dark/light mode. The defaults below mirror
-   * the dark palette so initial paint is correct. The
-   * [data-theme="light"] block redefines them for light mode.
+  /* ─── THEMED TOKENS (used across all dashboards + components) ─────
+   * Defaults reflect LIGHT mode. Dark mode redefines below.
    */
-  --theme-bg: #0a0a0f;
-  --theme-surface: #12121a;
-  --theme-surface2: #1a1a26;
-  --theme-border: rgba(255,255,255,0.06);
-  --theme-border-strong: rgba(255,255,255,0.10);
-  --theme-text: #f1f0f5;
-  --theme-text-muted: #8b8a99;
-  --theme-text-dim: #4a4958;
-  /* Accent palette — identical in both modes */
-  --theme-purple: #7c3aed;
-  --theme-purple-light: #a78bfa;
-  --theme-purple-dim: rgba(124,58,237,0.14);
-  --theme-amber: #f59e0b;
-  --theme-amber-dim: rgba(245,158,11,0.16);
-  --theme-teal: #0d9488;
-  --theme-teal-dim: rgba(13,148,136,0.16);
-  --theme-green: #22c55e;
-  --theme-red: #ef4444;
-  --theme-blue: #60a5fa;
+  --theme-bg: #FDFBF7;
+  --theme-surface: #FFFFFF;
+  --theme-surface2: #F7F4EE;
+  --theme-border: #E7E5E4;
+  --theme-border-strong: #D6D3D1;
+  --theme-text: #1C1917;
+  --theme-text-muted: #57534E;
+  --theme-text-dim: #A8A29E;
+  /* Accent palette — deep green primary + coral secondary */
+  --theme-purple: #0F4C3A;             /* aliased to primary for backward-compat */
+  --theme-purple-light: #1F6B5C;
+  --theme-purple-dim: rgba(15,76,58,0.10);
+  --theme-primary: #0F4C3A;
+  --theme-primary-light: #1F6B5C;
+  --theme-primary-dim: rgba(15,76,58,0.10);
+  --theme-secondary: #E06D53;
+  --theme-secondary-dim: rgba(224,109,83,0.12);
+  --theme-amber: #F59E0B;
+  --theme-amber-dim: rgba(245,158,11,0.14);
+  --theme-teal: #14B8A6;
+  --theme-teal-dim: rgba(20,184,166,0.14);
+  --theme-green: #10B981;
+  --theme-red: #E06D53;
+  --theme-blue: #3B82F6;
 }
 
+/* Dark mode — warm-neutral (not cold blue-black). Deep espresso + emerald. */
+html[data-theme="dark"] {
+  --color-background: #0C0A09;
+  --color-surface: #1C1917;
+  --color-surface-raised: #292524;
+  --color-border: #292524;
+  --color-border-subtle: #1C1917;
+  --color-text-primary: #FAFAF9;
+  --color-text-secondary: #D6D3D1;
+  --color-text-muted: #A8A29E;
+
+  --sidebar-bg: #0C0A09;
+  --sidebar-bg-end: #14110F;
+  --sidebar-text: #FAFAF9;
+  --sidebar-text-muted: #A8A29E;
+  --sidebar-active-bg: rgba(52, 211, 153, 0.14);
+  --sidebar-active-border: #34D399;
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.04);
+  --sidebar-divider: rgba(255, 255, 255, 0.06);
+
+  --theme-bg: #0C0A09;
+  --theme-surface: #1C1917;
+  --theme-surface2: #292524;
+  --theme-border: #292524;
+  --theme-border-strong: #44403C;
+  --theme-text: #FAFAF9;
+  --theme-text-muted: #D6D3D1;
+  --theme-text-dim: #78716C;
+
+  /* Dark accent tokens — emerald primary, warm coral secondary */
+  --theme-purple: #34D399;
+  --theme-purple-light: #6EE7B7;
+  --theme-purple-dim: rgba(52,211,153,0.14);
+  --theme-primary: #34D399;
+  --theme-primary-light: #6EE7B7;
+  --theme-primary-dim: rgba(52,211,153,0.14);
+  --theme-secondary: #FB7185;
+  --theme-secondary-dim: rgba(251,113,133,0.14);
+}
+
+/* Light mode is DEFAULT — explicit data-theme="light" also matches defaults */
 html[data-theme="light"] {
-  --theme-bg: #f8f7ff;
-  --theme-surface: #ffffff;
-  --theme-surface2: #f1f0f8;
-  --theme-border: #e2e0f0;
-  --theme-border-strong: #cbc5e0;
-  --theme-text: #0f0e17;
-  --theme-text-muted: #6b6880;
-  --theme-text-dim: #9c9aaa;
+  /* All defaults above already reflect light mode. Empty block kept for
+     specificity parity with dark selector. */
 }
 
 /* Smooth swap on background + border only (not text — avoids FOUT). */
@@ -133,22 +183,19 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--theme-bg);
-  color: var(--color-text-primary);
+  color: var(--theme-text);
   font-feature-settings: "ss01" on, "cv11" on;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-h1, h2, h3, h4, h5, h6, .heading {
-  font-family: var(--font-sans);
-}
-
-/* Premium magazine-style display headings (matches genleadai.com hero typography) */
-.font-display {
+h1, h2, h3, h4, h5, h6, .heading, .font-display {
   font-family: var(--font-display);
-  font-weight: 700;
   letter-spacing: -0.02em;
-  font-feature-settings: "liga" on, "calt" on, "ss01" on;
+  font-feature-settings: "liga" on, "calt" on;
 }
+h1, h2, h3 { font-weight: 600; }
+h4, h5, h6 { font-weight: 500; }
+
 .font-display-italic {
   font-family: var(--font-display);
   font-style: italic;
@@ -169,7 +216,7 @@ code, .mono {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ━━━ ARIA motion + texture utilities ━━━ */
+/* ━━━ ARIA motion + texture utilities (retained + tuned for calm palette) ━━ */
 @keyframes ariaFadeUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -179,9 +226,9 @@ code, .mono {
   50% { transform: translateX(100%); }
 }
 @keyframes ariaPulseRing {
-  0% { box-shadow: 0 0 0 0 rgba(192,68,224,0.45); }
-  70% { box-shadow: 0 0 0 14px rgba(192,68,224,0); }
-  100% { box-shadow: 0 0 0 0 rgba(192,68,224,0); }
+  0% { box-shadow: 0 0 0 0 rgba(15,76,58,0.35); }
+  70% { box-shadow: 0 0 0 14px rgba(15,76,58,0); }
+  100% { box-shadow: 0 0 0 0 rgba(15,76,58,0); }
 }
 @keyframes ariaGlow {
   0%, 100% { opacity: 0.6; }
@@ -196,39 +243,65 @@ code, .mono {
 .aria-pulse-ring { animation: ariaPulseRing 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
 .aria-glow { animation: ariaGlow 3s ease-in-out infinite; }
 
-/* Subtle grain texture for premium dark hero panels */
+/* Grain overlay for premium hero panels (subtle now — cream needs less texture) */
 .aria-grain::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  opacity: 0.07;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.05;
   mix-blend-mode: overlay;
   border-radius: inherit;
 }
 
-/* Premium card lift on hover (use additively, not on every card) */
+/* Calm card lift on hover (Notion-esque) */
 .aria-card-lift {
-  transition: transform 0.3s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.3s cubic-bezier(0.2,0.8,0.2,1), border-color 0.3s ease;
+  transition: transform 0.24s cubic-bezier(0.2,0.8,0.2,1),
+              box-shadow 0.24s cubic-bezier(0.2,0.8,0.2,1),
+              border-color 0.24s ease;
 }
 .aria-card-lift:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: var(--shadow-hover);
+  border-color: var(--theme-primary-dim);
 }
 
-/* Gradient text for hero numbers */
+/* Gradient text — deep green ↔ coral (replaces old purple gradient) */
 .aria-gradient-text {
-  background: linear-gradient(135deg, #7C35DC 0%, #C044E0 100%);
+  background: linear-gradient(135deg, #0F4C3A 0%, #E06D53 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
 .aria-gradient-text-light {
-  background: linear-gradient(135deg, #FFFFFF 0%, #C9B6FF 100%);
+  background: linear-gradient(135deg, #FAFAF9 0%, #E7E5E4 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
+
+/* iter163 — Bento-box widget card recipe */
+.bento-card {
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
+  border-radius: 1.25rem; /* rounded-[20px] */
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.24s ease, border-color 0.24s ease, transform 0.24s ease;
+}
+.bento-card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+/* iter163 — Section tag ("eyebrow" mini-headline) */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+}
+
