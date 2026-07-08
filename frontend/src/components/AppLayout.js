@@ -324,7 +324,7 @@ const SidebarLeadStrip = ({ leadCounts, onClick }) => {
           }}
           data-testid={`sidebar-lead-strip-dot-${hasLeads ? 'active' : 'empty'}`}
         />
-        <span className="text-xs font-extrabold text-white tracking-wide" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+        <span className="text-xs font-extrabold tracking-wide" style={{ fontFamily: 'var(--font-display)', color: 'var(--sidebar-text)' }}>
           {total.toLocaleString()} Lead{total === 1 ? '' : 's'}
         </span>
       </div>
@@ -339,10 +339,10 @@ const SidebarLeadStrip = ({ leadCounts, onClick }) => {
             key={s.key}
             data-testid={`sidebar-lead-chip-${s.key}`}
             className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--sidebar-text)' }}
+            style={{ background: 'var(--sidebar-hover-bg)', color: 'var(--sidebar-text)' }}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.dot }} />
-            {s.label} <span className="text-white">{stages[s.key] || 0}</span>
+            {s.label} <span style={{ color: 'var(--sidebar-text)', fontWeight: 800 }}>{stages[s.key] || 0}</span>
           </span>
         ))}
       </div>
