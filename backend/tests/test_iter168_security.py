@@ -81,6 +81,17 @@ class TestSEC002LegacyLeadsTenantScoped:
         assert r.status_code == 200, r.text
         data = r.json()
         assert "leads" in data
+        assert "segments" in data
+
+    def test_sleeping_threshold_days_param(self, hdr):
+        r = requests.get(f"{BASE_URL}/api/leads/sleeping?threshold_days=30", headers=hdr, timeout=15)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "leads" in data and "segments" in data
+
+    def test_sleeping_deprecated_returns_410(self, hdr):
+        r = requests.get(f"{BASE_URL}/api/leads/sleeping-deprecated", headers=hdr, timeout=15)
+        assert r.status_code == 410, f"expected 410 got {r.status_code} {r.text}"
 
     def test_no_duplicate_sleeping_route(self):
         # Grep server.py — must have only ONE @app.get("/api/leads/sleeping")

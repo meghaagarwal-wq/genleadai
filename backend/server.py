@@ -473,6 +473,50 @@ async def get_your_five_today_route(current_user: dict = Depends(get_current_use
     scored.sort(key=lambda x: x["_rank_score"], reverse=True)
     return {"leads": scored[:5], "generated_at": now.isoformat()}
 
+@app.get("/api/leads/sleeping")
+async def get_sleeping_leads(
+    threshold_days: int = 14,
+    tier: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get leads with no activity beyond threshold days.
+
+    iter168 — this handler MUST be registered before @app.get('/api/leads/{lead_id}')
+    otherwise FastAPI matches 'sleeping' as a lead_id parameter and returns 404.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
+    query = {
+        "tenant_id": current_user.get("tenant_id"),
+        "status": {"$nin": ["won", "lost", "do_not_contact"]},
+        "$or": [
+            {"last_contacted_at": {"$lt": cutoff}},
+            {"last_contacted_at": None},
+            {"last_contacted_at": {"$exists": False}},
+        ]
+    }
+    leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
+    leads = [serialize_doc(l) for l in leads]
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        lc = lead.get("last_contacted_at")
+        if lc:
+            try:
+                days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
+            except Exception:
+                days = 30
+        else:
+            try:
+                days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
+            except Exception:
+                days = 30
+        lead["_days_asleep"] = days
+        lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
+    sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
+    at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
+    cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
+    return {"leads": leads, "total": len(leads), "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault}}
+
+
 @app.get("/api/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     # Try ObjectId lookup first (legacy CRM leads). If lead_id isn't a valid
@@ -1324,50 +1368,15 @@ async def get_aria_feed(current_user: dict = Depends(get_current_user)):
 # MODULE: SLEEPING LEADS + REVIVAL ENGINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@app.get("/api/leads/sleeping")
-async def get_sleeping_leads(
+@app.get("/api/leads/sleeping-deprecated")
+async def get_sleeping_leads_deprecated_stub(
     threshold_days: int = 14,
     tier: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get leads with no activity beyond threshold days."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
-    query = {
-        "tenant_id": current_user.get("tenant_id"),
-        "status": {"$nin": ["won", "lost", "do_not_contact"]},
-        "$or": [
-            {"last_contacted_at": {"$lt": cutoff}},
-            {"last_contacted_at": None},
-            {"last_contacted_at": {"$exists": False}},
-        ]
-    }
-
-    leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
-    leads = [serialize_doc(l) for l in leads]
-
-    now = datetime.now(timezone.utc)
-    for lead in leads:
-        lc = lead.get("last_contacted_at")
-        if lc:
-            try:
-                days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
-            except:
-                days = 30
-        else:
-            days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
-        lead["_days_asleep"] = days
-        lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
-
-    # Segment counts
-    sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
-    at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
-    cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
-
-    return {
-        "leads": leads,
-        "total": len(leads),
-        "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault},
-    }
+    """iter168 — duplicate handler removed. Canonical implementation lives
+    above /api/leads/{lead_id} route to avoid path shadowing."""
+    raise HTTPException(status_code=410, detail="Deprecated — see /api/leads/sleeping (canonical) above /api/leads/{lead_id}")
 
 class RevivalCampaignRequest(BaseModel):
     lead_ids: List[str]
@@ -1434,7 +1443,7 @@ async def launch_revival_campaign(request: RevivalCampaignRequest, current_user:
 
             # Update lead
             leads_collection.update_one(
-                {"_id": ObjectId(lead_id)},
+                {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
                 {"$set": {
                     "last_contacted_at": datetime.now(timezone.utc).isoformat(),
                     "status": "contacted",
