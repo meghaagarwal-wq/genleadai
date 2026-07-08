@@ -13,6 +13,14 @@ const LeadFeed = ({ embedded = false }) => {
   const [showCsv, setShowCsv] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState(null);
+  // iter166 — view mode (table | kanban) with localStorage persistence
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem('leadfeed.view') || 'table'; } catch { return 'table'; }
+  });
+  const setView = (v) => {
+    setViewMode(v);
+    try { localStorage.setItem('leadfeed.view', v); } catch (_e) { /* ignore */ }
+  };
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -140,6 +148,34 @@ const LeadFeed = ({ embedded = false }) => {
                 {newSinceLastSeen} new
               </button>
             )}
+            {/* iter166 — Table ⇄ Kanban view toggle */}
+            <div
+              className="inline-flex items-center p-0.5 rounded-full border"
+              style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}
+              data-testid="leadfeed-view-toggle"
+              role="tablist"
+              aria-label="Lead view"
+            >
+              {[
+                { key: 'table', label: 'Table' },
+                { key: 'kanban', label: 'Kanban' },
+              ].map((v) => (
+                <button
+                  key={v.key}
+                  role="tab"
+                  aria-selected={viewMode === v.key}
+                  onClick={() => setView(v.key)}
+                  data-testid={`leadfeed-view-${v.key}`}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+                  style={{
+                    color: viewMode === v.key ? 'var(--theme-primary)' : 'var(--theme-text-muted)',
+                    background: viewMode === v.key ? 'var(--theme-surface)' : 'transparent',
+                    boxShadow: viewMode === v.key ? '0 1px 3px rgba(28,25,23,0.08)' : 'none',
+                    fontFamily: 'var(--font-display)',
+                  }}
+                >{v.label}</button>
+              ))}
+            </div>
             <button onClick={runBatchIntel} disabled={batchBusy} data-testid="scan-all-hot-leads-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
               style={{ background: 'var(--theme-primary)' }}>
@@ -233,6 +269,16 @@ const LeadFeed = ({ embedded = false }) => {
             </div>
           }
         />
+      ) : viewMode === 'kanban' ? (
+        <KanbanBoard leads={leads} onCard={(id) => navigate(`/app/leads/${id}`)} onStageChange={async (leadId, newStage) => {
+          try {
+            await ptApi.patch(`/api/pt/leads/${leadId}`, { stage: newStage });
+            setLeads((xs) => xs.map((l) => l.id === leadId ? { ...l, stage: newStage } : l));
+            toast.success('Stage updated');
+          } catch (e) {
+            toast.error(e?.response?.data?.detail || 'Could not update stage');
+          }
+        }} />
       ) : (
         <div className="bg-white border border-[var(--theme-border-strong)] rounded-lg overflow-x-auto" data-testid="pt-leadfeed-table">
           <table className="w-full text-sm">
@@ -272,6 +318,110 @@ const LeadFeed = ({ embedded = false }) => {
     </div>
   );
 };
+
+// iter166 — KanbanBoard: HTML5 native drag-drop grouped by stage.
+// Columns: New · Engaged · Warm · Hot · Session/Pilot · Cold. Cards can
+// be dragged between columns to change stage — hits PATCH /api/pt/leads.
+const KANBAN_STAGES = [
+  { key: 'new',            label: 'New',           color: '#3B82F6', bg: 'rgba(59,130,246,0.08)' },
+  { key: 'engaged',        label: 'Engaged',       color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  { key: 'warm',           label: 'Warm',          color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' },
+  { key: 'hot',            label: 'Hot',           color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
+  { key: 'session_pilot',  label: 'Session/Pilot', color: '#0F4C3A', bg: 'rgba(15,76,58,0.10)' },
+  { key: 'cold',           label: 'Cold',          color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
+];
+
+const KanbanBoard = ({ leads, onCard, onStageChange }) => {
+  const [dragId, setDragId] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+  const grouped = KANBAN_STAGES.map((s) => ({
+    ...s,
+    items: leads.filter((l) => (l.stage || 'cold').toLowerCase() === s.key),
+  }));
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2" data-testid="pt-leadfeed-kanban" style={{ minHeight: 400 }}>
+      {grouped.map((col) => (
+        <div
+          key={col.key}
+          data-testid={`kanban-column-${col.key}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(col.key); }}
+          onDragLeave={() => setDragOver((c) => c === col.key ? null : c)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(null);
+            if (dragId) {
+              const lead = leads.find((l) => l.id === dragId);
+              if (lead && (lead.stage || 'cold').toLowerCase() !== col.key) {
+                onStageChange(dragId, col.key);
+              }
+              setDragId(null);
+            }
+          }}
+          className="shrink-0 w-[280px] rounded-2xl border p-3 flex flex-col gap-2 transition-colors"
+          style={{
+            background: dragOver === col.key ? col.bg : 'var(--theme-surface)',
+            borderColor: dragOver === col.key ? col.color : 'var(--theme-border)',
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: col.color }} aria-hidden="true" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>{col.label}</span>
+            </div>
+            <span
+              className="text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums"
+              style={{ background: col.bg, color: col.color }}
+              data-testid={`kanban-count-${col.key}`}
+            >{col.items.length}</span>
+          </div>
+          <div className="flex-1 space-y-2 min-h-[80px]">
+            {col.items.length === 0 && (
+              <div className="text-center py-8 text-[11px] italic" style={{ color: 'var(--theme-text-dim)' }}>
+                Drop here
+              </div>
+            )}
+            {col.items.map((l, i) => (
+              <div
+                key={`${l.id}__${l.email || i}`}
+                draggable
+                onDragStart={() => setDragId(l.id)}
+                onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                onClick={() => onCard(l.id)}
+                data-testid={`kanban-card-${l.id}`}
+                className="rounded-xl border p-3 cursor-pointer transition-transform hover:-translate-y-0.5 hover:shadow-sm"
+                style={{
+                  background: 'var(--theme-surface)',
+                  borderColor: 'var(--theme-border)',
+                  opacity: dragId === l.id ? 0.55 : 1,
+                  borderLeft: `3px solid ${col.color}`,
+                }}
+                title="Drag to change stage · click to open"
+              >
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--theme-text)' }}>
+                  {l.first_name} {l.last_name}
+                </div>
+                <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+                  {l.company_name || l.email || '—'}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}>
+                    {l.score ?? 0}
+                  </span>
+                  {l.latest_signal && (
+                    <span className="text-[10px] truncate flex-1" style={{ color: 'var(--theme-text-muted)' }}>
+                      {l.latest_signal}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 
 const AddLeadModal = ({ onClose, onSaved }) => {
   const [f, setF] = useState({ first_name: '', last_name: '', email: '', company_name: '', title: '', linkedin_url: '', source: 'manual', industry: '', employee_count: '', geography: '', icp_fit: 'match', owner: 'Content Vista' });
