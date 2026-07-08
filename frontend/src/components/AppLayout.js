@@ -32,6 +32,7 @@ import AriaAvatar from './AriaAvatar';
 import AriaToastWatcher from './AriaToastWatcher';
 import AriaTourModal from './AriaTourModal';
 import AiSummaryDrawer from './AiSummaryDrawer';
+import AriaCompanionDrawer from './AriaCompanionDrawer';
 import api from '../config/api';
 
 // ── Nav definition ──────────────────────────────────────────────────────
@@ -648,6 +649,7 @@ const AppLayout = ({ children }) => {
       <AriaToastWatcher />
       <AriaTourModal />
       <AiSummaryDrawer open={aiSummaryOpen} onClose={() => setAiSummaryOpen(false)} />
+      <AriaCompanionDrawer />
     </div>
   );
 };

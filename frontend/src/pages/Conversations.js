@@ -78,31 +78,40 @@ const Conversations = () => {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-1">Live Threads</div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversations</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Urgent and negative sentiment leads float to the top automatically.</p>
+          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[var(--theme-primary)] mb-1">Live Threads</div>
+          <h1 className="text-3xl font-extrabold text-[var(--theme-text)]" style={{ fontFamily: 'var(--font-display)' }}>Conversations</h1>
+          <p className="text-sm text-[var(--theme-text-muted)] mt-1">Urgent and negative sentiment leads float to the top automatically.</p>
         </div>
         <div className="flex items-center gap-2">
           <form onSubmit={(e) => { e.preventDefault(); load(); }} className="flex items-center gap-2">
             <div className="relative">
-              <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B8AB0]" />
+              <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--theme-text-dim)]" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or phone…" data-testid="conv-search"
-                className="pl-8 pr-3 py-2 bg-white border border-[#E8E0F5] rounded-lg text-xs w-60" />
+                className="pl-8 pr-3 py-2 border rounded-full text-xs w-60 outline-none"
+                style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }} />
             </div>
           </form>
         </div>
       </div>
 
+      {/* Keyboard hints strip (Superhuman-inspired) */}
+      <div className="hidden md:flex items-center gap-3 text-[10px]" style={{ color: 'var(--theme-text-dim)' }}>
+        <span className="inline-flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded border text-[10px] font-semibold" style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>J</kbd>/<kbd className="px-1.5 py-0.5 rounded border text-[10px] font-semibold" style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>K</kbd> navigate</span>
+        <span className="inline-flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded border text-[10px] font-semibold" style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>E</kbd> archive</span>
+        <span className="inline-flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded border text-[10px] font-semibold" style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>/</kbd> search</span>
+        <span className="inline-flex items-center gap-1"><kbd className="px-1.5 py-0.5 rounded border text-[10px] font-semibold" style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}>⌘J</kbd> ask Aria</span>
+      </div>
+
       {/* Sentiment filter pills */}
       <div className="flex items-center gap-2 flex-wrap" data-testid="sentiment-filters">        {[
-          { key: '', label: `All (${counts.all})`, color: '#7C35DC' },
+          { key: '', label: `All (${counts.all})`, color: 'var(--theme-primary)' },
           { key: 'urgent', label: `Urgent (${counts.urgent})`, color: '#DC2626' },
           { key: 'negative', label: `Negative (${counts.negative})`, color: '#D97706' },
           { key: 'positive', label: `Positive (${counts.positive})`, color: '#16A34A' },
           { key: 'neutral', label: `Neutral (${counts.neutral})`, color: '#5A4A7A' },
         ].map((p) => (
           <button key={p.key} onClick={() => applyFilter(p.key)} data-testid={`filter-${p.key || 'all'}`}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${filter === p.key ? 'text-white' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:bg-[#F9F5FF]'}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filter === p.key ? 'text-white' : 'bg-[var(--theme-surface)] text-[var(--theme-text-muted)] border-[var(--theme-border)] hover:bg-[var(--theme-surface2)]'}`}
             style={filter === p.key ? { background: p.color, borderColor: p.color } : {}}>
             {p.label}
           </button>
@@ -111,10 +120,10 @@ const Conversations = () => {
 
       {/* Aria-says microcopy */}
       {ariaSays && (
-        <div className="aria-card-lift rounded-2xl border border-[#E0D4F7] bg-gradient-to-r from-[#F4F0FF] to-[#FAFAFA] px-4 py-3 flex items-start gap-2.5" data-testid="conversations-aria-says">
-          <Sparkle size={14} weight="fill" className="text-[#7C35DC] mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-[#1A0A2E] leading-relaxed">
-            <span className="font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Aria says: </span>
+        <div className="aria-card-lift rounded-2xl border px-4 py-3 flex items-start gap-2.5" style={{ background: 'var(--theme-primary-dim)', borderColor: 'var(--theme-border)' }} data-testid="conversations-aria-says">
+          <Sparkle size={14} weight="fill" className="text-[var(--theme-primary)] mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-[var(--theme-text)] leading-relaxed">
+            <span className="font-extrabold text-[var(--theme-primary)]" style={{ fontFamily: 'var(--font-display)' }}>Aria says: </span>
             {ariaSays}
           </p>
         </div>
@@ -122,15 +131,15 @@ const Conversations = () => {
 
       {/* Threads list */}
       {loading ? (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-10 text-center text-sm text-[#9B8AB0]">Loading…</div>
+        <div className="bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl p-10 text-center text-sm text-[var(--theme-text-dim)]">Loading…</div>
       ) : threads.length === 0 ? (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-12 text-center" data-testid="no-conversations">
-          <Sparkle size={28} weight="duotone" className="text-[#7C35DC] mx-auto mb-2" />
-          <h3 className="text-base font-bold text-[#1A0A2E] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>No conversations yet</h3>
-          <p className="text-xs text-[#5A4A7A]">When leads start replying to Aria, threads will appear here.</p>
+        <div className="bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl p-12 text-center" data-testid="no-conversations">
+          <Sparkle size={28} weight="duotone" className="text-[var(--theme-primary)] mx-auto mb-2" />
+          <h3 className="text-base font-bold text-[var(--theme-text)] mb-1" style={{ fontFamily: 'var(--font-display)' }}>No conversations yet</h3>
+          <p className="text-xs text-[var(--theme-text-muted)]">When leads start replying to Aria, threads will appear here.</p>
         </div>
       ) : (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <div className="bg-[var(--theme-surface)] border border-[var(--theme-border)] rounded-xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
           {threads.map((t, idx) => {
             const sm = SENTIMENT_META[(t.latest_sentiment || 'neutral').toLowerCase()] || SENTIMENT_META.neutral;
             const Icon = sm.icon;
@@ -146,14 +155,14 @@ const Conversations = () => {
                 {/* Name + last msg */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{t.first_name || 'Lead'} {t.last_name || ''}</span>
+                    <span className="text-sm font-bold text-[var(--theme-text)]" style={{ fontFamily: 'var(--font-display)' }}>{t.first_name || 'Lead'} {t.last_name || ''}</span>
                     {!t.aria_active && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#D97706] border border-[#D97706]/30">Human</span>}
-                    <span className="text-[10px] font-mono text-[#9B8AB0]">{t.phone}</span>
+                    <span className="text-[10px] font-mono text-[var(--theme-text-dim)]">{t.phone}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-[#5A4A7A] mt-0.5">
-                    {t.last_message_role === 'aria' && <span className="text-[10px] font-bold text-[#7C35DC]">Aria:</span>}
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--theme-text-muted)] mt-0.5">
+                    {t.last_message_role === 'aria' && <span className="text-[10px] font-bold text-[var(--theme-primary)]">Aria:</span>}
                     {t.last_message_role === 'lead' && <span className="text-[10px] font-bold text-[#0055FF]">Lead:</span>}
-                    <span className="truncate">{t.last_message || <span className="italic text-[#9B8AB0]">No messages yet</span>}</span>
+                    <span className="truncate">{t.last_message || <span className="italic text-[var(--theme-text-dim)]">No messages yet</span>}</span>
                   </div>
                 </div>
 
@@ -161,14 +170,14 @@ const Conversations = () => {
                 <div className="flex-shrink-0 flex items-center gap-3">
                   {t.aria_confidence !== null && t.aria_confidence !== undefined && (
                     <div className="text-right">
-                      <div className="text-[9px] font-bold uppercase tracking-wider text-[#9B8AB0]">Confidence</div>
-                      <div className="text-xs font-extrabold text-[#7C35DC]">{Math.round((t.aria_confidence || 0) * 100)}%</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wider text-[var(--theme-text-dim)]">Confidence</div>
+                      <div className="text-xs font-extrabold text-[var(--theme-primary)]">{Math.round((t.aria_confidence || 0) * 100)}%</div>
                     </div>
                   )}
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border" style={{ background: sm.bg, borderColor: sm.color + '55', color: sm.color }}>
                     <Icon size={10} weight="fill" /> {sm.label}
                   </span>
-                  <span className="text-[10px] text-[#9B8AB0] font-mono w-16 text-right">{fmtRel(t.last_message_at)}</span>
+                  <span className="text-[10px] text-[var(--theme-text-dim)] font-mono w-16 text-right">{fmtRel(t.last_message_at)}</span>
                 </div>
               </button>
             );
