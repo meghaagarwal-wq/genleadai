@@ -244,8 +244,8 @@ const LeadFeed = ({ embedded = false }) => {
               </tr>
             </thead>
             <tbody>
-              {leads.map(l => (
-                <tr key={l.id} onClick={() => navigate(`/app/leads/${l.id}`)}
+              {leads.map((l, i) => (
+                <tr key={`${l.id}__${l.email || i}`} onClick={() => navigate(`/app/leads/${l.id}`)}
                   data-testid={`lead-row-${l.id}`}
                   className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] cursor-pointer">
                   <td className="px-3 py-2.5">

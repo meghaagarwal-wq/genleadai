@@ -627,6 +627,20 @@ async def list_leads(
             {"company_name": {"$regex": q, "$options": "i"}},
         ]
     rows = list(leads_col.find(query, {"_id": 0}).sort("last_activity_at", DESCENDING).limit(min(limit, 1000)))
+    # iter165 — dedupe on id to prevent React duplicate-key warnings when two
+    # seed scripts inserted leads with colliding id (e.g. two "Sarah Chen"
+    # profiles at different companies both getting id="ptl_demo_sarah_chen").
+    # Keep the FIRST occurrence (sorted by last_activity_at DESC → freshest).
+    _seen = set()
+    _deduped = []
+    for _r in rows:
+        _rid = _r.get("id")
+        if _rid and _rid in _seen:
+            continue
+        if _rid:
+            _seen.add(_rid)
+        _deduped.append(_r)
+    rows = _deduped
     return {"leads": rows, "total": len(rows)}
 
 
