@@ -1,3 +1,61 @@
+## Iter 165 — Duplicate-key fix + Reply Triage Conversations (Feb 2026)
+
+User: "Fix the duplicate-key warning first. Then build the split-pane
+Conversations view, but design it as a reply-triage/approval queue —
+assume each item carries an AI classification and a drafted response
+awaiting approval. Park the Kanban toggle and onboarding wizard."
+
+### Bug fix — React duplicate-key warning on /app/leads
+- Root cause: 3 pairs of `pt_leads` share generated IDs
+  (`ptl_demo_sarah_chen`, `ptl_demo_arjun_mehta`,
+  `ptl_demo_james_whitfield`) because two seed scripts each inserted
+  a "Sarah Chen" (etc.) at different companies with colliding IDs.
+- Fixed with a two-layer defense:
+  1. **Backend dedupe** in `GET /api/pt/leads` (`routes/pietential.py`
+     `list_leads`) — after Mongo query, keep first occurrence per id
+     (sorted by last_activity DESC → freshest wins). Response goes
+     from 16 → 13 unique leads.
+  2. **Frontend composite key** in `LeadFeed.js .map` uses
+     `${l.id}__${l.email || i}` so React never sees dupes even if
+     backend later regresses.
+
+### New feature — Reply Triage Queue (Conversations rewrite)
+- Entirely rebuilt `pages/Conversations.js` (~520 lines) as a
+  Superhuman-inspired split-pane approval triage view.
+- **Data source**: `GET /api/approvals` (pending_outreach with
+  `status=awaiting_owner_approval`) — 3 seeded items in ten_demo.
+- **Left pane** (380px): scrollable list of pending drafts. Each row
+  shows avatar (initials) + name + company + draft snippet +
+  3 classification pills (stage HOT/WARM/ENGAGED/COLD · channel
+  LinkedIn/Email/WhatsApp/SMS · AI confidence %) + age.
+- **Right pane**: selected item's full detail:
+  - Lead header (name + stage badge + score + company + queued-ago)
+  - ARIA callout with `ai_model` + `reason_for_review` + colored
+    confidence bar (green ≥75%, amber ≥50%, red < 50%)
+  - Drafted body (with subject for email channel)
+  - Actions: **Reject** (with reason input) · **Edit** (inline
+    subject/body → Save & send) · **Approve & send**
+- **Keyboard shortcuts** (Superhuman-style):
+  - `J` / `↓` next · `K` / `↑` prev · `E` approve · `R` reject ·
+    `/` focus search · `Esc` unfocus input · `Cmd/Ctrl+J` open ARIA
+  - Shortcuts don't fire while typing in inputs/textareas.
+- **Filter pills**: All (N) · High conf (≥75%) · Medium (50-74%) · Low
+  (<50%).
+- **Wired actions**: `POST /api/approvals/{id}/approve|edit-send|reject`.
+- **Kanban toggle + onboarding wizard**: parked per user instruction.
+
+### Verified (testing_agent iter165)
+- 100% pass on backend (5/5 endpoints) + frontend.
+- Duplicate-key console errors: **0** on /app/leads.
+- Triage page renders 3 pending approvals with correct pills.
+- Keyboard J/K/E/R/`/` shortcuts functional.
+- Edit + Reject inline flows verified.
+- Regression: ARIA drawer, light theme, demo mode switcher all intact.
+
+---
+
+
+
 ## Iter 164 — "Calm Intelligence" Chunk B (Feb 2026)
 
 User: "Credits Recharged. Please Continue." (green-light for Chunk B).
