@@ -1,3 +1,58 @@
+## Iter 163 — "Calm Intelligence" UI/UX overhaul (Chunk A) — Feb 2026
+
+User: "now work on UI UX of the demo dashboard and the app make it optimised
+and something founder and business owners would wanna get hooked on to and
+use it as their SSOT for all b2b, b2c and hybrid"
+
+### User preferences (verbatim)
+- Scope: Full app overhaul (dashboards + workspace pages)
+- Vibe: Calm intelligence (Notion/Attio) + ARIA-as-friend companion drawer
+- Visual: Light-first, warm founder palette + auto-adaptive dark toggle
+- Inspiration: Artisan.co
+- Must-preserve: nothing sacred
+
+### Design system shipped (design_agent brief → `/app/design_guidelines.json`)
+- Warm cream (#FDFBF7) light theme + warm espresso (#0C0A09) dark theme
+- Deep founder green primary (#0F4C3A) + coral secondary (#E06D53)
+- Outfit for display type + Manrope for body (Artisan-inspired)
+- Rounded-2xl bento cards, soft shadow-card + shadow-hover
+- New CSS utility classes: `.bento-card`, `.eyebrow`, calm hover animations
+
+### Chunk A shipped
+- **Global design tokens** in `frontend/src/index.css` — all `--theme-*` vars
+  rewritten. Existing components using CSS variables auto-inherit new palette.
+- **Default theme flipped** from dark → light in `ThemeContext.js`.
+- **AppLayout sidebar + header** now use theme-aware colors (cream sidebar in
+  light mode, warm espresso in dark). Search box + AI Summary button + mode
+  chip repainted to green/coral palette.
+- **DemoModeSwitcher** rebuilt as a Notion-style pill toggle inside a bordered
+  cream capsule. Active pill uses white background + primary green text.
+- **B2C / B2B Founder / B2B Sales dashboard headers** restyled with eyebrow
+  tag + 32px Outfit heading + neutral bordered refresh button (no more purple
+  gradient buttons).
+- **Integrations page** auto-inherited the new palette via CSS variables —
+  cards, filter pills, connect buttons all warm-cream + green.
+
+### Chunk A verified (testing_agent iter163)
+- Backend regression: 6/6 endpoints pass (login, tenants/me, dashboard/b2c,
+  b2b-founder, b2b-sales, integration-showcase).
+- Frontend: default light theme, theme toggle persistence, mode switcher
+  persistence, all 3 dashboards render, integrations grid renders, sidebar
+  nav works, no console errors, no missing CSS variables.
+- Only noise: pre-existing Recharts width/height=-1 warnings (unrelated).
+
+### Chunk B — next session
+- Leads page: Attio-style spreadsheet + Kanban toggle
+- Conversations: Superhuman-style triage inbox
+- ARIA companion drawer (persistent right-side, Cmd+J shortcut, brief AI
+  cards: "Aria noticed / drafted / suggests")
+- Command Center greeting card + founder-hook micro-interactions
+- Onboarding wizard polish
+
+---
+
+
+
 ## Iter 162 — OAuth callback URL blocker fixed (Feb 2026)
 
 User: "OAuth callback URL blocker in oauth_integrations.py still open from the previous session — may block redeploy."
