@@ -1368,15 +1368,8 @@ async def get_aria_feed(current_user: dict = Depends(get_current_user)):
 # MODULE: SLEEPING LEADS + REVIVAL ENGINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@app.get("/api/leads/sleeping-deprecated")
-async def get_sleeping_leads_deprecated_stub(
-    threshold_days: int = 14,
-    tier: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """iter168 — duplicate handler removed. Canonical implementation lives
-    above /api/leads/{lead_id} route to avoid path shadowing."""
-    raise HTTPException(status_code=410, detail="Deprecated — see /api/leads/sleeping (canonical) above /api/leads/{lead_id}")
+# iter169 — deprecated /api/leads/sleeping stub removed. Canonical
+# tenant-scoped handler lives above /api/leads/{lead_id} (line ~476).
 
 class RevivalCampaignRequest(BaseModel):
     lead_ids: List[str]

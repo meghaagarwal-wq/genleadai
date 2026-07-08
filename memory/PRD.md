@@ -1,3 +1,41 @@
+## Iter 168-169 — Security Audit Remediation (Feb 2026)
+
+User: "Run the Security Audit on the deployed app."
+
+### Audit findings (SecurityAuditAgent — read-only)
+- **VERDICT**: FAIL — ACTION REQUIRED. 3 HIGH BOLA defects + 2 MEDIUM.
+- **SEC-001 HIGH** — Pietential lead write/delete/ask-aria missing tenant filter (routes/pietential.py:678,690,713)
+- **SEC-002 HIGH** — Legacy /api/leads/your-five-today + /api/leads/sleeping (duplicate) returned ALL tenants' PII (server.py:407,473)
+- **SEC-003 HIGH** — 7 ARIA endpoints acted on any lead cross-tenant (server.py:1038,1088,1147,1170,1199,1382,1464)
+- **SEC-004 MEDIUM** — Unescaped $regex in list_leads → ReDoS (routes/pietential.py:617,624)
+- **SEC-005 MEDIUM** — CSV import missing tenant_id + no size cap (server.py:740-777)
+
+### iter168 fixes
+- **SEC-001**: added `**_tf(current_user)` to `patch_lead`, `delete_lead`, `ask_aria_pt` filters in routes/pietential.py.
+- **SEC-002**: removed duplicate unscoped `/api/leads/sleeping`; added `tenant_id` filter to `/api/leads/your-five-today`.
+- **SEC-003**: added `"tenant_id": current_user.get("tenant_id")` to all 7 ARIA endpoints (`trigger`, `reply`, `conversation`, `takeover`, `resume`, `revival-campaign`, `no-show-recovery`) — including the update_one calls (defense-in-depth from code review).
+- **SEC-004**: `re.escape()` + 100-char cap on `q` and `title` regex inputs.
+- **SEC-005**: CSV import now enforces content-type check, 5 MB size cap, 5000-row cap, stamps `tenant_id` on every imported lead.
+
+### iter169 regression fix
+- **Route shadowing**: iter168 removed a duplicate `/api/leads/sleeping` handler; the surviving tenant-scoped handler was registered AFTER `/api/leads/{lead_id}` so FastAPI matched 'sleeping' as a lead_id → 404. Fixed by relocating the canonical handler ABOVE `/api/leads/{lead_id}`. Dead stub deleted.
+
+### Verified (testing_agent iter168 + iter169)
+- iter168: 24/25 pass (1 routing regression).
+- iter169: 26/27 pass (only cosmetic dead-stub issue, then deleted).
+- All 5 SEC findings verified fixed.
+- Foreign IDs return 404. Real ten_demo IDs still work. All prior regression endpoints unaffected.
+
+### Deferred hardening (P3 — future session)
+- JWT stored in localStorage — consider httpOnly cookie or shorter expiry with refresh.
+- `/api/auth/signup` add per-IP rate limit.
+- Server-side OAuth redirect_uri allowlist (defense-in-depth over provider registration).
+- Refactor: server.py is now >1400 lines — split into route modules.
+
+---
+
+
+
 ## Iter 166-167 — Chunk C: Leads Kanban + Onboarding polish (Feb 2026)
 
 User: option (d) — Leads Kanban + Onboarding polish, skip read-only Conversations Inbox.
