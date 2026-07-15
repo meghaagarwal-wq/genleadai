@@ -175,32 +175,32 @@ const OnboardingWizard = () => {
   const Step = STEPS[step];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #FAFAFA 0%, #F4F0FF 100%)' }} data-testid="onboarding-wizard">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #FAFAFA 0%, var(--theme-primary-dim) 100%)' }} data-testid="onboarding-wizard">
       <Toaster position="top-center" richColors closeButton />
       <div className="w-full max-w-2xl">
         {/* Progress */}
         <div className="flex items-center gap-2 mb-6">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex-1">
-              <div className={`h-1.5 rounded-full transition-all ${i < step ? 'bg-[#7C35DC]' : i === step ? 'bg-[#7C35DC]' : 'bg-[#E8E0F5]'}`} />
-              <div className={`text-[10px] font-bold uppercase tracking-[0.16em] mt-1.5 text-center ${i <= step ? 'text-[#7C35DC]' : 'text-[#9B8AB0]'}`}>{s.title}</div>
+              <div className={`h-1.5 rounded-full transition-all ${i < step ? 'bg-[var(--theme-primary)]' : i === step ? 'bg-[var(--theme-primary)]' : 'bg-[var(--theme-border)]'}`} />
+              <div className={`text-[10px] font-bold uppercase tracking-[0.16em] mt-1.5 text-center ${i <= step ? 'text-[var(--theme-primary)]' : 'text-[var(--theme-text-dim)]'}`}>{s.title}</div>
             </div>
           ))}
         </div>
 
-        <div className="bg-white border border-[#E8E0F5] rounded-2xl p-7 shadow-[0_24px_64px_-12px_rgba(76,29,149,0.18)]" data-testid={`onboarding-step-${Step.id}`}>
+        <div className="bg-white border border-[var(--theme-border)] rounded-2xl p-7 shadow-[0_24px_64px_-12px_rgba(76,29,149,0.18)]" data-testid={`onboarding-step-${Step.id}`}>
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--theme-primary-hover, #0A3B2C), var(--theme-primary))' }}>
               <Step.icon size={18} weight="fill" className="text-white" />
             </div>
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#7C35DC]">Step {step + 1} of {STEPS.length}</div>
-              <h2 className="text-xl font-bold text-[#1A0A2E]">{Step.title}</h2>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">Step {step + 1} of {STEPS.length}</div>
+              <h2 className="text-xl font-bold text-[var(--theme-text)]">{Step.title}</h2>
             </div>
           </div>
 
           {tenantName && step === 0 && (
-            <div className="text-sm text-[#5A4A7A] mb-4 mt-3">Setting up <span className="font-bold text-[#7C35DC]">{tenantName}</span>. This takes about a minute.</div>
+            <div className="text-sm text-[var(--theme-text-muted)] mb-4 mt-3">Setting up <span className="font-bold text-[var(--theme-primary)]">{tenantName}</span>. This takes about a minute.</div>
           )}
 
           <div className="mt-5 space-y-4">
@@ -309,11 +309,11 @@ const OnboardingWizard = () => {
                         <input value={s} onChange={(e) => updateStage(i, e.target.value)} className={inputCls}
                           data-testid={`ob-sales-stage-${i}`} />
                         <button type="button" onClick={() => removeStage(i)}
-                          className="px-2.5 py-2 rounded-lg border border-[#E8E0F5] text-[#9B8AB0] hover:text-[#DC2626] hover:border-[#DC2626]/40 text-xs">×</button>
+                          className="px-2.5 py-2 rounded-lg border border-[var(--theme-border)] text-[var(--theme-text-dim)] hover:text-[#DC2626] hover:border-[#DC2626]/40 text-xs">×</button>
                       </div>
                     ))}
                     <button type="button" onClick={addStage} data-testid="ob-sales-add-stage"
-                      className="text-xs font-bold uppercase tracking-[0.14em] text-[#7C35DC] hover:underline">+ Add stage</button>
+                      className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--theme-primary)] hover:underline">+ Add stage</button>
                   </div>
                 </Field>
               </>
@@ -345,7 +345,7 @@ const OnboardingWizard = () => {
             {/* STEP 5: WhatsApp */}
             {step === 5 && (
               <>
-                <div className="text-sm text-[#5A4A7A] mb-2">
+                <div className="text-sm text-[var(--theme-text-muted)] mb-2">
                   Aria primarily operates over WhatsApp. You can configure this now or later from Settings.
                 </div>
                 <Field label="Provider">
@@ -365,8 +365,8 @@ const OnboardingWizard = () => {
                     onChange={(e) => update('whatsapp', { whatsapp_number: e.target.value })} className={inputCls}
                     placeholder="+91…" />
                 </Field>
-                <div className="text-xs text-[#5A4A7A] bg-[#F4F0FF] border border-[#7C35DC]/20 rounded-lg p-3">
-                  <span className="font-bold text-[#7C35DC]">Webhook URL:</span> auto-generated after onboarding.
+                <div className="text-xs text-[var(--theme-text-muted)] bg-[var(--theme-primary-dim)] border border-[var(--theme-primary)]/20 rounded-lg p-3">
+                  <span className="font-bold text-[var(--theme-primary)]">Webhook URL:</span> auto-generated after onboarding.
                   Find it under Settings → Integrations once you're in.
                 </div>
 
@@ -390,17 +390,17 @@ const OnboardingWizard = () => {
             {/* STEP 6: Team (skippable) */}
             {step === 6 && (
               <>
-                <div className="text-sm text-[#5A4A7A]">
+                <div className="text-sm text-[var(--theme-text-muted)]">
                   You can invite teammates right now or later from <span className="font-bold">Settings → Team</span>.
                 </div>
-                <div className="bg-[#F4F0FF] border border-[#7C35DC]/20 rounded-lg p-4 space-y-2">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#7C35DC]">PLAN LIMITS</div>
-                  <div className="text-sm text-[#1A0A2E]">Free plan: <span className="font-bold">3 seats</span>, unlimited on paid plans.</div>
-                  <div className="text-xs text-[#5A4A7A]">Skip this and ship — you can come back any time.</div>
+                <div className="bg-[var(--theme-primary-dim)] border border-[var(--theme-primary)]/20 rounded-lg p-4 space-y-2">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--theme-primary)]">PLAN LIMITS</div>
+                  <div className="text-sm text-[var(--theme-text)]">Free plan: <span className="font-bold">3 seats</span>, unlimited on paid plans.</div>
+                  <div className="text-xs text-[var(--theme-text-muted)]">Skip this and ship — you can come back any time.</div>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <CheckCircle size={16} weight="fill" className="text-[#7C35DC]" />
-                  <span className="text-sm text-[#1A0A2E]">Workspace ready to ship.</span>
+                  <CheckCircle size={16} weight="fill" className="text-[var(--theme-primary)]" />
+                  <span className="text-sm text-[var(--theme-text)]">Workspace ready to ship.</span>
                 </div>
               </>
             )}
@@ -420,25 +420,25 @@ const OnboardingWizard = () => {
           {/* Nav */}
           <div className="flex justify-between items-center pt-6 mt-6 border-t border-[#F0ECF9]">
             <button type="button" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}
-              data-testid="ob-back" className="flex items-center gap-1 text-sm font-bold text-[#5A4A7A] hover:text-[#7C35DC] disabled:opacity-40">
+              data-testid="ob-back" className="flex items-center gap-1 text-sm font-bold text-[var(--theme-text-muted)] hover:text-[var(--theme-primary)] disabled:opacity-40">
               <ArrowLeft size={14} /> Back
             </button>
             {/* Step 4 (touchpoints) handles its own Continue/Customise CTAs internally */}
             {step === 4 ? (
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#9B8AB0]">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--theme-text-dim)]">
                 {touchpointSaved ? 'Saved · advancing…' : 'Choose to continue'}
               </span>
             ) : step < STEPS.length - 1 ? (
               <button type="button" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}
                 data-testid="ob-next"
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-white text-sm font-bold disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}>
+                style={{ background: 'linear-gradient(135deg, var(--theme-primary-hover, #0A3B2C), var(--theme-primary))' }}>
                 Next <ArrowRight size={14} />
               </button>
             ) : (
               <button type="button" disabled={saving} onClick={submit} data-testid="ob-finish"
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg text-white text-sm font-bold disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #4C1D95, #7C35DC)' }}>
+                style={{ background: 'linear-gradient(135deg, var(--theme-primary-hover, #0A3B2C), var(--theme-primary))' }}>
                 <Sparkle size={14} weight="fill" /> {saving ? 'Setting up…' : 'Launch workspace'}
               </button>
             )}
@@ -449,12 +449,12 @@ const OnboardingWizard = () => {
   );
 };
 
-const inputCls = "w-full bg-white border border-[#E8E0F5] text-[#1A0A2E] px-3.5 py-2.5 rounded-lg text-sm focus:border-[#7C35DC] focus:ring-2 focus:ring-[#7C35DC]/15 outline-none transition";
-const pillCls = (active) => `px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-[0.1em] border transition ${active ? 'bg-[#7C35DC] text-white border-[#7C35DC]' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:border-[#7C35DC]/40'}`;
+const inputCls = "w-full bg-white border border-[var(--theme-border)] text-[var(--theme-text)] px-3.5 py-2.5 rounded-lg text-sm focus:border-[var(--theme-primary)] focus:ring-2 focus:ring-[var(--theme-primary)]/15 outline-none transition";
+const pillCls = (active) => `px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-[0.1em] border transition ${active ? 'bg-[var(--theme-primary)] text-white border-[var(--theme-primary)]' : 'bg-white text-[var(--theme-text-muted)] border-[var(--theme-border)] hover:border-[var(--theme-primary)]/40'}`;
 
 const Field = ({ label, required, children }) => (
   <div>
-    <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-[#5A4A7A] mb-1.5">
+    <label className="block text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--theme-text-muted)] mb-1.5">
       {label} {required && <span className="text-[#DC2626]">*</span>}
     </label>
     {children}

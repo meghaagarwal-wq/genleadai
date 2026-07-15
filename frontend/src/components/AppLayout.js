@@ -32,6 +32,7 @@ import AriaAvatar from './AriaAvatar';
 import AriaToastWatcher from './AriaToastWatcher';
 import AriaTourModal from './AriaTourModal';
 import AiSummaryDrawer from './AiSummaryDrawer';
+import AriaCompanionDrawer from './AriaCompanionDrawer';
 import api from '../config/api';
 
 // ── Nav definition ──────────────────────────────────────────────────────
@@ -323,7 +324,7 @@ const SidebarLeadStrip = ({ leadCounts, onClick }) => {
           }}
           data-testid={`sidebar-lead-strip-dot-${hasLeads ? 'active' : 'empty'}`}
         />
-        <span className="text-xs font-extrabold text-white tracking-wide" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+        <span className="text-xs font-extrabold tracking-wide" style={{ fontFamily: 'var(--font-display)', color: 'var(--sidebar-text)' }}>
           {total.toLocaleString()} Lead{total === 1 ? '' : 's'}
         </span>
       </div>
@@ -338,10 +339,10 @@ const SidebarLeadStrip = ({ leadCounts, onClick }) => {
             key={s.key}
             data-testid={`sidebar-lead-chip-${s.key}`}
             className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--sidebar-text)' }}
+            style={{ background: 'var(--sidebar-hover-bg)', color: 'var(--sidebar-text)' }}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.dot }} />
-            {s.label} <span className="text-white">{stages[s.key] || 0}</span>
+            {s.label} <span style={{ color: 'var(--sidebar-text)', fontWeight: 800 }}>{stages[s.key] || 0}</span>
           </span>
         ))}
       </div>
@@ -455,7 +456,7 @@ const AppLayout = ({ children }) => {
           <AriaAvatar size={32} tone="default" />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-white font-extrabold text-base leading-none" style={{ fontFamily: 'Plus Jakarta Sans', letterSpacing: '0.02em' }}>
+              <span className="font-extrabold text-base leading-none" style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.02em', color: 'var(--sidebar-text)' }}>
                 ARIA
               </span>
             </div>
@@ -465,7 +466,7 @@ const AppLayout = ({ children }) => {
           </div>
         </div>
         {mobile && (
-          <button onClick={() => setMobileOpen(false)} className="p-1 text-[var(--sidebar-text-muted)] hover:text-white">
+          <button onClick={() => setMobileOpen(false)} className="p-1 text-[var(--sidebar-text-muted)] hover:opacity-70">
             <X size={20} />
           </button>
         )}
@@ -486,14 +487,14 @@ const AppLayout = ({ children }) => {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                   isActive
-                    ? 'text-white font-semibold'
-                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                    ? 'font-semibold'
+                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)]'
                 }`
               }
               style={({ isActive }) =>
                 isActive
-                  ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' }
-                  : { fontFamily: 'Plus Jakarta Sans' }
+                  ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'var(--font-display)', color: 'var(--sidebar-active-border)' }
+                  : { fontFamily: 'var(--font-display)' }
               }
             >
               <item.icon size={18} weight="duotone" />
@@ -502,7 +503,7 @@ const AppLayout = ({ children }) => {
                 <span
                   data-testid="nav-approvals-badge"
                   className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-extrabold text-white"
-                  style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}
+                  style={{ background: 'var(--theme-secondary)' }}
                 >
                   {approvalsCount > 99 ? '99+' : approvalsCount}
                 </span>
@@ -513,9 +514,9 @@ const AppLayout = ({ children }) => {
 
         {/* ADVANCED · ARIA TOOLS */}
         <div className="mt-5 mb-2 px-3 flex items-center gap-2">
-          <div className="h-px flex-1 bg-white/10" />
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[var(--sidebar-text-muted)]" style={{ fontFamily: 'Plus Jakarta Sans' }}>ADVANCED · ARIA TOOLS</span>
-          <div className="h-px flex-1 bg-white/10" />
+          <div className="h-px flex-1" style={{ background: 'var(--sidebar-divider)' }} />
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[var(--sidebar-text-muted)]" style={{ fontFamily: 'var(--font-display)' }}>ADVANCED · ARIA TOOLS</span>
+          <div className="h-px flex-1" style={{ background: 'var(--sidebar-divider)' }} />
         </div>
         <div className="space-y-0.5">
           {NAV_ADVANCED.map((item) => (
@@ -527,14 +528,14 @@ const AppLayout = ({ children }) => {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                   isActive
-                    ? 'text-white font-semibold'
-                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white'
+                    ? 'font-semibold'
+                    : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)]'
                 }`
               }
               style={({ isActive }) =>
                 isActive
-                  ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'Plus Jakarta Sans' }
-                  : { fontFamily: 'Plus Jakarta Sans' }
+                  ? { background: 'var(--sidebar-active-bg)', borderLeft: '3px solid var(--sidebar-active-border)', paddingLeft: 'calc(0.75rem - 3px)', fontFamily: 'var(--font-display)', color: 'var(--sidebar-active-border)' }
+                  : { fontFamily: 'var(--font-display)' }
               }
             >
               <item.icon size={18} weight="duotone" />
@@ -546,16 +547,16 @@ const AppLayout = ({ children }) => {
         {user?.role === 'master_admin' && (
           <>
             <div className="mt-5 mb-2 px-3 flex items-center gap-2">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[9px] font-extrabold uppercase tracking-[0.25em] text-[#E2B96F]/80" style={{ fontFamily: 'Plus Jakarta Sans' }}>PLATFORM</span>
-              <div className="h-px flex-1 bg-white/10" />
+              <div className="h-px flex-1" style={{ background: 'var(--sidebar-divider)' }} />
+              <span className="text-[9px] font-extrabold uppercase tracking-[0.25em]" style={{ fontFamily: 'var(--font-display)', color: 'var(--theme-secondary)' }}>PLATFORM</span>
+              <div className="h-px flex-1" style={{ background: 'var(--sidebar-divider)' }} />
             </div>
             <NavLink
               to="/admin"
               onClick={() => mobile && setMobileOpen(false)}
               data-testid="nav-master-admin"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-white transition-all"
-              style={{ fontFamily: 'Plus Jakarta Sans' }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover-bg)] transition-all"
+              style={{ fontFamily: 'var(--font-display)' }}
             >
               <GearSix size={18} weight="duotone" />
               <span className="text-sm">Admin Panel</span>
@@ -593,7 +594,8 @@ const AppLayout = ({ children }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="md:hidden p-1.5 text-[#5A4A7A] hover:text-[#7C35DC]"
+              className="md:hidden p-1.5"
+              style={{ color: 'var(--theme-text-muted)' }}
               aria-label="Open menu"
               data-testid="mobile-menu-btn"
             >
@@ -602,7 +604,7 @@ const AppLayout = ({ children }) => {
             <WorkspaceSwitcher onSwitch={handleWorkspaceSwitch} user={user} />
             <span
               className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.12em]"
-              style={{ background: 'var(--theme-purple-dim)', color: 'var(--theme-purple-light)' }}
+              style={{ background: 'var(--theme-primary-dim)', color: 'var(--theme-primary)' }}
               data-testid="mode-chip"
             >
               {workspaceType}
@@ -619,7 +621,7 @@ const AppLayout = ({ children }) => {
                   background: 'var(--theme-surface2)',
                   borderColor: 'var(--theme-border-strong)',
                   color: 'var(--theme-text)',
-                  fontFamily: 'Plus Jakarta Sans',
+                  fontFamily: 'var(--font-sans)',
                 }}
                 data-testid="global-search"
               />
@@ -631,7 +633,7 @@ const AppLayout = ({ children }) => {
               aria-label="Open ARIA's 7-day AI summary"
               title="ARIA's 7-day briefing"
               className="hidden md:inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold text-white transition-colors"
-              style={{ background: 'linear-gradient(135deg, #5b21b6 0%, #7c3aed 60%)', fontFamily: 'Plus Jakarta Sans' }}
+              style={{ background: 'var(--theme-primary)', fontFamily: 'var(--font-display)' }}
             >
               <Sparkle size={13} weight="fill" />
               AI Summary
@@ -647,6 +649,7 @@ const AppLayout = ({ children }) => {
       <AriaToastWatcher />
       <AriaTourModal />
       <AiSummaryDrawer open={aiSummaryOpen} onClose={() => setAiSummaryOpen(false)} />
+      <AriaCompanionDrawer />
     </div>
   );
 };

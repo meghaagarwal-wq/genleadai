@@ -15,6 +15,7 @@ import csv
 import hmac
 import io
 import os
+import re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any
@@ -614,19 +615,37 @@ async def list_leads(
     if industry:
         query["industry"] = industry
     if title:
-        query["title"] = {"$regex": title, "$options": "i"}
+        # SEC-004 fix (iter168) — escape user input, cap length to bound
+        # regex complexity and prevent ReDoS.
+        _safe_title = re.escape((title or "")[:100])
+        query["title"] = {"$regex": _safe_title, "$options": "i"}
     if owner:
         query["owner"] = owner
     if company_id:
         query["company_id"] = company_id
     if q:
+        _safe_q = re.escape((q or "")[:100])
         query["$or"] = [
-            {"email": {"$regex": q, "$options": "i"}},
-            {"first_name": {"$regex": q, "$options": "i"}},
-            {"last_name": {"$regex": q, "$options": "i"}},
-            {"company_name": {"$regex": q, "$options": "i"}},
+            {"email": {"$regex": _safe_q, "$options": "i"}},
+            {"first_name": {"$regex": _safe_q, "$options": "i"}},
+            {"last_name": {"$regex": _safe_q, "$options": "i"}},
+            {"company_name": {"$regex": _safe_q, "$options": "i"}},
         ]
     rows = list(leads_col.find(query, {"_id": 0}).sort("last_activity_at", DESCENDING).limit(min(limit, 1000)))
+    # iter165 — dedupe on id to prevent React duplicate-key warnings when two
+    # seed scripts inserted leads with colliding id (e.g. two "Sarah Chen"
+    # profiles at different companies both getting id="ptl_demo_sarah_chen").
+    # Keep the FIRST occurrence (sorted by last_activity_at DESC → freshest).
+    _seen = set()
+    _deduped = []
+    for _r in rows:
+        _rid = _r.get("id")
+        if _rid and _rid in _seen:
+            continue
+        if _rid:
+            _seen.add(_rid)
+        _deduped.append(_r)
+    rows = _deduped
     return {"leads": rows, "total": len(rows)}
 
 
@@ -661,10 +680,11 @@ async def patch_lead(lead_id: str, payload: LeadPatch, current_user: dict = Depe
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
     update["updated_at"] = _now_iso()
-    res = leads_col.update_one({"id": lead_id}, {"$set": update})
+    # SEC-001 fix (iter168) — enforce tenant scope on write
+    res = leads_col.update_one({"id": lead_id, **_tf(current_user)}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Lead not found")
-    lead = leads_col.find_one({"id": lead_id}, {"_id": 0})
+    lead = leads_col.find_one({"id": lead_id, **_tf(current_user)}, {"_id": 0})
     if lead.get("company_id"):
         _recompute_company(lead["company_id"])
     return {"lead": lead}
@@ -673,12 +693,13 @@ async def patch_lead(lead_id: str, payload: LeadPatch, current_user: dict = Depe
 @router.delete("/leads/{lead_id}")
 async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     _require_write(current_user)
-    lead = leads_col.find_one({"id": lead_id}, {"_id": 0})
+    # SEC-001 fix (iter168) — enforce tenant scope on delete
+    lead = leads_col.find_one({"id": lead_id, **_tf(current_user)}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    leads_col.delete_one({"id": lead_id})
-    events_col.delete_many({"lead_id": lead_id})
-    notes_col.delete_many({"lead_id": lead_id})
+    leads_col.delete_one({"id": lead_id, **_tf(current_user)})
+    events_col.delete_many({"lead_id": lead_id, **_tf(current_user)})
+    notes_col.delete_many({"lead_id": lead_id, **_tf(current_user)})
     if lead.get("company_id"):
         _recompute_company(lead["company_id"])
     return {"status": "ok"}
@@ -696,13 +717,13 @@ async def ask_aria_pt(lead_id: str, payload: AskAriaPayload, current_user: dict 
 
     Falls back to a heuristic message if Claude is unavailable.
     """
-    lead = leads_col.find_one({"id": lead_id}, {"_id": 0})
+    lead = leads_col.find_one({"id": lead_id, **_tf(current_user)}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
     company = companies_col.find_one({"id": lead.get("company_id")}, {"_id": 0}) if lead.get("company_id") else None
-    events = list(events_col.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", DESCENDING).limit(10))
-    last_note = notes_col.find_one({"lead_id": lead_id}, {"_id": 0}, sort=[("created_at", DESCENDING)])
+    events = list(events_col.find({"lead_id": lead_id, **_tf(current_user)}, {"_id": 0}).sort("created_at", DESCENDING).limit(10))
+    last_note = notes_col.find_one({"lead_id": lead_id, **_tf(current_user)}, {"_id": 0}, sort=[("created_at", DESCENDING)])
 
     first_name = (lead.get("first_name") or "there").strip()
     last_name = (lead.get("last_name") or "").strip()

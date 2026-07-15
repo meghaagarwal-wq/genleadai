@@ -26,39 +26,12 @@ def iso(dt):
 
 
 # ─────────────── ACCOUNT 1 — Megha@contentvista.com ────────────────
+# iter160 — Pietential workspace + owner permanently retired. This
+# function is intentionally a no-op so any legacy caller (e.g. running
+# `python -m scripts.iter148_seed_demo_accounts` standalone) doesn't
+# recreate the retired tenant.
 def setup_pietential_owner():
-    email = "megha@contentvista.com"
-    new_hash = pwd.hash("Pietential2026!")
-    db.users.update_one(
-        {"email": email},
-        {"$set": {
-            "password_hash": new_hash,
-            "tenant_id": "ten_pietential",
-            "role": "workspace_owner",      # display role
-            "full_name": "Megha Agarwal",
-            "is_active": True,
-            "updated_at": iso(NOW),
-        }},
-        upsert=True,
-    )
-    # Ensure membership exists with role=owner
-    db.tenant_memberships.update_one(
-        {"tenant_id": "ten_pietential", "user_email": email},
-        {"$set": {
-            "id": "mem_pt_megha_at_contentvista_com",
-            "tenant_id": "ten_pietential",
-            "user_email": email,
-            "role": "owner",
-            "joined_at": iso(NOW),
-        }},
-        upsert=True,
-    )
-    # Strip ANY other tenant memberships
-    other = db.tenant_memberships.delete_many({
-        "user_email": email,
-        "tenant_id": {"$ne": "ten_pietential"},
-    }).deleted_count
-    print(f"✓ ACCOUNT 1 {email} provisioned as workspace_owner of ten_pietential (removed {other} stray memberships)")
+    return None
 
 
 # ─────────────── ACCOUNT 2 — meghaagarwaljain2015@gmail.com ────────

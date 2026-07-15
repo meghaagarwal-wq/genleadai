@@ -47,17 +47,47 @@ integrations_col = db["integration_configs"]
 audit_col = db["audit_log"]
 
 # Default callback host. In production this should resolve to your API origin.
-def _api_base() -> str:
-    # iter150 — follow the env-var fallback chain instead of hardcoding the
-    # production domain. Deployment-agent flagged the original
-    # `os.getenv("PUBLIC_API_BASE_URL", "https://app.genleadai.com")` as a
-    # leaky default (would route OAuth callbacks to production even on a
-    # preview deploy missing the env var).
+def _api_base(request: Optional[Request] = None) -> str:
+    """Resolve the backend origin used to build OAuth redirect URIs.
+
+    iter161 — Deployer Agent flagged the previous env-var-first approach
+    because `PUBLIC_API_BASE_URL=https://app.genleadai.com` in `.env` was
+    routing every preview deploy's OAuth flow to the production domain.
+
+    Resolution order (highest → lowest priority):
+      1. `X-Forwarded-Proto` + `X-Forwarded-Host` from the request (set by
+         the Kubernetes ingress). This makes preview and production auto-
+         resolve to the right callback URL WITHOUT any env-var pinning.
+      2. `request.base_url` (uvicorn's view of the incoming request).
+      3. `PUBLIC_API_BASE_URL` env override — only used when the caller
+         has no request (background token-refresh loop).
+      4. Legacy env fallbacks (BACKEND_URL / FRONTEND_URL).
+
+    We deliberately do NOT fall back to `localhost` — a broken callback
+    URL is preferable to silently routing production OAuth to localhost.
+    """
+    # 1 + 2. Derive from the incoming request when we have one.
+    if request is not None:
+        proto = request.headers.get("x-forwarded-proto")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if proto and host:
+            return f"{proto}://{host}".rstrip("/")
+        try:
+            base = str(request.base_url)  # e.g. "https://foo.example.com/"
+            if base and not base.startswith("http://localhost") and not base.startswith("http://127."):
+                return base.rstrip("/")
+        except Exception:
+            pass
+
+    # 3 + 4. Env-var fallbacks (only when we don't have a request, i.e.
+    # background loops). This intentionally comes AFTER the request-based
+    # resolution so a preview deploy inheriting the production env var
+    # doesn't leak OAuth to production.
     return (
         os.environ.get("PUBLIC_API_BASE_URL")
-        or os.environ.get("FRONTEND_URL")
         or os.environ.get("BACKEND_URL")
-        or "http://localhost:8001"
+        or os.environ.get("FRONTEND_URL")
+        or ""
     ).rstrip("/")
 
 
@@ -170,8 +200,8 @@ def _creds(provider: str) -> Tuple[Optional[str], Optional[str]]:
     return os.getenv(p["client_id_env"]), os.getenv(p["client_secret_env"])
 
 
-def _redirect_uri(provider: str) -> str:
-    return f"{_api_base().rstrip('/')}/api/integrations/{provider}/callback"
+def _redirect_uri(provider: str, request: Optional[Request] = None) -> str:
+    return f"{_api_base(request).rstrip('/')}/api/integrations/{provider}/callback"
 
 
 def _active_tenant_for_user(user_email: str) -> Optional[str]:
@@ -197,7 +227,7 @@ async def oauth_connect(provider: str, request: Request, current_user: dict = De
     state = _state_for(current_user["email"], tenant_id, provider)
     params = {
         "client_id": cid,
-        "redirect_uri": _redirect_uri(provider),
+        "redirect_uri": _redirect_uri(provider, request),
         "response_type": "code",
         "scope": cfg["scopes"],
         "state": state,
@@ -208,7 +238,7 @@ async def oauth_connect(provider: str, request: Request, current_user: dict = De
 
 # ─── /callback — code → token exchange ──────────────────────────────────────
 @router.get("/api/integrations/{provider}/callback")
-async def oauth_callback(provider: str, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+async def oauth_callback(provider: str, request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
     if error:
         return HTMLResponse(
             f"<h3>OAuth error: {error}</h3><p>Close this window and try again.</p>",
@@ -233,7 +263,7 @@ async def oauth_callback(provider: str, code: Optional[str] = None, state: Optio
                 r = await client.get(cfg["token_url"], params={
                     "client_id": cid,
                     "client_secret": csecret,
-                    "redirect_uri": _redirect_uri(provider),
+                    "redirect_uri": _redirect_uri(provider, request),
                     "code": code,
                 })
             else:
@@ -242,7 +272,7 @@ async def oauth_callback(provider: str, code: Optional[str] = None, state: Optio
                     data={
                         "grant_type": "authorization_code",
                         "code": code,
-                        "redirect_uri": _redirect_uri(provider),
+                        "redirect_uri": _redirect_uri(provider, request),
                         "client_id": cid,
                         "client_secret": csecret,
                     },
@@ -291,7 +321,7 @@ async def oauth_callback(provider: str, code: Optional[str] = None, state: Optio
     try:
         if provider == "calendly" and access:
             # Register no-show + booked + cancelled webhooks
-            await _calendly_register_webhooks(state_doc["tenant_id"], access)
+            await _calendly_register_webhooks(state_doc["tenant_id"], access, request)
     except Exception as e:
         print(f"[oauth_callback] {provider} post-connect hook failed: {e}")
 
@@ -333,10 +363,10 @@ async def oauth_disconnect(provider: str, request: Request, current_user: dict =
 
 
 # ─── Calendly post-connect: register webhooks ───────────────────────────────
-async def _calendly_register_webhooks(tenant_id: str, access_token: str) -> None:
+async def _calendly_register_webhooks(tenant_id: str, access_token: str, request: Optional[Request] = None) -> None:
     """Register Calendly webhook for invitee.created, invitee.canceled,
     and invitee_no_show.created so ARIA can react in real time."""
-    base = _api_base().rstrip("/")
+    base = _api_base(request).rstrip("/")
     callback_url = f"{base}/api/webhooks/calendly?tenant_id={tenant_id}"
     async with httpx.AsyncClient(timeout=15.0) as client:
         # Need the organization URI

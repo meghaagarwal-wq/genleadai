@@ -13,6 +13,14 @@ const LeadFeed = ({ embedded = false }) => {
   const [showCsv, setShowCsv] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchResult, setBatchResult] = useState(null);
+  // iter166 — view mode (table | kanban) with localStorage persistence
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem('leadfeed.view') || 'table'; } catch { return 'table'; }
+  });
+  const setView = (v) => {
+    setViewMode(v);
+    try { localStorage.setItem('leadfeed.view', v); } catch (_e) { /* ignore */ }
+  };
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -140,17 +148,45 @@ const LeadFeed = ({ embedded = false }) => {
                 {newSinceLastSeen} new
               </button>
             )}
+            {/* iter166 — Table ⇄ Kanban view toggle */}
+            <div
+              className="inline-flex items-center p-0.5 rounded-full border"
+              style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}
+              data-testid="leadfeed-view-toggle"
+              role="tablist"
+              aria-label="Lead view"
+            >
+              {[
+                { key: 'table', label: 'Table' },
+                { key: 'kanban', label: 'Kanban' },
+              ].map((v) => (
+                <button
+                  key={v.key}
+                  role="tab"
+                  aria-selected={viewMode === v.key}
+                  onClick={() => setView(v.key)}
+                  data-testid={`leadfeed-view-${v.key}`}
+                  className="px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+                  style={{
+                    color: viewMode === v.key ? 'var(--theme-primary)' : 'var(--theme-text-muted)',
+                    background: viewMode === v.key ? 'var(--theme-surface)' : 'transparent',
+                    boxShadow: viewMode === v.key ? '0 1px 3px rgba(28,25,23,0.08)' : 'none',
+                    fontFamily: 'var(--font-display)',
+                  }}
+                >{v.label}</button>
+              ))}
+            </div>
             <button onClick={runBatchIntel} disabled={batchBusy} data-testid="scan-all-hot-leads-btn"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #4C1D95 0%, #7C35DC 100%)' }}>
+              style={{ background: 'var(--theme-primary)' }}>
               <Brain size={14} weight="duotone" /> {batchBusy ? 'Queuing scans…' : 'Scan engaged leads'}
             </button>
             <button onClick={() => setShowCsv(true)} data-testid="import-csv-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30 hover:bg-[#7C35DC]/5">
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[var(--theme-primary)] border border-[var(--theme-primary)]/30 hover:bg-[var(--theme-primary)]/5">
               <Upload size={14} weight="bold" /> Upload CSV
             </button>
             <button onClick={() => setShowAdd(true)} data-testid="pt-leadfeed-add-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }}>
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: 'var(--theme-primary)' }}>
               <Plus size={14} weight="bold" /> Add lead
             </button>
           </div>
@@ -158,38 +194,38 @@ const LeadFeed = ({ embedded = false }) => {
       />}
 
       {/* Filters */}
-      <div className="bg-white border border-[#E2E8F0] rounded-lg p-3 flex items-center gap-2 flex-wrap mb-4" data-testid="pt-leadfeed-filters">
+      <div className="bg-white border border-[var(--theme-border-strong)] rounded-lg p-3 flex items-center gap-2 flex-wrap mb-4" data-testid="pt-leadfeed-filters">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94A3B8]" />
           <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search name, email, company"
             data-testid="pt-leadfeed-search"
-            className="w-full pl-7 pr-3 py-1.5 text-sm border border-[#E2E8F0] rounded-md outline-none focus:ring-2 focus:ring-[#C044E0]/20" />
+            className="w-full pl-7 pr-3 py-1.5 text-sm border border-[var(--theme-border-strong)] rounded-md outline-none focus:ring-2 focus:ring-[var(--theme-primary)]/20" />
         </div>
         <select value={filters.stage} onChange={(e) => setFilters({ ...filters, stage: e.target.value })}
           data-testid="pt-leadfeed-filter-stage"
-          className="text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none">
+          className="text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5 outline-none">
           <option value="">All stages</option>
           <option value="cold">Cold</option><option value="warm">Warm</option><option value="hot">Hot</option><option value="engaged">Engaged</option><option value="session_pilot">Session/Pilot</option>
         </select>
         <select value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}
           data-testid="pt-leadfeed-filter-source"
-          className="text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none">
+          className="text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5 outline-none">
           <option value="">All sources</option>
           {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <input type="number" value={filters.score_min} onChange={(e) => setFilters({ ...filters, score_min: e.target.value })} placeholder="Score min"
-          className="w-24 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
+          className="w-24 text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5 outline-none" />
         <input type="number" value={filters.score_max} onChange={(e) => setFilters({ ...filters, score_max: e.target.value })} placeholder="Score max"
-          className="w-24 text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none" />
+          className="w-24 text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5 outline-none" />
       </div>
 
       {/* iter114 Batch 4 — Batch intel result banner */}
       {batchResult && (
-        <div className="mb-4 bg-white border border-[#7C35DC]/30 rounded-lg p-3" data-testid="pt-leadfeed-batch-result" style={{ background: '#FAF7FF' }}>
+        <div className="mb-4 bg-white border border-[var(--theme-primary)]/30 rounded-lg p-3" data-testid="pt-leadfeed-batch-result" style={{ background: '#FAF7FF' }}>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <div className="flex items-center gap-1.5">
-              <Sparkle size={13} weight="fill" className="text-[#7C35DC]" />
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#7C35DC]">Batch intel run</span>
+              <Sparkle size={13} weight="fill" className="text-[var(--theme-primary)]" />
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--theme-primary)]">Batch intel run</span>
             </div>
             <button onClick={() => setBatchResult(null)} className="text-[#94A3B8] hover:text-[#0F172A]" data-testid="pt-leadfeed-batch-dismiss">
               <X size={12} />
@@ -208,7 +244,7 @@ const LeadFeed = ({ embedded = false }) => {
                     <div key={i} className="text-xs flex items-center gap-1.5" data-testid={`pt-leadfeed-batch-row-${i}`}>
                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${r.status === 'ok' ? 'bg-emerald-500' : 'bg-[#DC2626]'}`} />
                       <span className="font-semibold truncate flex-1">{r.name}</span>
-                      {r.status === 'ok' && <span className="text-[#7C35DC] font-bold">{r.fit_score}/100</span>}
+                      {r.status === 'ok' && <span className="text-[var(--theme-primary)] font-bold">{r.fit_score}/100</span>}
                       {r.status !== 'ok' && <span className="text-[#DC2626] truncate">{r.reason || r.status}</span>}
                     </div>
                   ))}
@@ -228,15 +264,33 @@ const LeadFeed = ({ embedded = false }) => {
           message="Upload a CSV of real prospects, or wait for engagement events to flow in from Saleshandy / Lemlist / newsletter."
           cta={
             <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setShowCsv(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: '#7C35DC' }} data-testid="empty-cta-upload">Upload CSV</button>
-              <Link to="/app/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[#7C35DC] border border-[#7C35DC]/30">Configure integrations</Link>
+              <button onClick={() => setShowCsv(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white" style={{ background: 'var(--theme-primary)' }} data-testid="empty-cta-upload">Upload CSV</button>
+              <Link to="/app/integrations" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-[var(--theme-primary)] border border-[var(--theme-primary)]/30">Configure integrations</Link>
             </div>
           }
         />
+      ) : viewMode === 'kanban' ? (
+        <KanbanBoard leads={leads} onCard={(id) => navigate(`/app/leads/${id}`)} onStageChange={async (leadId, newStage) => {
+          try {
+            const { data } = await ptApi.patch(`/api/pt/leads/${leadId}`, { stage: newStage });
+            // iter167 — backend may auto-recompute stage from score. Trust
+            // the server response so any silent revert is immediately
+            // visible in the UI (not a fake success).
+            const effectiveStage = (data?.lead?.stage || data?.stage || newStage).toLowerCase();
+            setLeads((xs) => xs.map((l) => l.id === leadId ? { ...l, stage: effectiveStage } : l));
+            if (effectiveStage !== newStage) {
+              toast(`Score-based rule kept stage at "${effectiveStage}"`);
+            } else {
+              toast.success('Stage updated');
+            }
+          } catch (e) {
+            toast.error(e?.response?.data?.detail || 'Could not update stage');
+          }
+        }} />
       ) : (
-        <div className="bg-white border border-[#E2E8F0] rounded-lg overflow-x-auto" data-testid="pt-leadfeed-table">
+        <div className="bg-white border border-[var(--theme-border-strong)] rounded-lg overflow-x-auto" data-testid="pt-leadfeed-table">
           <table className="w-full text-sm">
-            <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+            <thead className="bg-[#F8FAFC] border-b border-[var(--theme-border-strong)]">
               <tr>
                 {['Lead', 'Company', 'Title', 'Source', 'Latest signal', 'Score', 'Stage', 'Owner', 'Last activity'].map(h => (
                   <th key={h} className="px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#64748B]">{h}</th>
@@ -244,8 +298,8 @@ const LeadFeed = ({ embedded = false }) => {
               </tr>
             </thead>
             <tbody>
-              {leads.map(l => (
-                <tr key={l.id} onClick={() => navigate(`/app/leads/${l.id}`)}
+              {leads.map((l, i) => (
+                <tr key={`${l.id}__${l.email || i}`} onClick={() => navigate(`/app/leads/${l.id}`)}
                   data-testid={`lead-row-${l.id}`}
                   className="border-b border-[#F1F5F9] hover:bg-[#F8FAFC] cursor-pointer">
                   <td className="px-3 py-2.5">
@@ -273,6 +327,125 @@ const LeadFeed = ({ embedded = false }) => {
   );
 };
 
+// iter166 — KanbanBoard: HTML5 native drag-drop grouped by stage.
+// Column set matches the FULL sales pipeline stage taxonomy so no lead
+// disappears (iter167 fix — previously 'discovery_call', 'contacted',
+// 'qualified' leads were invisible). Ordering follows funnel flow:
+// New → Contacted → Discovery Call → Qualified → Engaged → Warm →
+// Hot → Session/Pilot → Cold. Any unrecognised stage falls back to
+// an "Other" column so nothing is ever silently hidden.
+const KANBAN_STAGES = [
+  { key: 'new',             label: 'New',            color: '#3B82F6', bg: 'rgba(59,130,246,0.08)' },
+  { key: 'contacted',       label: 'Contacted',      color: '#8B5CF6', bg: 'rgba(139,92,246,0.08)' },
+  { key: 'discovery_call',  label: 'Discovery Call', color: '#6366F1', bg: 'rgba(99,102,241,0.10)' },
+  { key: 'qualified',       label: 'Qualified',      color: '#14B8A6', bg: 'rgba(20,184,166,0.10)' },
+  { key: 'engaged',         label: 'Engaged',        color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  { key: 'warm',            label: 'Warm',           color: '#F59E0B', bg: 'rgba(245,158,11,0.10)' },
+  { key: 'hot',             label: 'Hot',            color: '#DC2626', bg: 'rgba(220,38,38,0.08)' },
+  { key: 'session_pilot',   label: 'Session/Pilot',  color: '#0F4C3A', bg: 'rgba(15,76,58,0.10)' },
+  { key: 'cold',            label: 'Cold',           color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
+];
+const KNOWN_STAGES = new Set(KANBAN_STAGES.map((s) => s.key));
+
+const KanbanBoard = ({ leads, onCard, onStageChange }) => {
+  const [dragId, setDragId] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+  // Build "Other" bucket for any stage we didn't hardcode
+  const otherItems = leads.filter((l) => !KNOWN_STAGES.has((l.stage || 'cold').toLowerCase()));
+  const grouped = KANBAN_STAGES.map((s) => ({
+    ...s,
+    items: leads.filter((l) => (l.stage || 'cold').toLowerCase() === s.key),
+  }));
+  if (otherItems.length > 0) {
+    grouped.push({
+      key: 'other', label: 'Other', color: '#78716C', bg: 'rgba(120,113,108,0.10)', items: otherItems,
+    });
+  }
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2" data-testid="pt-leadfeed-kanban" style={{ minHeight: 400 }}>
+      {grouped.map((col) => (
+        <div
+          key={col.key}
+          data-testid={`kanban-column-${col.key}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(col.key); }}
+          onDragLeave={() => setDragOver((c) => c === col.key ? null : c)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(null);
+            if (dragId) {
+              const lead = leads.find((l) => l.id === dragId);
+              if (lead && (lead.stage || 'cold').toLowerCase() !== col.key) {
+                onStageChange(dragId, col.key);
+              }
+              setDragId(null);
+            }
+          }}
+          className="shrink-0 w-[280px] rounded-2xl border p-3 flex flex-col gap-2 transition-colors"
+          style={{
+            background: dragOver === col.key ? col.bg : 'var(--theme-surface)',
+            borderColor: dragOver === col.key ? col.color : 'var(--theme-border)',
+          }}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: col.color }} aria-hidden="true" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>{col.label}</span>
+            </div>
+            <span
+              className="text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums"
+              style={{ background: col.bg, color: col.color }}
+              data-testid={`kanban-count-${col.key}`}
+            >{col.items.length}</span>
+          </div>
+          <div className="flex-1 space-y-2 min-h-[80px]">
+            {col.items.length === 0 && (
+              <div className="text-center py-8 text-[11px] italic" style={{ color: 'var(--theme-text-dim)' }}>
+                Drop here
+              </div>
+            )}
+            {col.items.map((l, i) => (
+              <div
+                key={`${l.id}__${l.email || i}`}
+                draggable
+                onDragStart={() => setDragId(l.id)}
+                onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                onClick={() => onCard(l.id)}
+                data-testid={`kanban-card-${l.id}`}
+                className="rounded-xl border p-3 cursor-pointer transition-transform hover:-translate-y-0.5 hover:shadow-sm"
+                style={{
+                  background: 'var(--theme-surface)',
+                  borderColor: 'var(--theme-border)',
+                  opacity: dragId === l.id ? 0.55 : 1,
+                  borderLeft: `3px solid ${col.color}`,
+                }}
+                title="Drag to change stage · click to open"
+              >
+                <div className="text-sm font-semibold truncate" style={{ color: 'var(--theme-text)' }}>
+                  {l.first_name} {l.last_name}
+                </div>
+                <div className="text-[11px] truncate mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+                  {l.company_name || l.email || '—'}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full tabular-nums" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}>
+                    {l.score ?? 0}
+                  </span>
+                  {l.latest_signal && (
+                    <span className="text-[10px] truncate flex-1" style={{ color: 'var(--theme-text-muted)' }}>
+                      {l.latest_signal}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+
 const AddLeadModal = ({ onClose, onSaved }) => {
   const [f, setF] = useState({ first_name: '', last_name: '', email: '', company_name: '', title: '', linkedin_url: '', source: 'manual', industry: '', employee_count: '', geography: '', icp_fit: 'match', owner: 'Content Vista' });
   const [busy, setBusy] = useState(false);
@@ -291,8 +464,8 @@ const AddLeadModal = ({ onClose, onSaved }) => {
   };
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose} data-testid="pt-add-lead-modal">
-      <div className="bg-white rounded-xl border border-[#E2E8F0] w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-[var(--theme-border-strong)] w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--theme-border-strong)] flex items-center justify-between">
           <h3 className="text-base font-bold text-[#0F172A]" style={{ fontFamily: 'Space Grotesk, Inter' }}>Add lead</h3>
           <button onClick={onClose}><X size={16} className="text-[#64748B]" /></button>
         </div>
@@ -308,15 +481,15 @@ const AddLeadModal = ({ onClose, onSaved }) => {
           <Input label="Geography" value={f.geography} onChange={(v) => setF({ ...f, geography: v })} testid="add-geo" />
           <div className="col-span-1">
             <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">ICP fit</label>
-            <select value={f.icp_fit} onChange={(e) => setF({ ...f, icp_fit: e.target.value })} className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5">
+            <select value={f.icp_fit} onChange={(e) => setF({ ...f, icp_fit: e.target.value })} className="w-full text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5">
               <option value="match">Match</option><option value="partial">Partial</option><option value="outside">Outside</option>
             </select>
           </div>
         </div>
-        <div className="px-5 py-3 border-t border-[#E2E8F0] flex justify-end gap-2 bg-[#F8FAFC]">
+        <div className="px-5 py-3 border-t border-[var(--theme-border-strong)] flex justify-end gap-2 bg-[#F8FAFC]">
           <button onClick={onClose} className="px-3 py-1.5 text-sm font-semibold text-[#475569]">Cancel</button>
           <button onClick={submit} disabled={busy} data-testid="pt-add-lead-save"
-            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>
+            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: 'var(--theme-primary)' }}>
             {busy ? 'Saving…' : 'Save lead'}
           </button>
         </div>
@@ -329,7 +502,7 @@ const Input = ({ label, value, onChange, testid, full }) => (
   <div className={full ? 'col-span-2' : ''}>
     <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B] mb-1">{label}</label>
     <input value={value} onChange={(e) => onChange(e.target.value)} data-testid={testid}
-      className="w-full text-sm border border-[#E2E8F0] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[#C044E0]/20" />
+      className="w-full text-sm border border-[var(--theme-border-strong)] rounded-md px-2 py-1.5 outline-none focus:ring-2 focus:ring-[var(--theme-primary)]/20" />
   </div>
 );
 
@@ -368,8 +541,8 @@ const CsvModal = ({ onClose, onDone }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose} data-testid="pt-csv-modal">
-      <div className="bg-white rounded-xl border border-[#E2E8F0] w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-[var(--theme-border-strong)] w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--theme-border-strong)] flex items-center justify-between">
           <h3 className="text-base font-bold text-[#0F172A]" style={{ fontFamily: 'Space Grotesk, Inter' }}>Upload leads CSV</h3>
           <button onClick={onClose}><X size={16} /></button>
         </div>
@@ -381,8 +554,8 @@ const CsvModal = ({ onClose, onDone }) => {
             className="block w-full text-sm border border-dashed border-[#CBD5E1] rounded-lg p-4 cursor-pointer" />
           {parsing && <div className="text-sm text-[#64748B]">Parsing…</div>}
           {preview && (
-            <div className="border border-[#E2E8F0] rounded-md overflow-hidden">
-              <div className="bg-[#F8FAFC] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#64748B] border-b border-[#E2E8F0]">Preview · {preview.length} rows</div>
+            <div className="border border-[var(--theme-border-strong)] rounded-md overflow-hidden">
+              <div className="bg-[#F8FAFC] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#64748B] border-b border-[var(--theme-border-strong)]">Preview · {preview.length} rows</div>
               <div className="max-h-56 overflow-auto p-2 text-xs">
                 {preview.slice(0, 5).map((row, i) => (
                   <div key={i} className="text-[#475569] py-1 border-b border-[#F1F5F9] last:border-0">
@@ -395,10 +568,10 @@ const CsvModal = ({ onClose, onDone }) => {
             </div>
           )}
         </div>
-        <div className="px-5 py-3 border-t border-[#E2E8F0] flex justify-end gap-2 bg-[#F8FAFC]">
+        <div className="px-5 py-3 border-t border-[var(--theme-border-strong)] flex justify-end gap-2 bg-[#F8FAFC]">
           <button onClick={onClose} className="px-3 py-1.5 text-sm font-semibold text-[#475569]">Cancel</button>
           <button onClick={submit} disabled={!preview || busy} data-testid="pt-csv-import-btn"
-            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: '#7C35DC' }}>
+            className="px-4 py-1.5 text-sm font-semibold text-white rounded-md disabled:opacity-50" style={{ background: 'var(--theme-primary)' }}>
             {busy ? 'Importing…' : `Import ${preview?.length || 0} rows`}
           </button>
         </div>

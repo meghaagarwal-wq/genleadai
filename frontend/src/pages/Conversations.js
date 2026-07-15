@@ -1,182 +1,603 @@
 /**
- * Conversations — /conversations
+ * Conversations — Reply Triage Queue (iter165)
+ * ────────────────────────────────────────────────────────────────────
+ * A Superhuman-inspired split-pane approval queue. Each item is an
+ * AI-drafted response awaiting founder sign-off. Left pane lists the
+ * pending items with an AI classification chip (stage + confidence).
+ * Right pane shows the full draft + inline edit + approve/reject.
  *
- * Thread list with urgent/negative leads floating to top.
- * Each row → Lead Inbox for takeover/reply.
+ * Backend: /api/approvals returns pending_outreach with lead_snapshot,
+ *          confidence, reason_for_review, channel, subject, draft.
+ * Actions:
+ *   POST /api/approvals/{id}/approve
+ *   POST /api/approvals/{id}/edit-send  { subject?, body }
+ *   POST /api/approvals/{id}/reject     { reason? }
+ *
+ * Keyboard: J/K navigate · E approve · R reject · / search · Esc close
  */
-import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import {
+  ChatCircleText, EnvelopeSimple, LinkedinLogo,
+  Lightning, CheckCircle, X as XIcon, PencilSimple,
+  MagnifyingGlass, Sparkle, Warning, Fire, ThermometerSimple,
+  ChatDots, ArrowRight, Command, Robot,
+} from '@phosphor-icons/react';
 import api from '../config/api';
-import { ChatCircle, Warning, Fire, Heart, Smiley, Question, MagnifyingGlass, Sparkle } from '@phosphor-icons/react';
 
-const SENTIMENT_META = {
-  urgent: { color: '#DC2626', bg: '#FEE2E2', label: 'Urgent', icon: Warning },
-  negative: { color: '#D97706', bg: '#FEF3C7', label: 'Negative', icon: Fire },
-  neutral: { color: '#5A4A7A', bg: '#F1F5F9', label: 'Neutral', icon: Question },
-  positive: { color: '#16A34A', bg: '#DCFCE7', label: 'Positive', icon: Smiley },
+const CHANNEL_META = {
+  whatsapp: { icon: ChatCircleText, label: 'WhatsApp', color: '#25D366' },
+  email:    { icon: EnvelopeSimple, label: 'Email',    color: '#3B82F6' },
+  linkedin: { icon: LinkedinLogo,   label: 'LinkedIn', color: '#0A66C2' },
+  sms:      { icon: ChatDots,       label: 'SMS',      color: '#A855F7' },
 };
 
-const fmtRel = (iso) => {
-  if (!iso) return '—';
-  const d = Date.now() - new Date(iso).getTime();
-  if (d < 60000) return 'just now';
-  if (d < 3600000) return `${Math.round(d / 60000)}m ago`;
-  if (d < 86400000) return `${Math.round(d / 3600000)}h ago`;
-  return `${Math.round(d / 86400000)}d ago`;
+const STAGE_META = {
+  hot:     { color: '#DC2626', bg: 'rgba(220,38,38,0.10)',   label: 'HOT',     icon: Fire },
+  warm:    { color: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  label: 'WARM',    icon: ThermometerSimple },
+  engaged: { color: '#10B981', bg: 'rgba(16,185,129,0.12)',  label: 'ENGAGED', icon: Sparkle },
+  cold:    { color: '#6B7280', bg: 'rgba(107,114,128,0.14)', label: 'COLD',    icon: null },
 };
 
-const Conversations = () => {
-  const nav = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [threads, setThreads] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState(searchParams.get('tab') || '');  // sentiment filter
+const relTime = (iso) => {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+};
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (filter) params.set('sentiment', filter);
-      if (search) params.set('search', search);
-      const r = await api.get(`/api/conversations/threads?${params.toString()}`);
-      setThreads(r.data?.threads || []);
-    } finally { setLoading(false); }
-  };
+const initials = (name) =>
+  (name || 'PP').split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
 
-  useEffect(() => { load(); }, [filter]);  // eslint-disable-line
+const confidenceLabel = (c) => {
+  if (c == null) return { label: 'Review', color: 'var(--theme-text-muted)', pct: 50 };
+  const pct = Math.round(c * 100);
+  if (c >= 0.75) return { label: 'High confidence', color: '#10B981', pct };
+  if (c >= 0.5)  return { label: 'Medium confidence', color: '#F59E0B', pct };
+  return { label: 'Low confidence', color: '#DC2626', pct };
+};
 
-  // URL persistence helper.
-  const applyFilter = (key) => {
-    setFilter(key);
-    setSearchParams((sp) => {
-      const next = new URLSearchParams(sp);
-      if (!key) next.delete('tab'); else next.set('tab', key);
-      return next;
-    }, { replace: true });
-  };
 
-  const counts = useMemo(() => {
-    const c = { all: threads.length, urgent: 0, negative: 0, positive: 0, neutral: 0 };
-    threads.forEach((t) => { const s = (t.latest_sentiment || 'neutral').toLowerCase(); if (c[s] !== undefined) c[s]++; });
-    return c;
-  }, [threads]);
-
-  // Aria-says microcopy — adaptive based on what's in the queue.
-  const ariaSays = useMemo(() => {
-    if (loading) return null;
-    if (counts.urgent > 0) return `${counts.urgent} urgent thread${counts.urgent === 1 ? '' : 's'} need your reply now. Aria has paused her replies on these and is waiting for you.`;
-    if (counts.negative > 0) return `${counts.negative} lead${counts.negative === 1 ? ' is' : 's are'} showing negative signals. Open them first so the conversation doesn't slip further.`;
-    if (counts.positive > 0) return `${counts.positive} thread${counts.positive === 1 ? '' : 's'} are warming up. Great time to send a soft nudge or share a case study.`;
-    if (counts.all === 0) return 'No conversations yet. Connect your WhatsApp or website widget so Aria can start chatting with new leads.';
-    return 'Pipeline is calm. Aria is keeping every thread alive in the background.';
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [counts, loading]);
+// ─── Left pane row ───────────────────────────────────────────────────
+const TriageRow = ({ item, active, onClick }) => {
+  const ChannelIcon = (CHANNEL_META[item.channel] || CHANNEL_META.email).icon;
+  const chColor = (CHANNEL_META[item.channel] || {}).color || 'var(--theme-primary)';
+  const stage = STAGE_META[(item.lead_snapshot?.stage || 'cold').toLowerCase()] || STAGE_META.cold;
+  const conf = confidenceLabel(item.confidence);
+  const name = item.lead_snapshot?.name || 'Prospect';
+  const company = item.lead_snapshot?.company;
 
   return (
-    <div className="space-y-5 max-w-[1100px] mx-auto" data-testid="conversations-page">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#7C35DC] mb-1">Live Threads</div>
-          <h1 className="text-3xl font-extrabold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Conversations</h1>
-          <p className="text-sm text-[#5A4A7A] mt-1">Urgent and negative sentiment leads float to the top automatically.</p>
+    <button
+      onClick={onClick}
+      data-testid={`triage-row-${item.id}`}
+      aria-selected={active}
+      className="w-full text-left px-3 py-3 border-b flex gap-3 transition-colors focus:outline-none"
+      style={{
+        background: active ? 'var(--theme-primary-dim)' : 'transparent',
+        borderColor: 'var(--theme-border)',
+        borderLeft: active ? '3px solid var(--theme-primary)' : '3px solid transparent',
+      }}
+    >
+      <div
+        className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
+        style={{ background: 'var(--theme-primary)' }}
+        aria-hidden="true"
+      >
+        {initials(name)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <div className="text-sm font-semibold truncate" style={{ color: 'var(--theme-text)' }}>{name}</div>
+          <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--theme-text-muted)' }}>{relTime(item.created_at)}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <form onSubmit={(e) => { e.preventDefault(); load(); }} className="flex items-center gap-2">
-            <div className="relative">
-              <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9B8AB0]" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or phone…" data-testid="conv-search"
-                className="pl-8 pr-3 py-2 bg-white border border-[#E8E0F5] rounded-lg text-xs w-60" />
+        <div className="text-[11px] truncate mb-1" style={{ color: 'var(--theme-text-muted)' }}>
+          {company || item.lead_snapshot?.email || '—'}
+        </div>
+        <div className="text-xs line-clamp-2 mb-1.5" style={{ color: 'var(--theme-text)' }}>
+          {item.draft_preview || item.body || item.draft || item.subject}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider"
+            style={{ background: stage.bg, color: stage.color }}
+          >
+            {stage.icon ? <stage.icon size={9} weight="fill" /> : null} {stage.label}
+          </span>
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold"
+            style={{ background: 'var(--theme-surface2)', color: chColor }}
+          >
+            <ChannelIcon size={9} weight="fill" /> {(CHANNEL_META[item.channel] || {}).label || item.channel}
+          </span>
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold"
+            style={{ background: 'var(--theme-surface2)', color: conf.color }}
+            title={`${conf.pct}% AI confidence`}
+          >
+            <Sparkle size={9} weight="fill" /> {conf.pct}%
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+};
+
+
+// ─── Right pane detail ───────────────────────────────────────────────
+const TriageDetail = ({ item, onApprove, onReject, onEditSend, busy }) => {
+  const [editing, setEditing] = useState(false);
+  const [subject, setSubject] = useState(item?.subject || '');
+  const [body, setBody] = useState(item?.body || item?.draft || '');
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  useEffect(() => {
+    setEditing(false);
+    setRejecting(false);
+    setSubject(item?.subject || '');
+    setBody(item?.body || item?.draft || '');
+    setRejectReason('');
+  }, [item?.id]);
+
+  if (!item) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-10">
+        <div className="text-center">
+          <div className="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3"
+               style={{ background: 'var(--theme-primary-dim)', color: 'var(--theme-primary)' }}>
+            <Robot size={28} weight="duotone" />
+          </div>
+          <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            Pick a draft to review.
+          </div>
+          <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>
+            Use <kbd className="px-1 mx-0.5 rounded border text-[10px]" style={{ borderColor: 'var(--theme-border)' }}>J</kbd> and
+            <kbd className="px-1 mx-0.5 rounded border text-[10px]" style={{ borderColor: 'var(--theme-border)' }}>K</kbd> to navigate.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const stage = STAGE_META[(item.lead_snapshot?.stage || 'cold').toLowerCase()] || STAGE_META.cold;
+  const ChannelIcon = (CHANNEL_META[item.channel] || CHANNEL_META.email).icon;
+  const chColor = (CHANNEL_META[item.channel] || {}).color || 'var(--theme-primary)';
+  const conf = confidenceLabel(item.confidence);
+  const name = item.lead_snapshot?.name || 'Prospect';
+  const company = item.lead_snapshot?.company;
+  const showSubject = item.channel === 'email';
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid={`triage-detail-${item.id}`}>
+      {/* Lead header */}
+      <div className="px-6 py-4 border-b flex items-start gap-4" style={{ borderColor: 'var(--theme-border)' }}>
+        <div
+          className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white"
+          style={{ background: 'var(--theme-primary)' }}
+        >
+          {initials(name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-lg font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>{name}</div>
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: stage.bg, color: stage.color }}
+            >
+              {stage.icon ? <stage.icon size={10} weight="fill" /> : null} {stage.label}
+            </span>
+            {item.lead_snapshot?.score != null && (
+              <span
+                className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }}
+              >
+                Score {item.lead_snapshot.score}
+              </span>
+            )}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>
+            {company || item.lead_snapshot?.email || '—'} · Queued {relTime(item.created_at)} ago
+          </div>
+        </div>
+      </div>
+
+      {/* AI reasoning callout */}
+      <div className="px-6 py-3 border-b" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-primary-dim)' }}>
+        <div className="flex items-start gap-2">
+          <Sparkle size={14} weight="fill" style={{ color: 'var(--theme-primary)', marginTop: 2 }} />
+          <div className="flex-1">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--theme-primary)' }}>
+              ARIA · {item.ai_model || 'draft'}
             </div>
-          </form>
+            <div className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--theme-text)' }}>
+              {item.reason_for_review || 'AI drafted this reply and would like your sign-off before sending.'}
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              <div className="flex-1 max-w-[240px] h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--theme-surface2)' }}>
+                <div className="h-full transition-all" style={{ width: `${conf.pct}%`, background: conf.color }} />
+              </div>
+              <span className="text-[11px] font-semibold" style={{ color: conf.color }}>{conf.label} · {conf.pct}%</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Sentiment filter pills */}
-      <div className="flex items-center gap-2 flex-wrap" data-testid="sentiment-filters">        {[
-          { key: '', label: `All (${counts.all})`, color: '#7C35DC' },
-          { key: 'urgent', label: `Urgent (${counts.urgent})`, color: '#DC2626' },
-          { key: 'negative', label: `Negative (${counts.negative})`, color: '#D97706' },
-          { key: 'positive', label: `Positive (${counts.positive})`, color: '#16A34A' },
-          { key: 'neutral', label: `Neutral (${counts.neutral})`, color: '#5A4A7A' },
-        ].map((p) => (
-          <button key={p.key} onClick={() => applyFilter(p.key)} data-testid={`filter-${p.key || 'all'}`}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${filter === p.key ? 'text-white' : 'bg-white text-[#5A4A7A] border-[#E8E0F5] hover:bg-[#F9F5FF]'}`}
-            style={filter === p.key ? { background: p.color, borderColor: p.color } : {}}>
-            {p.label}
-          </button>
+      {/* Draft body — read or edit */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="text-[10px] uppercase tracking-[0.18em] font-bold mb-2 flex items-center gap-1.5" style={{ color: 'var(--theme-text-muted)' }}>
+          <ChannelIcon size={11} weight="fill" style={{ color: chColor }} /> AI-drafted {(CHANNEL_META[item.channel] || {}).label || 'reply'}
+        </div>
+        {showSubject && (editing ? (
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject"
+            className="w-full mb-3 px-3 py-2 rounded-lg text-sm outline-none border"
+            style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}
+            data-testid="triage-subject-input"
+          />
+        ) : (
+          <div className="mb-3 text-sm font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            {item.subject || <span className="italic" style={{ color: 'var(--theme-text-muted)' }}>(no subject)</span>}
+          </div>
         ))}
+        {editing ? (
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={10}
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none border leading-relaxed resize-none"
+            style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}
+            data-testid="triage-body-input"
+          />
+        ) : (
+          <div
+            className="text-sm leading-relaxed whitespace-pre-wrap rounded-xl border p-4"
+            style={{ color: 'var(--theme-text)', background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+          >
+            {item.body || item.draft || '(no draft body)'}
+          </div>
+        )}
+
+        {rejecting && (
+          <div className="mt-4">
+            <div className="text-[10px] uppercase tracking-[0.18em] font-bold mb-2" style={{ color: 'var(--theme-text-muted)' }}>Reject reason (optional)</div>
+            <input
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Not the right time, wrong angle…"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border-strong)', color: 'var(--theme-text)' }}
+              data-testid="triage-reject-reason"
+            />
+          </div>
+        )}
       </div>
 
-      {/* Aria-says microcopy */}
-      {ariaSays && (
-        <div className="aria-card-lift rounded-2xl border border-[#E0D4F7] bg-gradient-to-r from-[#F4F0FF] to-[#FAFAFA] px-4 py-3 flex items-start gap-2.5" data-testid="conversations-aria-says">
-          <Sparkle size={14} weight="fill" className="text-[#7C35DC] mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-[#1A0A2E] leading-relaxed">
-            <span className="font-extrabold text-[#7C35DC]" style={{ fontFamily: 'Plus Jakarta Sans' }}>Aria says: </span>
-            {ariaSays}
-          </p>
-        </div>
-      )}
-
-      {/* Threads list */}
-      {loading ? (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-10 text-center text-sm text-[#9B8AB0]">Loading…</div>
-      ) : threads.length === 0 ? (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl p-12 text-center" data-testid="no-conversations">
-          <Sparkle size={28} weight="duotone" className="text-[#7C35DC] mx-auto mb-2" />
-          <h3 className="text-base font-bold text-[#1A0A2E] mb-1" style={{ fontFamily: 'Plus Jakarta Sans' }}>No conversations yet</h3>
-          <p className="text-xs text-[#5A4A7A]">When leads start replying to Aria, threads will appear here.</p>
-        </div>
-      ) : (
-        <div className="bg-white border border-[#E8E0F5] rounded-xl overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
-          {threads.map((t, idx) => {
-            const sm = SENTIMENT_META[(t.latest_sentiment || 'neutral').toLowerCase()] || SENTIMENT_META.neutral;
-            const Icon = sm.icon;
-            const urgent = ['urgent', 'negative'].includes((t.latest_sentiment || '').toLowerCase());
-            return (
-              <button key={t.lead_id} onClick={() => nav(`/lead-inbox?lead=${t.lead_id}`)} data-testid={`thread-${t.lead_id}`}
-                className={`w-full text-left px-5 py-3 border-b border-[#F0ECF9] hover:bg-[#FAF7FF] transition-all flex items-center gap-4 ${idx === threads.length - 1 ? 'border-b-0' : ''} ${urgent ? 'bg-gradient-to-r from-[#FEE2E2]/30 to-transparent' : ''}`}>
-                {/* Avatar */}
-                <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white" style={{ background: 'var(--gradient-brand)' }}>
-                  {(t.first_name || 'L').slice(0, 1).toUpperCase()}
-                </div>
-
-                {/* Name + last msg */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-[#1A0A2E]" style={{ fontFamily: 'Plus Jakarta Sans' }}>{t.first_name || 'Lead'} {t.last_name || ''}</span>
-                    {!t.aria_active && <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FEF3C7] text-[#D97706] border border-[#D97706]/30">Human</span>}
-                    <span className="text-[10px] font-mono text-[#9B8AB0]">{t.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-[#5A4A7A] mt-0.5">
-                    {t.last_message_role === 'aria' && <span className="text-[10px] font-bold text-[#7C35DC]">Aria:</span>}
-                    {t.last_message_role === 'lead' && <span className="text-[10px] font-bold text-[#0055FF]">Lead:</span>}
-                    <span className="truncate">{t.last_message || <span className="italic text-[#9B8AB0]">No messages yet</span>}</span>
-                  </div>
-                </div>
-
-                {/* Right: sentiment + score + time */}
-                <div className="flex-shrink-0 flex items-center gap-3">
-                  {t.aria_confidence !== null && t.aria_confidence !== undefined && (
-                    <div className="text-right">
-                      <div className="text-[9px] font-bold uppercase tracking-wider text-[#9B8AB0]">Confidence</div>
-                      <div className="text-xs font-extrabold text-[#7C35DC]">{Math.round((t.aria_confidence || 0) * 100)}%</div>
-                    </div>
-                  )}
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border" style={{ background: sm.bg, borderColor: sm.color + '55', color: sm.color }}>
-                    <Icon size={10} weight="fill" /> {sm.label}
-                  </span>
-                  <span className="text-[10px] text-[#9B8AB0] font-mono w-16 text-right">{fmtRel(t.last_message_at)}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Actions */}
+      <div className="px-6 py-4 border-t flex items-center gap-2" style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-surface)' }}>
+        {rejecting ? (
+          <>
+            <button
+              onClick={() => { setRejecting(false); setRejectReason(''); }}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+              data-testid="triage-cancel-reject"
+            >Cancel</button>
+            <button
+              onClick={() => onReject(item, rejectReason)}
+              disabled={busy}
+              className="ml-auto px-4 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+              style={{ background: '#DC2626' }}
+              data-testid="triage-confirm-reject"
+            >Confirm reject</button>
+          </>
+        ) : editing ? (
+          <>
+            <button
+              onClick={() => { setEditing(false); setBody(item.body || item.draft || ''); setSubject(item.subject || ''); }}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            >Cancel</button>
+            <span className="text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Editing draft…</span>
+            <button
+              onClick={() => onEditSend(item, { subject, body })}
+              disabled={busy || !body.trim()}
+              className="ml-auto px-4 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50 inline-flex items-center gap-1.5"
+              style={{ background: 'var(--theme-primary)' }}
+              data-testid="triage-save-send"
+            >
+              <CheckCircle size={12} weight="fill" /> Save & send
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setRejecting(true)}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: '#DC2626' }}
+              data-testid="triage-reject-btn"
+            >
+              <XIcon size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Reject
+            </button>
+            <button
+              onClick={() => setEditing(true)}
+              className="px-3 py-2 rounded-lg text-xs font-semibold border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+              data-testid="triage-edit-btn"
+            >
+              <PencilSimple size={11} weight="bold" className="inline -mt-0.5 mr-1" /> Edit
+            </button>
+            <button
+              onClick={() => onApprove(item)}
+              disabled={busy}
+              className="ml-auto px-4 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-50 inline-flex items-center gap-1.5"
+              style={{ background: 'var(--theme-primary)' }}
+              data-testid="triage-approve-btn"
+            >
+              <Lightning size={12} weight="fill" /> Approve & send
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 };
+
+
+// ─── Main page ───────────────────────────────────────────────────────
+const Conversations = () => {
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [confFilter, setConfFilter] = useState('all'); // all | high | medium | low
+  const [activeId, setActiveId] = useState(null);
+  const searchRef = useRef(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get('/api/approvals');
+      const list = r.data?.items || [];
+      setItems(list);
+      // Auto-select first item on load
+      setActiveId((cur) => cur && list.some((x) => x.id === cur) ? cur : list[0]?.id || null);
+    } catch (_e) {
+      toast.error('Could not load approvals');
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((it) => {
+      // Confidence filter
+      const c = it.confidence ?? 0;
+      if (confFilter === 'high'   && c < 0.75) return false;
+      if (confFilter === 'medium' && (c < 0.5 || c >= 0.75)) return false;
+      if (confFilter === 'low'    && c >= 0.5) return false;
+      // Search filter
+      if (q) {
+        const hay = `${it.lead_snapshot?.name || ''} ${it.lead_snapshot?.company || ''} ${it.subject || ''} ${it.body || it.draft || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [items, query, confFilter]);
+
+  const active = filtered.find((it) => it.id === activeId) || null;
+  const activeIdx = filtered.findIndex((it) => it.id === activeId);
+
+  // Auto-adjust active if filter changes and current is filtered out
+  useEffect(() => {
+    if (filtered.length > 0 && !filtered.some((x) => x.id === activeId)) {
+      setActiveId(filtered[0].id);
+    } else if (filtered.length === 0) {
+      setActiveId(null);
+    }
+  }, [filtered, activeId]);
+
+  // ─── Actions ───
+  const doApprove = async (item) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/approvals/${item.id}/approve`);
+      toast.success(`Approved & sent to ${item.lead_snapshot?.name || 'lead'}`);
+      setItems((xs) => xs.filter((x) => x.id !== item.id));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Approve failed');
+    } finally { setBusy(false); }
+  };
+
+  const doReject = async (item, reason) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/approvals/${item.id}/reject`, { reason });
+      toast.success('Draft rejected');
+      setItems((xs) => xs.filter((x) => x.id !== item.id));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Reject failed');
+    } finally { setBusy(false); }
+  };
+
+  const doEditSend = async (item, patch) => {
+    setBusy(true);
+    try {
+      await api.post(`/api/approvals/${item.id}/edit-send`, patch);
+      toast.success('Sent with your edits');
+      setItems((xs) => xs.filter((x) => x.id !== item.id));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Send failed');
+    } finally { setBusy(false); }
+  };
+
+  // ─── Keyboard shortcuts ───
+  useEffect(() => {
+    const handler = (e) => {
+      // Ignore inputs / editable text
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) {
+        if (e.key === 'Escape') e.target.blur();
+        return;
+      }
+      if (e.key === 'j' || e.key === 'J' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filtered.length === 0) return;
+        const nxt = filtered[(activeIdx + 1) % filtered.length];
+        setActiveId(nxt.id);
+      } else if (e.key === 'k' || e.key === 'K' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filtered.length === 0) return;
+        const prv = filtered[(activeIdx - 1 + filtered.length) % filtered.length];
+        setActiveId(prv.id);
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (active) { e.preventDefault(); doApprove(active); }
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (active) { e.preventDefault(); doReject(active, ''); }
+      } else if (e.key === '/') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, activeIdx, active]);
+
+  return (
+    <div className="max-w-[1400px] mx-auto" data-testid="conversations-page" style={{ color: 'var(--theme-text)' }}>
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <div className="eyebrow" style={{ color: 'var(--theme-primary)' }}>Reply Triage</div>
+          <h1 className="text-[28px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            Conversations
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--theme-text-muted)' }}>
+            ARIA drafts replies. You review, edit, or approve. Fast.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <MagnifyingGlass size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--theme-text-dim)' }} />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search leads or drafts…"
+              className="pl-8 pr-3 py-2 rounded-full text-xs w-56 outline-none border"
+              style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+              data-testid="triage-search"
+            />
+          </div>
+          <button
+            onClick={load}
+            className="px-3 py-2 rounded-full text-xs font-semibold border transition-colors hover:bg-[var(--theme-surface2)]"
+            style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+            data-testid="triage-refresh"
+          >Refresh</button>
+        </div>
+      </div>
+
+      {/* Filter + kbd hints */}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        {[
+          { k: 'all', label: `All (${items.length})` },
+          { k: 'high', label: `High conf` },
+          { k: 'medium', label: `Medium` },
+          { k: 'low', label: `Low` },
+        ].map((f) => {
+          const active = confFilter === f.k;
+          return (
+            <button
+              key={f.k}
+              onClick={() => setConfFilter(f.k)}
+              data-testid={`triage-filter-${f.k}`}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors"
+              style={{
+                background: active ? 'var(--theme-primary)' : 'var(--theme-surface)',
+                borderColor: active ? 'var(--theme-primary)' : 'var(--theme-border)',
+                color: active ? '#fff' : 'var(--theme-text-muted)',
+              }}
+            >{f.label}</button>
+          );
+        })}
+        <div className="ml-auto hidden md:flex items-center gap-3 text-[10px]" style={{ color: 'var(--theme-text-dim)' }}>
+          <Hint k="J" desc="next" />
+          <Hint k="K" desc="prev" />
+          <Hint k="E" desc="approve" />
+          <Hint k="R" desc="reject" />
+          <Hint k="/" desc="search" />
+          <Hint k={<><Command size={10} weight="bold" className="inline -mt-0.5" />J</>} desc="Aria" />
+        </div>
+      </div>
+
+      {/* Split-pane container */}
+      <div
+        className="rounded-2xl border overflow-hidden flex"
+        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', height: 'calc(100vh - 240px)', minHeight: 480 }}
+        data-testid="triage-split-pane"
+      >
+        {/* Left list */}
+        <div className="w-[380px] shrink-0 border-r flex flex-col" style={{ borderColor: 'var(--theme-border)' }}>
+          <div className="px-4 py-2.5 border-b text-[10px] uppercase tracking-[0.16em] font-bold flex items-center justify-between" style={{ borderColor: 'var(--theme-border)', color: 'var(--theme-text-muted)' }}>
+            <span>{filtered.length} to review</span>
+            <span>Newest first</span>
+          </div>
+          <div className="flex-1 overflow-y-auto" data-testid="triage-list">
+            {loading && (
+              <div className="text-center py-10 text-xs" style={{ color: 'var(--theme-text-muted)' }}>Loading…</div>
+            )}
+            {!loading && filtered.length === 0 && (
+              <div className="text-center py-14 px-4">
+                <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-2"
+                     style={{ background: 'var(--theme-primary-dim)', color: 'var(--theme-primary)' }}>
+                  <CheckCircle size={22} weight="duotone" />
+                </div>
+                <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+                  Inbox zero.
+                </div>
+                <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>
+                  No drafts waiting on you.
+                </div>
+              </div>
+            )}
+            {!loading && filtered.map((it) => (
+              <TriageRow key={it.id} item={it} active={it.id === activeId} onClick={() => setActiveId(it.id)} />
+            ))}
+          </div>
+        </div>
+
+        {/* Right detail */}
+        <TriageDetail
+          item={active}
+          busy={busy}
+          onApprove={doApprove}
+          onReject={doReject}
+          onEditSend={doEditSend}
+        />
+      </div>
+    </div>
+  );
+};
+
+const Hint = ({ k, desc }) => (
+  <span className="inline-flex items-center gap-1">
+    <kbd
+      className="px-1.5 py-0.5 rounded border text-[10px] font-semibold"
+      style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)', color: 'var(--theme-text)' }}
+    >{k}</kbd>
+    {desc}
+  </span>
+);
 
 export default Conversations;

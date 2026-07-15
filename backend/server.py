@@ -403,9 +403,12 @@ async def get_leads(
 async def get_your_five_today_route(current_user: dict = Depends(get_current_user)):
     """Redirect to the actual handler below."""
     # This is a forwarding stub — actual logic is in the handler at the bottom of the file
+    # SEC-002 fix (iter168) — scope query to caller's tenant to prevent
+    # cross-tenant PII leak. Prior code returned ALL tenants' leads.
+    _tenant_id = current_user.get("tenant_id")
     excluded = ["won", "lost", "do_not_contact"]
     candidates = list(leads_collection.find(
-        {"status": {"$nin": excluded}},
+        {"status": {"$nin": excluded}, "tenant_id": _tenant_id},
         {
             "_id": 1, "first_name": 1, "last_name": 1, "email": 1, "phone": 1,
             "company_name": 1, "status": 1, "icp_score": 1, "source_channel": 1,
@@ -471,26 +474,48 @@ async def get_your_five_today_route(current_user: dict = Depends(get_current_use
     return {"leads": scored[:5], "generated_at": now.isoformat()}
 
 @app.get("/api/leads/sleeping")
-async def get_sleeping_leads_route(threshold_days: int = 14, current_user: dict = Depends(get_current_user)):
+async def get_sleeping_leads(
+    threshold_days: int = 14,
+    tier: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get leads with no activity beyond threshold days.
+
+    iter168 — this handler MUST be registered before @app.get('/api/leads/{lead_id}')
+    otherwise FastAPI matches 'sleeping' as a lead_id parameter and returns 404.
+    """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
-    query = {"status": {"$nin": ["won", "lost", "do_not_contact"]}, "$or": [{"last_contacted_at": {"$lt": cutoff}}, {"last_contacted_at": None}, {"last_contacted_at": {"$exists": False}}]}
+    query = {
+        "tenant_id": current_user.get("tenant_id"),
+        "status": {"$nin": ["won", "lost", "do_not_contact"]},
+        "$or": [
+            {"last_contacted_at": {"$lt": cutoff}},
+            {"last_contacted_at": None},
+            {"last_contacted_at": {"$exists": False}},
+        ]
+    }
     leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
     leads = [serialize_doc(l) for l in leads]
     now = datetime.now(timezone.utc)
     for lead in leads:
         lc = lead.get("last_contacted_at")
         if lc:
-            try: days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
-            except: days = 30
+            try:
+                days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
+            except Exception:
+                days = 30
         else:
-            try: days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
-            except: days = 30
+            try:
+                days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
+            except Exception:
+                days = 30
         lead["_days_asleep"] = days
         lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
     sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
     at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
     cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
     return {"leads": leads, "total": len(leads), "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault}}
+
 
 @app.get("/api/leads/{lead_id}")
 async def get_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
@@ -740,12 +765,25 @@ async def get_lead_activities(lead_id: str, current_user: dict = Depends(get_cur
 @app.post("/api/leads/import")
 async def import_leads(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     try:
+        # SEC-005 fix (iter168) — cap file size (5 MB) to prevent memory
+        # exhaustion; require CSV content-type; stamp tenant_id on every
+        # row so imports never become unscoped.
+        MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB
+        MAX_CSV_ROWS = 5000
+        ct = (file.content_type or "").lower()
+        if ct and ct not in ("text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream", "text/plain"):
+            raise HTTPException(status_code=400, detail=f"Unsupported content type: {ct}. Upload a CSV.")
         contents = await file.read()
+        if len(contents) > MAX_CSV_BYTES:
+            raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_CSV_BYTES // (1024*1024)} MB.")
         csv_data = io.StringIO(contents.decode('utf-8'))
         reader = csv.DictReader(csv_data)
-        
+        _tenant_id = current_user.get("tenant_id")
+
         imported_count = 0
-        for row in reader:
+        for idx, row in enumerate(reader):
+            if idx >= MAX_CSV_ROWS:
+                break
             lead_doc = {
                 "lead_type": row.get("lead_type", "B2C"),
                 "first_name": row.get("first_name", ""),
@@ -767,7 +805,8 @@ async def import_leads(file: UploadFile = File(...), current_user: dict = Depend
                 "custom_fields": {},
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-                "created_by": current_user["email"]
+                "created_by": current_user["email"],
+                "tenant_id": _tenant_id,  # SEC-005 — always stamp tenant on import
             }
             
             if lead_doc["email"]:
@@ -775,6 +814,8 @@ async def import_leads(file: UploadFile = File(...), current_user: dict = Depend
                 imported_count += 1
         
         return {"message": f"Successfully imported {imported_count} leads"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Import failed: {str(e)}")
 
@@ -1035,7 +1076,7 @@ async def trigger_aria(request: AriaTriggerRequest, background_tasks: Background
         if not settings.get("enabled"):
             raise HTTPException(status_code=400, detail="ARIA is currently disabled")
         
-        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")})
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
@@ -1055,7 +1096,7 @@ async def trigger_aria(request: AriaTriggerRequest, background_tasks: Background
         # Update ARIA state
         new_state = "AWAITING_REPLY_1" if request.touch_type == "first_touch" else "AWAITING_REPLY_2"
         leads_collection.update_one(
-            {"_id": ObjectId(request.lead_id)},
+            {"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")},
             {"$set": {
                 "aria_state": new_state,
                 "aria_last_action_at": datetime.now(timezone.utc).isoformat(),
@@ -1085,7 +1126,7 @@ async def trigger_aria(request: AriaTriggerRequest, background_tasks: Background
 async def process_aria_reply(request: AriaReplyRequest, current_user: dict = Depends(get_current_user)):
     """Process an incoming reply from a lead and generate ARIA's response."""
     try:
-        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+        lead = leads_collection.find_one({"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")})
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
@@ -1116,7 +1157,7 @@ async def process_aria_reply(request: AriaReplyRequest, current_user: dict = Dep
         
         # Update state
         leads_collection.update_one(
-            {"_id": ObjectId(request.lead_id)},
+            {"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")},
             {"$set": {
                 "aria_state": "CONVERSATION_ACTIVE",
                 "aria_last_action_at": datetime.now(timezone.utc).isoformat(),
@@ -1143,8 +1184,14 @@ async def process_aria_reply(request: AriaReplyRequest, current_user: dict = Dep
 @app.get("/api/aria/conversation/{lead_id}")
 async def get_aria_conversation(lead_id: str, current_user: dict = Depends(get_current_user)):
     """Get full ARIA conversation history for a lead."""
+    # SEC-003 fix (iter168) — tenant-scoped read
+    lead = leads_collection.find_one(
+        {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
+        {"_id": 0, "aria_state": 1, "aria_handed_off": 1, "aria_qualification_data": 1, "aria_booking_url": 1},
+    )
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
     conversation = get_conversation_history(lead_id)
-    lead = leads_collection.find_one({"_id": ObjectId(lead_id)}, {"_id": 0, "aria_state": 1, "aria_handed_off": 1, "aria_qualification_data": 1, "aria_booking_url": 1})
     return {
         "conversation": conversation,
         "aria_state": lead.get("aria_state", "PENDING_FIRST_TOUCH") if lead else "PENDING_FIRST_TOUCH",
@@ -1156,18 +1203,21 @@ async def get_aria_conversation(lead_id: str, current_user: dict = Depends(get_c
 @app.post("/api/aria/takeover/{lead_id}")
 async def takeover_from_aria(lead_id: str, current_user: dict = Depends(get_current_user)):
     """Human takes over conversation from ARIA."""
-    leads_collection.update_one(
-        {"_id": ObjectId(lead_id)},
+    # SEC-003 fix (iter168) — tenant-scoped write
+    res = leads_collection.update_one(
+        {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
         {"$set": {
             "aria_state": "ESCALATED_TO_HUMAN",
             "aria_handed_off": True,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
     save_aria_message(lead_id, "system", "Human agent has taken over this conversation")
     # CRM sync — fire takeover + paused events
     try:
-        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
+        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")}) or {}
         tenant_id = lead_doc.get("tenant_id")
         if tenant_id:
             lead_doc["id"] = str(lead_doc.get("_id"))
@@ -1186,17 +1236,20 @@ async def takeover_from_aria(lead_id: str, current_user: dict = Depends(get_curr
 @app.post("/api/aria/resume/{lead_id}")
 async def resume_aria(lead_id: str, current_user: dict = Depends(get_current_user)):
     """Resume ARIA for a lead after human takeover."""
-    leads_collection.update_one(
-        {"_id": ObjectId(lead_id)},
+    # SEC-003 fix (iter168) — tenant-scoped write
+    res = leads_collection.update_one(
+        {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
         {"$set": {
             "aria_state": "CONVERSATION_ACTIVE",
             "aria_handed_off": False,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
     save_aria_message(lead_id, "system", "ARIA has been resumed for this conversation")
     try:
-        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id)}) or {}
+        lead_doc = leads_collection.find_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")}) or {}
         tenant_id = lead_doc.get("tenant_id")
         if tenant_id:
             lead_doc["id"] = str(lead_doc.get("_id"))
@@ -1315,50 +1368,8 @@ async def get_aria_feed(current_user: dict = Depends(get_current_user)):
 # MODULE: SLEEPING LEADS + REVIVAL ENGINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-@app.get("/api/leads/sleeping")
-async def get_sleeping_leads(
-    threshold_days: int = 14,
-    tier: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get leads with no activity beyond threshold days."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=threshold_days)).isoformat()
-    query = {
-        "tenant_id": current_user.get("tenant_id"),
-        "status": {"$nin": ["won", "lost", "do_not_contact"]},
-        "$or": [
-            {"last_contacted_at": {"$lt": cutoff}},
-            {"last_contacted_at": None},
-            {"last_contacted_at": {"$exists": False}},
-        ]
-    }
-
-    leads = list(leads_collection.find(query).sort("icp_score", DESCENDING).limit(200))
-    leads = [serialize_doc(l) for l in leads]
-
-    now = datetime.now(timezone.utc)
-    for lead in leads:
-        lc = lead.get("last_contacted_at")
-        if lc:
-            try:
-                days = (now - datetime.fromisoformat(lc.replace("Z", "+00:00"))).days
-            except:
-                days = 30
-        else:
-            days = (now - datetime.fromisoformat(lead.get("created_at", now.isoformat()).replace("Z", "+00:00"))).days
-        lead["_days_asleep"] = days
-        lead["_segment"] = "cold_vault" if days >= 60 else ("at_risk" if days >= 30 else "sleeping")
-
-    # Segment counts
-    sleeping = len([l for l in leads if l["_segment"] == "sleeping"])
-    at_risk = len([l for l in leads if l["_segment"] == "at_risk"])
-    cold_vault = len([l for l in leads if l["_segment"] == "cold_vault"])
-
-    return {
-        "leads": leads,
-        "total": len(leads),
-        "segments": {"sleeping": sleeping, "at_risk": at_risk, "cold_vault": cold_vault},
-    }
+# iter169 — deprecated /api/leads/sleeping stub removed. Canonical
+# tenant-scoped handler lives above /api/leads/{lead_id} (line ~476).
 
 class RevivalCampaignRequest(BaseModel):
     lead_ids: List[str]
@@ -1379,7 +1390,9 @@ async def launch_revival_campaign(request: RevivalCampaignRequest, current_user:
 
     for lead_id in request.lead_ids[:50]:  # Cap at 50
         try:
-            lead = leads_collection.find_one({"_id": ObjectId(lead_id)})
+            # SEC-003 fix (iter168) — tenant-scoped lookup + prevent
+            # sending outbound email/AI-spend on foreign leads.
+            lead = leads_collection.find_one({"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")})
             if not lead:
                 continue
             lead = serialize_doc(lead)
@@ -1423,7 +1436,7 @@ async def launch_revival_campaign(request: RevivalCampaignRequest, current_user:
 
             # Update lead
             leads_collection.update_one(
-                {"_id": ObjectId(lead_id)},
+                {"_id": ObjectId(lead_id), "tenant_id": current_user.get("tenant_id")},
                 {"$set": {
                     "last_contacted_at": datetime.now(timezone.utc).isoformat(),
                     "status": "contacted",
@@ -1461,7 +1474,8 @@ class NoShowRequest(BaseModel):
 @app.post("/api/leads/no-show-recovery")
 async def trigger_no_show_recovery(request: NoShowRequest, current_user: dict = Depends(get_current_user)):
     """Trigger no-show recovery message for a lead."""
-    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id)})
+    # SEC-003 fix (iter168) — tenant-scoped read
+    lead = leads_collection.find_one({"_id": ObjectId(request.lead_id), "tenant_id": current_user.get("tenant_id")})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     lead = serialize_doc(lead)

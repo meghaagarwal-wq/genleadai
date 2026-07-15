@@ -16,7 +16,29 @@ from services.intel_service import compose_message
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 leads_col = db["leads"]
+pt_leads_col = db["pt_leads"]
 conversations_col = db["aria_conversations"]
+
+
+def _merge_leads_for_threads(tenant_id: str, base_filter: dict, limit: int) -> list[dict]:
+    """iter159 — union pt_leads + legacy leads, deduped by `id`, newest first.
+    Legacy `leads` rows take precedence for fields the conversation page still
+    relies on (`updated_at`, `latest_sentiment`, `aria_active`, etc); pt_leads
+    fills any gap when the lead was only created via the new intel pipeline."""
+    pt_rows = list(pt_leads_col.find(base_filter, {"_id": 0}).sort("updated_at", -1).limit(int(limit) * 2))
+    legacy_rows = list(leads_col.find(base_filter, {"_id": 0}).sort("updated_at", -1).limit(int(limit) * 2))
+    merged: dict[str, dict] = {}
+    for r in pt_rows:
+        if r.get("id"):
+            merged[r["id"]] = r
+    for r in legacy_rows:
+        if r.get("id"):
+            existing = merged.get(r["id"]) or {}
+            # legacy wins where it has a value (richer conversation fields)
+            merged[r["id"]] = {**existing, **{k: v for k, v in r.items() if v is not None}}
+    out = list(merged.values())
+    out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    return out[: int(limit)]
 
 
 @router.get("/threads")
@@ -50,7 +72,7 @@ async def threads(
             {"email": {"$regex": _safe, "$options": "i"}},
         ]
 
-    rows = list(leads_col.find(base, {"_id": 0}).sort("updated_at", -1).limit(int(limit)))
+    rows = _merge_leads_for_threads(tenant_id, base, limit)
 
     # Enrich with last message preview + aria_confidence
     out = []

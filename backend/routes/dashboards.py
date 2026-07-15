@@ -319,11 +319,15 @@ async def dashboard_b2c(current_user: dict = Depends(get_current_user)):
             "last_refresh": _iso(now),
         },
         "kpis": {
-            "leads_today": {"value": leads_today, "trend": _trend(leads_today, leads_same_day_last_week)},
-            "active_convos": {"value": active_convos, "label": "ARIA is handling all of them"},
-            "bookings_week": {"value": bookings_week, "trend": _trend(bookings_week, bookings_last_week)},
-            "conversion_rate": {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
-            "revenue_pipeline": {"value": round(pipeline_value), "currency": currency},
+            "leads_today":      {"value": leads_today,      "trend": _trend(leads_today, leads_same_day_last_week),
+                                 "spark": _timeseries_count(pt_leads_col, base, "created_at", now)},
+            "active_convos":    {"value": active_convos,    "label": "ARIA is handling all of them",
+                                 "spark": _timeseries_count(outbound_log, base, "created_at", now)},
+            "bookings_week":    {"value": bookings_week,    "trend": _trend(bookings_week, bookings_last_week),
+                                 "spark": _timeseries_count(booking_events, base, "when", now)},
+            "conversion_rate":  {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
+            "revenue_pipeline": {"value": round(pipeline_value), "currency": currency,
+                                 "spark": _timeseries_sum(booking_events, base, "when", "deal_value", now)},
         },
         "aria_time_saved": _aria_time_saved(tenant_id, 7, hourly),
         "momentum": _momentum(tenant_id, {"leads": 0.4, "high_intent": 0.4, "bookings": 0.2}),
@@ -335,6 +339,7 @@ async def dashboard_b2c(current_user: dict = Depends(get_current_user)):
         "biggest_drop": biggest_drop,
         "sequences": sequences,
         "channel_overlap": _channel_overlap(tenant_id),
+        "winning_combos": _winning_channel_combos(tenant_id),
         "ghost_leads": ghost_leads,
         "cost_per_qualified_lead": _cost_per_qualified_lead(tenant_id, currency, month_start),
     }
@@ -368,6 +373,38 @@ def _channel_overlap(tenant_id: str) -> Dict[str, Any]:
         key=lambda r: r["leads"], reverse=True,
     )[:5]
     return {"coming_soon": False, "rows": out_rows}
+
+
+def _winning_channel_combos(tenant_id: str) -> Dict[str, Any]:
+    """Top 3 channel combinations by REAL booked-meeting count
+    (joins pt_leads.source_channels × booking_events.lead_id).
+    Powers the 'Winning Channel Combos' leaderboard on the B2C dashboard."""
+    pipeline = [
+        {"$match": {"tenant_id": tenant_id, "source_channels": {"$exists": True, "$ne": [], "$type": "array"}}},
+        {"$lookup": {"from": "booking_events", "localField": "id", "foreignField": "lead_id", "as": "bookings"}},
+        {"$project": {"_id": 0, "channels": "$source_channels", "bookings_count": {"$size": "$bookings"}}},
+    ]
+    rows = list(pt_leads_col.aggregate(pipeline))
+    if not rows:
+        return {"coming_soon": True, "rows": []}
+    bucket: Dict[str, Dict[str, int]] = {}
+    for r in rows:
+        chs = sorted(set((c or "").strip().lower() for c in (r.get("channels") or []) if c))
+        if len(chs) < 2:
+            continue
+        key = " + ".join(chs[:3])
+        b = bucket.setdefault(key, {"leads": 0, "bookings": 0})
+        b["leads"] += 1
+        b["bookings"] += r.get("bookings_count") or 0
+    if not bucket:
+        return {"coming_soon": True, "rows": []}
+    out = []
+    for key, v in bucket.items():
+        close_rate = round((v["bookings"] / v["leads"]) * 100, 1) if v["leads"] else 0
+        out.append({"combo": key, "leads": v["leads"], "bookings": v["bookings"], "close_rate": close_rate})
+    # Sort by bookings DESC then close_rate DESC then leads DESC.
+    out.sort(key=lambda r: (-r["bookings"], -r["close_rate"], -r["leads"]))
+    return {"coming_soon": False, "rows": out[:3]}
 
 
 def _cost_per_qualified_lead(tenant_id: str, currency: str, month_start: str) -> Dict[str, Any]:
@@ -428,6 +465,41 @@ def _asset_performance(tenant_id: str, day_start_iso: str):
     if not rows:
         return {"coming_soon": True, "rows": []}
     return {"coming_soon": False, "rows": [{"name": r["_id"], "clicks": r["clicks"]} for r in rows]}
+
+
+def _timeseries_count(collection, base_filter: Dict[str, Any], date_field: str, now: datetime, days: int = 7) -> list[int]:
+    """Return a list of daily counts for the last `days` days (oldest → newest).
+    Used to feed KPI sparkline charts. Reads cheap via single $bucket aggregate."""
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    boundaries = [(start + timedelta(days=i)).isoformat() for i in range(days + 1)]
+    pipeline = [
+        {"$match": {**base_filter, date_field: {"$gte": boundaries[0]}}},
+        {"$bucket": {
+            "groupBy": f"${date_field}",
+            "boundaries": boundaries,
+            "default": "other",
+            "output": {"count": {"$sum": 1}},
+        }},
+    ]
+    rows = {r["_id"]: r["count"] for r in collection.aggregate(pipeline)}
+    return [rows.get(boundaries[i], 0) for i in range(days)]
+
+
+def _timeseries_sum(collection, base_filter: Dict[str, Any], date_field: str, value_field: str, now: datetime, days: int = 7) -> list[float]:
+    """Same as _timeseries_count but sums `value_field` per day. Used for $-tracking."""
+    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    boundaries = [(start + timedelta(days=i)).isoformat() for i in range(days + 1)]
+    pipeline = [
+        {"$match": {**base_filter, date_field: {"$gte": boundaries[0]}}},
+        {"$bucket": {
+            "groupBy": f"${date_field}",
+            "boundaries": boundaries,
+            "default": "other",
+            "output": {"total": {"$sum": f"${value_field}"}},
+        }},
+    ]
+    rows = {r["_id"]: r["total"] for r in collection.aggregate(pipeline)}
+    return [round(rows.get(boundaries[i], 0) or 0) for i in range(days)]
 
 
 def _signal_attribution(tenant_id: str, days_present: int) -> Dict[str, Any]:
@@ -491,8 +563,40 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
     icp_dist = {r["_id"] or "icp_unknown": r["count"] for r in icp_pipeline}
     unknown_pct = round(((icp_dist.get("icp_unknown", 0) + icp_dist.get("icp_not_fit", 0)) / total) * 100, 1)
     primary_pct = round(((icp_dist.get("icp_a", 0) + icp_dist.get("icp_b", 0)) / total) * 100, 1)
-    drift_detected = unknown_pct > 30 or primary_pct < 40
+    drift_detected_raw = unknown_pct > 30 or primary_pct < 40
     primary_label = max(icp_dist, key=icp_dist.get) if icp_dist else "icp_a"
+
+    # iter158 Phase B Step 5 — snooze: if tenant has a non-expired
+    # icp_drift_snooze_until timestamp, suppress the banner regardless of
+    # underlying numbers. Lets founders dismiss the alert for 7 days.
+    tenant_doc = db["tenants"].find_one({"id": tenant_id}, {"_id": 0, "icp_drift_snooze_until": 1}) or {}
+    snooze_until = tenant_doc.get("icp_drift_snooze_until")
+    snoozed = False
+    if snooze_until:
+        try:
+            snoozed = datetime.fromisoformat(snooze_until.replace("Z", "+00:00")) > now
+        except Exception:
+            snoozed = False
+    drift_detected = drift_detected_raw and not snoozed
+
+    # iter158 Phase B Step 5 — drift breakdown by channel (which sources are
+    # bringing in unknown-ICP leads). Powers the ICP Drift Modal drill-down.
+    by_channel_rows = list(pt_leads_col.aggregate([
+        {"$match": {**base, "created_at": {"$gte": (now - timedelta(days=30)).isoformat()}}},
+        {"$group": {
+            "_id": "$source",
+            "total":   {"$sum": 1},
+            "unknown": {"$sum": {"$cond": [{"$in": ["$icp_segment", [None, "", "icp_unknown", "icp_not_fit"]]}, 1, 0]}},
+        }},
+        {"$sort": {"total": -1}},
+    ]))
+    by_channel = [{
+        "channel": r["_id"] or "manual",
+        "total":   r["total"],
+        "unknown": r["unknown"],
+        "unknown_pct": round((r["unknown"] / r["total"]) * 100, 1) if r["total"] else 0,
+    } for r in by_channel_rows]
+
 
     # Channel performance.
     channel_rows = list(pt_leads_col.aggregate([
@@ -603,10 +707,14 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "last_refresh": _iso(now),
         },
         "kpis": {
-            "leads_month": {"value": leads_month, "trend": _trend(leads_month, leads_last_month)},
-            "high_intent": {"value": high_intent, "trend": _trend(high_intent, high_intent_last)},
-            "meetings": {"value": meetings, "trend": _trend(meetings, meetings_last)},
-            "signals": {"value": signals, "trend": _trend(signals, signals_last)},
+            "leads_month": {"value": leads_month, "trend": _trend(leads_month, leads_last_month),
+                             "spark": _timeseries_count(pt_leads_col, base, "created_at", now)},
+            "high_intent": {"value": high_intent, "trend": _trend(high_intent, high_intent_last),
+                             "spark": _timeseries_count(pt_leads_col, {**base, "score": {"$gte": 70}}, "rescored_at", now)},
+            "meetings": {"value": meetings, "trend": _trend(meetings, meetings_last),
+                          "spark": _timeseries_count(booking_events, base, "when", now)},
+            "signals": {"value": signals, "trend": _trend(signals, signals_last),
+                         "spark": _timeseries_count(pt_insights_col, base, "created_at", now)},
             "conv_rate": {"value": conv_rate, "unit": "%", "trend": _trend(int(conv_rate * 10), int(last_conv_rate * 10))},
         },
         "aria_time_saved": _aria_time_saved(tenant_id, 30, hourly),
@@ -617,6 +725,8 @@ async def dashboard_b2b_founder(current_user: dict = Depends(get_current_user)):
             "primary_pct": primary_pct,
             "actual_primary": primary_label,
             "icp_distribution": [{"icp": k, "count": v, "pct": round(v / total * 100, 1)} for k, v in icp_dist.items()],
+            "by_channel": by_channel,
+            "snoozed_until": snooze_until if snoozed else None,
         },
         "channel_performance": channel_perf,
         "signal_attribution": _signal_attribution(tenant_id, days_present),
@@ -818,10 +928,11 @@ async def dashboard_b2b_sales(current_user: dict = Depends(get_current_user)):
         },
         "top_actions": await _sales_coach_top3(tenant_id, current_user.get("email") or "anon", hot_lead_cards, _deal_risk(tenant_id, now), approval_queue, agenda_meetings, score_changes),
         "kpis": {
-            "followups_today": followups_today,
-            "meetings_today": meetings_today,
-            "approvals_pending": approvals,
-            "pipeline_value": {"value": round(pipeline_value), "trend": _trend(int(pipeline_value), int(pipeline_value_last))},
+            "followups_today":   {"value": followups_today,  "spark": _timeseries_count(pt_leads_col,     base, "next_followup_at", now)},
+            "meetings_today":    {"value": meetings_today,   "spark": _timeseries_count(booking_events,    base, "when",             now)},
+            "approvals_pending": {"value": approvals,        "spark": _timeseries_count(pt_insights_col,   {**base, "status": "pending"}, "created_at", now)},
+            "pipeline_value":    {"value": round(pipeline_value), "trend": _trend(int(pipeline_value), int(pipeline_value_last)),
+                                  "spark": _timeseries_sum(booking_events, base, "when", "deal_value", now)},
         },
         "hot_leads": hot_lead_cards,
         "pipeline": pipeline_rows,
@@ -938,7 +1049,54 @@ async def regenerate_top_actions(current_user: dict = Depends(get_current_user))
     return {"ok": True, "cache_cleared": True}
 
 
+@router.post("/sequences/duplicate-from-combo")
+async def duplicate_from_combo(payload: dict, current_user: dict = Depends(get_current_user)):
+    """iter159 — create a sequence skeleton seeded from a winning channel combo.
+    The actual outreach engine is still in Lemlist — this just inserts a row
+    that the founder can finish wiring up there. Returns the new row.
+
+    Body: {"combo": "linkedin + whatsapp"}
+    """
+    tenant_id = current_user.get("tenant_id") or ""
+    combo = (payload or {}).get("combo")
+    if not tenant_id or not combo:
+        return {"ok": False, "error": "tenant_id and combo are required"}
+    channels = [c.strip().lower() for c in combo.split("+") if c.strip()]
+    name = f"Auto · {combo.title()} (replicated)"
+    row = {
+        "id": f"seq_combo_{int(datetime.now(timezone.utc).timestamp())}",
+        "tenant_id": tenant_id,
+        "name": name,
+        "channels": channels,
+        "active": 0, "booked": 0, "rate": 0,
+        "status": "draft",
+        "created_by": current_user.get("email"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "winning_combo_duplicate",
+    }
+    db["lemlist_sequences"].insert_one(row)
+    row.pop("_id", None)
+    return {"ok": True, "sequence": row}
+
+
 # ───────────────────────── Misc helpers ──────────────────────────
+@router.post("/icp-drift/snooze")
+async def snooze_icp_drift(days: int = 7, current_user: dict = Depends(get_current_user)):
+    """iter158 Phase B Step 5 — snooze the ICP drift banner for N days
+    (default 7). Stored on the tenant doc so all team members see the same
+    snoozed state."""
+    tenant_id = current_user.get("tenant_id") or ""
+    if not tenant_id:
+        return {"ok": False, "error": "no tenant"}
+    days = max(1, min(int(days or 7), 30))
+    until = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    db["tenants"].update_one(
+        {"id": tenant_id},
+        {"$set": {"icp_drift_snooze_until": until, "icp_drift_snoozed_by": current_user.get("email")}},
+    )
+    return {"ok": True, "snoozed_until": until, "days": days}
+
+
 @router.get("/_mode")
 async def dashboard_mode(current_user: dict = Depends(get_current_user)):
     """Tells the frontend which dashboard to load based on tenant.mode."""

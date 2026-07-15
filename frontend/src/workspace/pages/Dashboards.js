@@ -20,111 +20,55 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  TrendUp, TrendDown, Sparkle, Clock, ChartLine, Lightning, ArrowsClockwise,
+  Sparkle, Clock, ChartLine, Lightning, ArrowsClockwise,
   Buildings, ArrowRight, Warning, Robot, Brain, Lightbulb,
 } from '@phosphor-icons/react';
 import api from '../../config/api';
-
-// ─── Shared tiny components ───────────────────────────────────────
-const KpiTile = ({ label, value, trend, unit, sub, testid }) => {
-  const dir = trend?.direction;
-  return (
-    <div className="rounded-xl border p-4" data-testid={testid}
-      style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-      <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: 'var(--theme-text-muted)' }}>{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-1.5">
-        <div className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{value ?? '—'}</div>
-        {unit && <div className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{unit}</div>}
-      </div>
-      {trend?.pct != null && (
-        <div className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold ${
-          dir === 'up' ? 'text-emerald-500' : dir === 'down' ? 'text-rose-500' : 'text-slate-400'
-        }`}>
-          {dir === 'up' ? <TrendUp size={12} weight="bold" /> : dir === 'down' ? <TrendDown size={12} weight="bold" /> : null}
-          {Math.abs(trend.pct)}% vs prev
-        </div>
-      )}
-      {sub && <div className="mt-1 text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>}
-    </div>
-  );
-};
-
-const ComingSoon = ({ what, why }) => (
-  <div className="rounded-xl border-2 border-dashed p-6 text-center"
-    style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-surface)' }}>
-    <Sparkle size={20} weight="duotone" className="mx-auto mb-2" style={{ color: 'var(--theme-purple-light)' }} />
-    <div className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>Coming soon — {what}</div>
-    {why && <div className="mt-1 text-xs" style={{ color: 'var(--theme-text-muted)' }}>{why}</div>}
-  </div>
-);
-
-const SectionCard = ({ title, sub, action, children, testid }) => (
-  <div className="rounded-xl border p-5" data-testid={testid}
-    style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-    <div className="flex items-start justify-between gap-3 mb-4">
-      <div>
-        <h3 className="text-sm font-bold" style={{ color: 'var(--theme-text)' }}>{title}</h3>
-        {sub && <div className="text-[11px] mt-0.5" style={{ color: 'var(--theme-text-muted)' }}>{sub}</div>}
-      </div>
-      {action}
-    </div>
-    {children}
-  </div>
-);
-
-const useDashboard = (endpoint) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.get(endpoint);
-      setData(r.data);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint]);
-  useEffect(() => { load(); }, [load]);
-  return { data, loading, refresh: load };
-};
-
-const fmtMoney = (v, currency) => {
-  if (v == null) return '—';
-  const symbol = { INR: '₹', USD: '$', GBP: '£', AED: 'د.إ', EUR: '€' }[currency] || '$';
-  return `${symbol}${Number(v).toLocaleString()}`;
-};
+import { Sparkline, RadialGauge, TaperedFunnel, HBars, MiniBarChart } from './dashboard_charts';
+import { ICPDriftModal } from './ICPDriftModal';
+import { WinningCombos } from './WinningCombos';
+// iter161 — IntegrationShowcase moved to /app/integrations page
+import {
+  KpiTile, ComingSoon, SectionCard, StatusPill, HealthBadge, useDashboard, fmtMoney, DashboardSkeleton,
+} from './dashboard_shared';
 
 // ───────────────────────── B2C DASHBOARD ──────────────────────────
 export const B2CDashboard = () => {
   const { data, loading, refresh } = useDashboard('/api/dashboard/b2c');
-  if (loading || !data) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading B2C dashboard…</div>;
+  if (loading || !data) return <DashboardSkeleton title="Loading B2C dashboard…" />;
   const c = data.header.currency;
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2c-dashboard">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.greeting}, {data.header.owner_name}</h1>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-primary)' }}>B2C Automation</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            {data.header.greeting}, {data.header.owner_name}
+          </h1>
           <div className="text-sm mt-1" style={{ color: 'var(--theme-text-muted)' }}>{data.header.workspace_name}</div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(14,159,134,0.15)', color: '#0E9F86' }}>B2C Automation</span>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2c-refresh">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={refresh}
+            className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)] active:scale-95 focus:outline-none focus:ring-2"
+            style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }}
+            data-testid="b2c-refresh"
+            aria-label="Refresh dashboard data"
+          >
             <ArrowsClockwise size={12} /> Refresh
           </button>
         </div>
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiTile label="Leads today" value={data.kpis.leads_today.value} trend={data.kpis.leads_today.trend} testid="kpi-leads-today" />
-        <KpiTile label="Active conversations" value={data.kpis.active_convos.value} sub={data.kpis.active_convos.label} testid="kpi-active-convos" />
-        <KpiTile label="Bookings this week" value={data.kpis.bookings_week.value} trend={data.kpis.bookings_week.trend} testid="kpi-bookings-week" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="group" aria-label="Key metrics">
+        <KpiTile label="Leads today" value={data.kpis.leads_today.value} trend={data.kpis.leads_today.trend} spark={data.kpis.leads_today.spark} testid="kpi-leads-today" />
+        <KpiTile label="Active conversations" value={data.kpis.active_convos.value} sub={data.kpis.active_convos.label} spark={data.kpis.active_convos.spark} testid="kpi-active-convos" />
+        <KpiTile label="Bookings this week" value={data.kpis.bookings_week.value} trend={data.kpis.bookings_week.trend} spark={data.kpis.bookings_week.spark} testid="kpi-bookings-week" />
         <KpiTile label="Lead → booking" value={data.kpis.conversion_rate.value} unit="%" trend={data.kpis.conversion_rate.trend} testid="kpi-conv-rate" />
-        <KpiTile label="Pipeline value" value={fmtMoney(data.kpis.revenue_pipeline.value, c)} testid="kpi-pipeline-value" />
+        <KpiTile label="Pipeline value" value={fmtMoney(data.kpis.revenue_pipeline.value, c)} spark={data.kpis.revenue_pipeline.spark} testid="kpi-pipeline-value" />
       </div>
 
       {/* ARIA Time Saved banner */}
@@ -148,15 +92,7 @@ export const B2CDashboard = () => {
       {/* Momentum + Revenue Forecast */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Momentum" sub={data.momentum.driver_text} testid="momentum-card">
-          <div className="flex items-center gap-4">
-            <div className="text-5xl">
-              {data.momentum.direction === 'up' ? '🚀' : data.momentum.direction === 'down' ? '🔻' : '→'}
-            </div>
-            <div>
-              <div className="text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.momentum.score}<span className="text-base" style={{ color: 'var(--theme-text-muted)' }}> / 100</span></div>
-              <div className="text-sm mt-0.5 font-semibold" style={{ color: data.momentum.direction === 'up' ? '#10B981' : data.momentum.direction === 'down' ? '#EF4444' : '#94A3B8' }}>{data.momentum.label}</div>
-            </div>
-          </div>
+          <RadialGauge score={data.momentum.score} label={data.momentum.label} sub={`Direction: ${data.momentum.direction}`} />
         </SectionCard>
         <SectionCard title="Revenue Forecast" testid="revenue-forecast">
           {data.revenue_forecast.coming_soon ? (
@@ -216,11 +152,7 @@ export const B2CDashboard = () => {
           </SectionCard>
           <SectionCard title="Asset performance" testid="asset-performance">
             {data.asset_performance.coming_soon ? <ComingSoon what="asset tracking" why="Add tracked links to your lead magnets to see clicks here." /> : (
-              <div className="space-y-2">
-                {data.asset_performance.rows.map((a) => (
-                  <div key={a.name} className="flex justify-between text-xs"><span className="truncate" style={{ color: 'var(--theme-text)' }}>{a.name}</span><span className="font-semibold" style={{ color: 'var(--theme-purple-light)' }}>{a.clicks}</span></div>
-                ))}
-              </div>
+              <HBars rows={data.asset_performance.rows.map(a => ({ label: a.name, value: a.clicks }))} unit="" color="#7C35DC" />
             )}
           </SectionCard>
         </div>
@@ -228,18 +160,7 @@ export const B2CDashboard = () => {
 
       {/* Funnel */}
       <SectionCard title="Booking Funnel — This Week" sub={`${data.funnel[0]?.count ?? 0} leads entered top of funnel`} testid="booking-funnel">
-        <div className="grid grid-cols-5 gap-2">
-          {data.funnel.map((step, i) => {
-            const palette = ['#6366F1', '#7C35DC', '#0E9F86', '#F59E0B', '#10B981'];
-            return (
-              <div key={step.stage} className="rounded-md p-3 text-center" style={{ background: palette[i], color: 'white' }}>
-                <div className="text-2xl font-bold">{step.count}</div>
-                <div className="text-[10px] opacity-90 mt-0.5">{step.stage}</div>
-                {i > 0 && <div className="text-[10px] mt-1 opacity-80">{step.pct_of_prev}% of prev</div>}
-              </div>
-            );
-          })}
-        </div>
+        <TaperedFunnel steps={data.funnel} />
         {data.biggest_drop && (
           <div className="mt-3 text-xs rounded-md px-3 py-2" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>
             ⚠ Biggest drop-off: {data.biggest_drop.from} → {data.biggest_drop.to} ({data.biggest_drop.loss_pct}% lost)
@@ -247,33 +168,39 @@ export const B2CDashboard = () => {
         )}
       </SectionCard>
 
+      {/* Winning Channel Combos — leaderboard with "duplicate sequence" CTA */}
+      <WinningCombos combos={data.winning_combos} onDuplicate={refresh} />
+
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SectionCard title="Active sequences" testid="sequences">
+        <SectionCard title="Active sequences" sub="Booked / Active conversion" testid="sequences">
           {data.sequences.length === 0 ? <ComingSoon what="sequence data" why="Connect Lemlist to populate." /> : (
-            <table className="w-full text-xs">
-              <thead><tr style={{ color: 'var(--theme-text-muted)' }}><th className="text-left font-semibold pb-1">Name</th><th className="text-right font-semibold pb-1">Active</th><th className="text-right font-semibold pb-1">Booked</th><th className="text-right font-semibold pb-1">Rate</th></tr></thead>
-              <tbody>
-                {data.sequences.map((s) => (
-                  <tr key={s.name}><td className="py-1 truncate" style={{ color: 'var(--theme-text)' }}>{s.name}</td><td className="text-right" style={{ color: 'var(--theme-text)' }}>{s.active}</td><td className="text-right" style={{ color: 'var(--theme-text)' }}>{s.booked}</td><td className="text-right font-bold" style={{ color: s.rate >= 15 ? '#10B981' : s.rate >= 5 ? '#F59E0B' : '#EF4444' }}>{s.rate}%</td></tr>
-                ))}
-              </tbody>
-            </table>
+            <HBars
+              rows={data.sequences.map(s => ({
+                label: s.name,
+                value: s.rate,
+                sub: `${s.booked} booked of ${s.active} active`,
+                color: s.rate >= 15 ? '#10B981' : s.rate >= 5 ? '#F59E0B' : '#EF4444',
+              }))}
+              unit="%"
+              maxValue={Math.max(25, ...data.sequences.map(s => s.rate))}
+            />
           )}
         </SectionCard>
         <SectionCard title="Multi-touch leads" sub="Leads from 2+ channels convert higher" testid="channel-overlap">
           {data.channel_overlap?.coming_soon || !(data.channel_overlap?.rows?.length) ? (
             <ComingSoon what="multi-touch tracking" why="Tag lead source on every channel to see overlap." />
           ) : (
-            <div className="space-y-2">
-              {data.channel_overlap.rows.map((r) => (
-                <div key={r.channels} className="flex items-center justify-between text-xs gap-2">
-                  <span className="capitalize font-semibold truncate flex-1" style={{ color: 'var(--theme-text)' }}>{r.channels}</span>
-                  <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads</span>
-                  <span className="font-bold" style={{ color: r.conv_rate >= 30 ? '#10B981' : r.conv_rate >= 10 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
-                </div>
-              ))}
-            </div>
+            <HBars
+              rows={data.channel_overlap.rows.map(r => ({
+                label: r.channels,
+                value: r.conv_rate,
+                sub: `${r.leads} leads · ${r.meetings} meetings`,
+                color: r.conv_rate >= 30 ? '#10B981' : r.conv_rate >= 10 ? '#F59E0B' : '#94A3B8',
+              }))}
+              unit="%"
+              maxValue={Math.max(50, ...data.channel_overlap.rows.map(r => r.conv_rate))}
+            />
           )}
         </SectionCard>
         <SectionCard title="Leads to recover" sub={`${data.ghost_leads.length} warm leads gone quiet`} testid="ghost-leads">
@@ -285,45 +212,41 @@ export const B2CDashboard = () => {
           ))}
         </SectionCard>
       </div>
+
     </div>
   );
 };
 
-const StatusPill = ({ status }) => {
-  const cfg = {
-    live: { bg: 'rgba(236,72,153,0.15)', color: '#EC4899', text: '● Live' },
-    waiting: { bg: 'rgba(245,158,11,0.15)', color: '#F59E0B', text: 'Waiting' },
-    booked: { bg: 'rgba(16,185,129,0.15)', color: '#10B981', text: '✓ Booked' },
-    qualified: { bg: 'rgba(59,130,246,0.15)', color: '#3B82F6', text: 'Qualified' },
-  }[status] || { bg: 'var(--theme-surface2)', color: 'var(--theme-text-muted)', text: status };
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: cfg.bg, color: cfg.color }}>{cfg.text}</span>;
-};
+// StatusPill now imported from dashboard_shared (iter158)
 
 // ───────────────────────── B2B FOUNDER ────────────────────────────
 export const B2BFounderDashboard = () => {
   const { data, loading, refresh } = useDashboard('/api/dashboard/b2b-founder');
+  const [driftOpen, setDriftOpen] = useState(false);
   if (loading || !data) return <div className="p-8 text-sm" style={{ color: 'var(--theme-text-muted)' }}>Loading B2B Founder dashboard…</div>;
   const c = data.header.currency;
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2b-founder-dashboard">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.header.workspace_name} · Intelligence Overview</h1>
-          <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>Last refresh: {new Date(data.header.last_refresh).toLocaleTimeString()}</div>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-primary)' }}>Good morning · B2B Founder</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            {data.header.workspace_name} <span style={{ color: 'var(--theme-text-muted)' }}>· intelligence overview</span>
+          </h1>
+          <div className="text-xs mt-1.5" style={{ color: 'var(--theme-text-muted)' }}>Last refresh: {new Date(data.header.last_refresh).toLocaleTimeString()}</div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(124,53,220,0.15)', color: '#7C35DC' }}>B2B Founder</span>
-          <Link to="/app/sales-view" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }}>Switch to Sales View →</Link>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2b-founder-refresh"><ArrowsClockwise size={12} /> Refresh</button>
+          <Link to="/app/sales-view" className="text-xs font-semibold" style={{ color: 'var(--theme-primary)' }}>Switch to Sales View →</Link>
+          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)]" style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }} data-testid="b2b-founder-refresh"><ArrowsClockwise size={12} /> Refresh</button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <KpiTile label="Leads this month" value={data.kpis.leads_month.value} trend={data.kpis.leads_month.trend} testid="kpi-leads-month" />
-        <KpiTile label="High intent (≥70)" value={data.kpis.high_intent.value} trend={data.kpis.high_intent.trend} testid="kpi-high-intent" />
-        <KpiTile label="Meetings" value={data.kpis.meetings.value} trend={data.kpis.meetings.trend} testid="kpi-meetings" />
-        <KpiTile label="Signals" value={data.kpis.signals.value} trend={data.kpis.signals.trend} testid="kpi-signals" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" role="group" aria-label="Founder metrics">
+        <KpiTile label="Leads this month" value={data.kpis.leads_month.value} trend={data.kpis.leads_month.trend} spark={data.kpis.leads_month.spark} testid="kpi-leads-month" />
+        <KpiTile label="High intent (≥70)" value={data.kpis.high_intent.value} trend={data.kpis.high_intent.trend} spark={data.kpis.high_intent.spark} testid="kpi-high-intent" />
+        <KpiTile label="Meetings" value={data.kpis.meetings.value} trend={data.kpis.meetings.trend} spark={data.kpis.meetings.spark} testid="kpi-meetings" />
+        <KpiTile label="Signals" value={data.kpis.signals.value} trend={data.kpis.signals.trend} spark={data.kpis.signals.spark} testid="kpi-signals" />
         <KpiTile label="Conversion" value={data.kpis.conv_rate.value} unit="%" trend={data.kpis.conv_rate.trend} testid="kpi-b2b-conv" />
       </div>
 
@@ -331,13 +254,7 @@ export const B2BFounderDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="md:col-span-3">
           <SectionCard title="Momentum" sub={data.momentum.driver_text} testid="b2b-momentum">
-            <div className="flex items-center gap-4">
-              <div className="text-5xl">{data.momentum.direction === 'up' ? '🚀' : data.momentum.direction === 'down' ? '🔻' : '→'}</div>
-              <div>
-                <div className="text-3xl font-bold" style={{ color: 'var(--theme-text)' }}>{data.momentum.score}<span className="text-base" style={{ color: 'var(--theme-text-muted)' }}> / 100</span></div>
-                <div className="text-sm mt-0.5 font-semibold" style={{ color: data.momentum.direction === 'up' ? '#10B981' : data.momentum.direction === 'down' ? '#EF4444' : '#94A3B8' }}>{data.momentum.label}</div>
-              </div>
-            </div>
+            <RadialGauge score={data.momentum.score} label={data.momentum.label} sub={`Direction: ${data.momentum.direction}`} />
           </SectionCard>
         </div>
         <div className="md:col-span-2">
@@ -354,54 +271,63 @@ export const B2BFounderDashboard = () => {
 
       {/* ICP Drift */}
       {data.icp_drift.drift_detected && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-3" style={{ background: 'rgba(245,158,11,0.12)', color: '#D97706', border: '1px solid rgba(245,158,11,0.3)' }} data-testid="icp-drift-banner">
+        <button
+          type="button"
+          onClick={() => setDriftOpen(true)}
+          className="w-full text-left rounded-xl px-4 py-3 text-sm flex items-center gap-3 hover:brightness-110 transition"
+          style={{ background: 'rgba(245,158,11,0.12)', color: '#D97706', border: '1px solid rgba(245,158,11,0.3)' }}
+          data-testid="icp-drift-banner"
+        >
           <Warning size={20} weight="bold" />
           <div className="flex-1">
             <strong>ICP Drift detected.</strong> Your last 30 days of leads are {data.icp_drift.primary_pct}% primary ICP / {data.icp_drift.unknown_pct}% unknown. Channel targeting may have shifted.
           </div>
-          <Link to="/app/integrations" className="text-xs font-semibold underline">Review channel settings →</Link>
-        </div>
+          <span className="text-xs font-bold underline">Open drill-down →</span>
+        </button>
       )}
+      <ICPDriftModal open={driftOpen} onClose={() => setDriftOpen(false)} drift={data.icp_drift} onSnoozed={refresh} />
 
-      {/* Channel Performance Table */}
-      <SectionCard title="Channel Performance" sub="Which channels are working — and which aren't" testid="channel-performance-table">
+      {/* Channel Performance — visual: leads per channel + conv rate badges */}
+      <SectionCard title="Channel Performance" sub="Bar height = leads · color = health · % = conversion to meeting" testid="channel-performance-table">
         {data.channel_performance.length === 0 ? <ComingSoon what="channel data" why="Connect a lead source to populate." /> : (
-          <table className="w-full text-xs">
-            <thead><tr style={{ color: 'var(--theme-text-muted)' }}>
-              <th className="text-left font-semibold pb-2">Channel</th><th className="text-right font-semibold">Leads</th>
-              <th className="text-right font-semibold">High %</th><th className="text-right font-semibold">Meetings</th>
-              <th className="text-right font-semibold">Conv %</th><th className="text-center font-semibold">Health</th>
-            </tr></thead>
-            <tbody>
-              {data.channel_performance.map((ch) => (
-                <tr key={ch.channel} className="border-t" style={{ borderColor: 'var(--theme-border)' }}>
-                  <td className="py-2 font-semibold capitalize" style={{ color: 'var(--theme-text)' }}><span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: ch.colour }} />{ch.channel}</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.leads}</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.high_pct}%</td>
-                  <td className="text-right" style={{ color: 'var(--theme-text)' }}>{ch.meetings}</td>
-                  <td className="text-right font-bold" style={{ color: ch.conv_rate >= 10 ? '#10B981' : ch.conv_rate >= 5 ? '#F59E0B' : '#EF4444' }}>{ch.conv_rate}%</td>
-                  <td className="text-center"><HealthBadge h={ch.health} /></td>
-                </tr>
+          <>
+            <MiniBarChart
+              data={data.channel_performance.map(ch => ({
+                name: ch.channel.charAt(0).toUpperCase() + ch.channel.slice(1),
+                value: ch.leads,
+                color: ch.health === 'healthy' ? '#10B981' : ch.health === 'warning' ? '#F59E0B' : ch.health === 'critical' ? '#EF4444' : ch.colour || '#7C35DC',
+              }))}
+              height={160}
+            />
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+              {data.channel_performance.map(ch => (
+                <div key={ch.channel} className="text-[11px] flex items-center justify-between px-2 py-1 rounded" style={{ background: 'var(--theme-surface2)' }}>
+                  <span className="capitalize font-semibold" style={{ color: 'var(--theme-text)' }}>{ch.channel}</span>
+                  <span className="tabular-nums font-bold" style={{ color: ch.conv_rate >= 10 ? '#10B981' : ch.conv_rate >= 5 ? '#F59E0B' : '#EF4444' }}>
+                    {ch.conv_rate}% · {ch.meetings} mtgs
+                  </span>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </SectionCard>
 
-      {/* Signal Attribution */}
-      <SectionCard title="What signals actually predict meetings" sub="Workspace-specific — needs 90+ days of data" testid="signal-attribution">
+      {/* Signal Attribution — horizontal bars (conv rate) */}
+      <SectionCard title="What signals actually predict meetings" sub="Bar width = meeting conversion rate" testid="signal-attribution">
         {data.signal_attribution.coming_soon || !(data.signal_attribution.rows?.length) ? (
           <ComingSoon what="attribution data" why="Need 90+ days of pipeline data + ≥3 meetings booked from signal-sourced leads." />
         ) : (
-          <div className="space-y-2">
-            {data.signal_attribution.rows.map((r) => (
-              <div key={r.signal_type} className="flex items-center justify-between text-xs">
-                <span className="font-semibold capitalize" style={{ color: 'var(--theme-text)' }}>{(r.signal_type || '').replace(/_/g, ' ')}</span>
-                <span style={{ color: 'var(--theme-text-muted)' }}>{r.leads} leads · {r.meetings} meetings</span>
-                <span className="font-bold" style={{ color: r.conv_rate >= 50 ? '#10B981' : r.conv_rate >= 20 ? '#F59E0B' : '#94A3B8' }}>{r.conv_rate}%</span>
-              </div>
-            ))}
-          </div>
+          <HBars
+            rows={data.signal_attribution.rows.map(r => ({
+              label: (r.signal_type || '').replace(/_/g, ' '),
+              value: r.conv_rate,
+              sub: `${r.leads} leads · ${r.meetings} meetings`,
+              color: r.conv_rate >= 50 ? '#10B981' : r.conv_rate >= 20 ? '#F59E0B' : '#94A3B8',
+            }))}
+            unit="%"
+            maxValue={Math.max(60, ...data.signal_attribution.rows.map(r => r.conv_rate))}
+          />
         )}
       </SectionCard>
 
@@ -434,16 +360,16 @@ export const B2BFounderDashboard = () => {
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SectionCard title="Ghost lead recovery" testid="founder-ghost-leads">
-          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghost leads — nice.</div> : data.ghost_leads.map((g) => (
-            <Link to={`/app/leads/${g.lead_id}`} key={g.lead_id} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghost leads — nice.</div> : data.ghost_leads.map((g, i) => (
+            <Link to={`/app/leads/${g.lead_id}`} key={`${g.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{g.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{g.company} · {g.days_silent}d silent · score {g.score}</div>
             </Link>
           ))}
         </SectionCard>
         <SectionCard title="Deals at risk" testid="deal-risk-flags">
-          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No at-risk deals.</div> : data.deal_risk_flags.map((d) => (
-            <Link to={`/app/leads/${d.lead_id}`} key={d.lead_id} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No at-risk deals.</div> : data.deal_risk_flags.map((d, i) => (
+            <Link to={`/app/leads/${d.lead_id}`} key={`${d.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 hover:bg-[var(--theme-surface2)] -mx-2 px-2 rounded" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{d.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{d.company} · {d.risk_type === 'negative_reply' ? '⚠ Negative reply' : `${d.days_silent}d silent`} · score {d.score}</div>
             </Link>
@@ -455,19 +381,12 @@ export const B2BFounderDashboard = () => {
           ))}
         </SectionCard>
       </div>
+
     </div>
   );
 };
 
-const HealthBadge = ({ h }) => {
-  const cfg = {
-    working_well: { color: '#10B981', label: 'Working' },
-    moderate: { color: '#F59E0B', label: 'Moderate' },
-    needs_attention: { color: '#EF4444', label: 'Attention' },
-    inactive: { color: '#94A3B8', label: 'Inactive' },
-  }[h] || { color: '#94A3B8', label: h };
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: `${cfg.color}22`, color: cfg.color }}>{cfg.label}</span>;
-};
+// HealthBadge moved to dashboard_shared.js (iter158)
 
 // ───────────────────────── B2B SALES ─────────────────────────────
 const TopActionsCard = ({ top, onRegenerate }) => {
@@ -535,13 +454,15 @@ export const B2BSalesDashboard = () => {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto" data-testid="b2b-sales-dashboard">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--theme-text)' }}>Good morning, {data.header.first_name}</h1>
-          <div className="text-xs mt-1" style={{ color: 'var(--theme-text-muted)' }}>{new Date(data.header.last_refresh).toDateString()}</div>
+          <div className="eyebrow mb-1" style={{ color: 'var(--theme-secondary)' }}>B2B Sales</div>
+          <h1 className="text-[32px] leading-tight tracking-tight font-semibold" style={{ color: 'var(--theme-text)', fontFamily: 'var(--font-display)' }}>
+            Good morning, {data.header.first_name}
+          </h1>
+          <div className="text-xs mt-1.5" style={{ color: 'var(--theme-text-muted)' }}>{new Date(data.header.last_refresh).toDateString()}</div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider" style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>Sales View</span>
-          <Link to="/app" className="text-xs font-semibold" style={{ color: 'var(--theme-purple-light)' }}>Switch to Founder View →</Link>
-          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: 'var(--theme-surface2)', color: 'var(--theme-text)' }} data-testid="b2b-sales-refresh"><ArrowsClockwise size={12} /> Refresh</button>
+          <Link to="/app" className="text-xs font-semibold" style={{ color: 'var(--theme-primary)' }}>Switch to Founder View →</Link>
+          <button onClick={refresh} className="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 border transition-colors hover:bg-[var(--theme-surface2)]" style={{ background: 'var(--theme-surface)', color: 'var(--theme-text)', borderColor: 'var(--theme-border)' }} data-testid="b2b-sales-refresh"><ArrowsClockwise size={12} /> Refresh</button>
         </div>
       </div>
 
@@ -549,11 +470,11 @@ export const B2BSalesDashboard = () => {
       <TopActionsCard top={data.top_actions} onRegenerate={refresh} />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiTile label="Follow-ups due" value={data.kpis.followups_today} testid="kpi-followups" />
-        <KpiTile label="Meetings today" value={data.kpis.meetings_today} testid="kpi-meetings-today" />
-        <KpiTile label="Approvals pending" value={data.kpis.approvals_pending} testid="kpi-approvals" />
-        <KpiTile label="Pipeline value" value={`$${(data.kpis.pipeline_value.value || 0).toLocaleString()}`} trend={data.kpis.pipeline_value.trend} testid="kpi-sales-pipeline" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="group" aria-label="Sales metrics">
+        <KpiTile label="Follow-ups due"    value={data.kpis.followups_today.value}   spark={data.kpis.followups_today.spark}   testid="kpi-followups" />
+        <KpiTile label="Meetings today"    value={data.kpis.meetings_today.value}    spark={data.kpis.meetings_today.spark}    testid="kpi-meetings-today" />
+        <KpiTile label="Approvals pending" value={data.kpis.approvals_pending.value} spark={data.kpis.approvals_pending.spark} testid="kpi-approvals" />
+        <KpiTile label="Pipeline value"    value={`$${(data.kpis.pipeline_value.value || 0).toLocaleString()}`} trend={data.kpis.pipeline_value.trend} spark={data.kpis.pipeline_value.spark} testid="kpi-sales-pipeline" />
       </div>
 
       {/* Hot leads */}
@@ -598,8 +519,8 @@ export const B2BSalesDashboard = () => {
         </div>
         <div className="lg:col-span-2 space-y-4">
           <SectionCard title="Today's agenda" testid="agenda">
-            {data.agenda.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No meetings or follow-ups today.</div> : data.agenda.map((a) => (
-              <div key={a.lead_id + a.when} className="py-1.5 text-xs">
+            {data.agenda.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No meetings or follow-ups today.</div> : data.agenda.map((a, i) => (
+              <div key={`${a.lead_id}_${a.when}_${i}`} className="py-1.5 text-xs">
                 <span className="font-bold mr-2" style={{ color: 'var(--theme-purple-light)' }}>{new Date(a.when).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
                 <span style={{ color: 'var(--theme-text)' }}>{a.lead_name}</span>
                 <span style={{ color: 'var(--theme-text-muted)' }}> · {a.company}</span>
@@ -620,8 +541,8 @@ export const B2BSalesDashboard = () => {
       {/* Bottom row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SectionCard title="Deal risk flags" testid="sales-deal-risk">
-          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No flagged deals.</div> : data.deal_risk_flags.map((d) => (
-            <Link to={`/app/leads/${d.lead_id}`} key={d.lead_id} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.deal_risk_flags.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No flagged deals.</div> : data.deal_risk_flags.map((d, i) => (
+            <Link to={`/app/leads/${d.lead_id}`} key={`${d.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{d.name} · <span style={{ color: 'var(--theme-text-muted)' }}>{d.company}</span></div>
               <div className="text-[11px]" style={{ color: '#EF4444' }}>{d.days_silent}d silent</div>
             </Link>
@@ -631,20 +552,21 @@ export const B2BSalesDashboard = () => {
           {Array.isArray(data.attribution_top3) && data.attribution_top3.length > 0 ? (
             <div className="space-y-1.5">
               {data.attribution_top3.map((a, i) => (
-                <div key={a.signal_type} className="flex justify-between text-xs"><span style={{ color: 'var(--theme-text)' }}>{i + 1}. {a.signal_type}</span><span className="font-bold" style={{ color: '#7C35DC' }}>{a.conv_rate}%</span></div>
+                <div key={`${a.signal_type}_${i}`} className="flex justify-between text-xs"><span style={{ color: 'var(--theme-text)' }}>{i + 1}. {a.signal_type}</span><span className="font-bold" style={{ color: '#7C35DC' }}>{a.conv_rate}%</span></div>
               ))}
             </div>
           ) : <ComingSoon what="signal attribution" why="Need ≥3 leads per signal type with booked meetings." />}
         </SectionCard>
         <SectionCard title="Ghost lead recovery" testid="sales-ghost-leads">
-          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghosts.</div> : data.ghost_leads.map((g) => (
-            <Link to={`/app/leads/${g.lead_id}`} key={g.lead_id} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
+          {data.ghost_leads.length === 0 ? <div className="text-xs text-center py-4" style={{ color: 'var(--theme-text-muted)' }}>No ghosts.</div> : data.ghost_leads.map((g, i) => (
+            <Link to={`/app/leads/${g.lead_id}`} key={`${g.lead_id}_${i}`} className="block py-2 border-b last:border-b-0 -mx-2 px-2 rounded hover:bg-[var(--theme-surface2)]" style={{ borderColor: 'var(--theme-border)' }}>
               <div className="text-xs font-semibold" style={{ color: 'var(--theme-text)' }}>{g.name}</div>
               <div className="text-[11px]" style={{ color: 'var(--theme-text-muted)' }}>{g.company} · {g.days_silent}d</div>
             </Link>
           ))}
         </SectionCard>
       </div>
+
     </div>
   );
 };
@@ -752,41 +674,56 @@ const InstinctFeedWidget = () => {
 };
 
 // ───────────────────────── Demo Mode Switcher ────────────────────
-// Renders 4 pill buttons at the top of /app for ten_demo only. Lets the
-// founder cycle B2C / B2B Founder / B2B Sales / Hybrid during sales calls.
-// Selection persists in localStorage so a refresh doesn't reset the demo.
+// Renders a Notion-style pill toggle at the top of /app for ten_demo only.
+// Framer Motion `layoutId` animates the active pill background between
+// options for a calm intelligence feel. iter163 palette (green/coral).
 const DEMO_MODE_KEY = 'aria.demo.dashboard.mode';
 const DemoModeSwitcher = ({ value, onChange }) => {
   const pills = [
-    { key: 'b2c',          label: 'B2C Demo',         color: '#0E9F86' },
-    { key: 'b2b-founder',  label: 'B2B Founder Demo', color: '#7C35DC' },
-    { key: 'b2b-sales',    label: 'B2B Sales Demo',   color: '#F59E0B' },
-    { key: 'hybrid',       label: 'Hybrid Demo',      color: '#6366F1' },
+    { key: 'b2c',          label: 'B2C' },
+    { key: 'b2b-founder',  label: 'B2B Founder' },
+    { key: 'b2b-sales',    label: 'B2B Sales' },
+    { key: 'hybrid',       label: 'Hybrid' },
   ];
   return (
-    <div className="px-6 pt-4" data-testid="demo-mode-switcher">
-      <div className="max-w-[1600px] mx-auto rounded-xl border p-3 flex flex-wrap items-center gap-2"
-        style={{ background: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}>
-        <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] mr-2" style={{ color: 'var(--theme-text-muted)' }}>Demo Mode</span>
-        {pills.map((p) => {
-          const active = value === p.key;
-          return (
-            <button
-              key={p.key}
-              onClick={() => onChange(p.key)}
-              data-testid={`demo-mode-${p.key}`}
-              className="px-3 py-1.5 rounded-full text-xs font-bold transition-all"
-              style={{
-                background: active ? p.color : 'var(--theme-surface2)',
-                color: active ? '#fff' : 'var(--theme-text)',
-                boxShadow: active ? `0 2px 12px ${p.color}66` : 'none',
-              }}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-        <span className="ml-auto text-[10px]" style={{ color: 'var(--theme-text-muted)' }}>Sales-call preview · saved locally</span>
+    <div className="px-4 sm:px-6 pt-6" data-testid="demo-mode-switcher">
+      <div
+        className="max-w-[1600px] mx-auto flex flex-wrap items-center gap-3"
+      >
+        <span className="eyebrow mr-1" style={{ fontFamily: 'var(--font-display)' }}>Demo mode</span>
+        <div
+          className="inline-flex items-center gap-1 p-1 rounded-full border"
+          style={{ background: 'var(--theme-surface2)', borderColor: 'var(--theme-border)' }}
+          role="tablist"
+          aria-label="Demo dashboard mode switcher"
+        >
+          {pills.map((p) => {
+            const active = value === p.key;
+            return (
+              <button
+                key={p.key}
+                role="tab"
+                aria-selected={active}
+                aria-controls="demo-dashboard-panel"
+                onClick={() => onChange(p.key)}
+                data-testid={`demo-mode-${p.key}`}
+                className="relative px-4 py-1.5 rounded-full text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
+                style={{
+                  color: active ? 'var(--theme-primary)' : 'var(--theme-text-muted)',
+                  background: active ? 'var(--theme-surface)' : 'transparent',
+                  boxShadow: active ? '0 1px 3px rgba(28,25,23,0.08)' : 'none',
+                  minHeight: 30,
+                  fontFamily: 'var(--font-display)',
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+        <span className="ml-auto text-[11px]" style={{ color: 'var(--theme-text-muted)', fontFamily: 'var(--font-sans)' }}>
+          Sales-call preview · saved locally
+        </span>
       </div>
     </div>
   );

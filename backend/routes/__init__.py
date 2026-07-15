@@ -198,6 +198,8 @@ def register_all_routes(app: FastAPI) -> None:
 
     # iter150 — Dashboards (B2C / B2B Founder / B2B Sales)
     from .dashboards import router as dashboards_router
+    # iter160 — Demo Integration Showcase widget
+    from .integration_showcase import router as integration_showcase_router
 
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
@@ -266,5 +268,6 @@ def register_all_routes(app: FastAPI) -> None:
         voice_seeds_router,
         demo_reset_router,
         dashboards_router,
+        integration_showcase_router,
     ):
         app.include_router(router)

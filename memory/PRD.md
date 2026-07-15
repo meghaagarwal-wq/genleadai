@@ -1,3 +1,456 @@
+## Iter 168-169 — Security Audit Remediation (Feb 2026)
+
+User: "Run the Security Audit on the deployed app."
+
+### Audit findings (SecurityAuditAgent — read-only)
+- **VERDICT**: FAIL — ACTION REQUIRED. 3 HIGH BOLA defects + 2 MEDIUM.
+- **SEC-001 HIGH** — Pietential lead write/delete/ask-aria missing tenant filter (routes/pietential.py:678,690,713)
+- **SEC-002 HIGH** — Legacy /api/leads/your-five-today + /api/leads/sleeping (duplicate) returned ALL tenants' PII (server.py:407,473)
+- **SEC-003 HIGH** — 7 ARIA endpoints acted on any lead cross-tenant (server.py:1038,1088,1147,1170,1199,1382,1464)
+- **SEC-004 MEDIUM** — Unescaped $regex in list_leads → ReDoS (routes/pietential.py:617,624)
+- **SEC-005 MEDIUM** — CSV import missing tenant_id + no size cap (server.py:740-777)
+
+### iter168 fixes
+- **SEC-001**: added `**_tf(current_user)` to `patch_lead`, `delete_lead`, `ask_aria_pt` filters in routes/pietential.py.
+- **SEC-002**: removed duplicate unscoped `/api/leads/sleeping`; added `tenant_id` filter to `/api/leads/your-five-today`.
+- **SEC-003**: added `"tenant_id": current_user.get("tenant_id")` to all 7 ARIA endpoints (`trigger`, `reply`, `conversation`, `takeover`, `resume`, `revival-campaign`, `no-show-recovery`) — including the update_one calls (defense-in-depth from code review).
+- **SEC-004**: `re.escape()` + 100-char cap on `q` and `title` regex inputs.
+- **SEC-005**: CSV import now enforces content-type check, 5 MB size cap, 5000-row cap, stamps `tenant_id` on every imported lead.
+
+### iter169 regression fix
+- **Route shadowing**: iter168 removed a duplicate `/api/leads/sleeping` handler; the surviving tenant-scoped handler was registered AFTER `/api/leads/{lead_id}` so FastAPI matched 'sleeping' as a lead_id → 404. Fixed by relocating the canonical handler ABOVE `/api/leads/{lead_id}`. Dead stub deleted.
+
+### Verified (testing_agent iter168 + iter169)
+- iter168: 24/25 pass (1 routing regression).
+- iter169: 26/27 pass (only cosmetic dead-stub issue, then deleted).
+- All 5 SEC findings verified fixed.
+- Foreign IDs return 404. Real ten_demo IDs still work. All prior regression endpoints unaffected.
+
+### Deferred hardening (P3 — future session)
+- JWT stored in localStorage — consider httpOnly cookie or shorter expiry with refresh.
+- `/api/auth/signup` add per-IP rate limit.
+- Server-side OAuth redirect_uri allowlist (defense-in-depth over provider registration).
+- Refactor: server.py is now >1400 lines — split into route modules.
+
+---
+
+
+
+## Iter 166-167 — Chunk C: Leads Kanban + Onboarding polish (Feb 2026)
+
+User: option (d) — Leads Kanban + Onboarding polish, skip read-only Conversations Inbox.
+
+### Shipped (iter166)
+- **Leads Kanban view toggle** on `/app/leads`:
+  - Table ⇄ Kanban pill toggle in the header (data-testid=leadfeed-view-toggle).
+  - HTML5 native drag-drop between columns.
+  - Drop triggers `PATCH /api/pt/leads/{id}` with new stage.
+  - View preference persists in `localStorage.leadfeed.view`.
+- **Onboarding wizard palette migration** on `/onboarding`:
+  - Replaced hardcoded purple (#7C35DC, #4C1D95) + old text colors
+    (#1A0A2E, #5A4A7A, #9B8AB0) + old surfaces (#F4F0FF, #E8E0F5) with
+    theme CSS variables (var(--theme-primary), var(--theme-text) etc.)
+    across all 464 lines.
+
+### Fixes (iter167 — from iter166 test agent findings)
+- **Missing Kanban columns FIXED**: KanbanBoard was hiding 5/13 leads
+  whose stage was `discovery_call`, `contacted`, or `qualified`.
+  Expanded KANBAN_STAGES to 9 columns matching full pipeline taxonomy
+  (New → Contacted → Discovery Call → Qualified → Engaged → Warm →
+  Hot → Session/Pilot → Cold). Added automatic 'Other' fallback
+  column for any unrecognised stage so nothing is ever silently
+  hidden.
+- **Silent stage-revert FIXED**: Drag-drop handler now trusts server
+  response — if backend auto-recomputes stage from score
+  (e.g. high-score leads get pinned to hot/session_pilot), the UI
+  reflects it truthfully with an informational toast
+  'Score-based rule kept stage at X' instead of a fake success.
+
+### Verified (testing_agent iter167)
+- 100% pass on backend + frontend.
+- All 13 leads visible in Kanban (exact expected distribution).
+- Drag-drop trust logic verified.
+- Regression: Table view, Reply Triage, ARIA drawer, Onboarding
+  palette, no console errors — all intact.
+
+### Deferred code-review notes
+- `LeadFeed.js` is 584 lines — extract KanbanBoard / AddLeadModal /
+  CsvModal into separate files (P3 refactor).
+- `/signup` marketing page still uses hardcoded purple — palette
+  migration was scoped to `/onboarding` wizard only per user request.
+
+---
+
+
+
+## Iter 165 — Duplicate-key fix + Reply Triage Conversations (Feb 2026)
+
+User: "Fix the duplicate-key warning first. Then build the split-pane
+Conversations view, but design it as a reply-triage/approval queue —
+assume each item carries an AI classification and a drafted response
+awaiting approval. Park the Kanban toggle and onboarding wizard."
+
+### Bug fix — React duplicate-key warning on /app/leads
+- Root cause: 3 pairs of `pt_leads` share generated IDs
+  (`ptl_demo_sarah_chen`, `ptl_demo_arjun_mehta`,
+  `ptl_demo_james_whitfield`) because two seed scripts each inserted
+  a "Sarah Chen" (etc.) at different companies with colliding IDs.
+- Fixed with a two-layer defense:
+  1. **Backend dedupe** in `GET /api/pt/leads` (`routes/pietential.py`
+     `list_leads`) — after Mongo query, keep first occurrence per id
+     (sorted by last_activity DESC → freshest wins). Response goes
+     from 16 → 13 unique leads.
+  2. **Frontend composite key** in `LeadFeed.js .map` uses
+     `${l.id}__${l.email || i}` so React never sees dupes even if
+     backend later regresses.
+
+### New feature — Reply Triage Queue (Conversations rewrite)
+- Entirely rebuilt `pages/Conversations.js` (~520 lines) as a
+  Superhuman-inspired split-pane approval triage view.
+- **Data source**: `GET /api/approvals` (pending_outreach with
+  `status=awaiting_owner_approval`) — 3 seeded items in ten_demo.
+- **Left pane** (380px): scrollable list of pending drafts. Each row
+  shows avatar (initials) + name + company + draft snippet +
+  3 classification pills (stage HOT/WARM/ENGAGED/COLD · channel
+  LinkedIn/Email/WhatsApp/SMS · AI confidence %) + age.
+- **Right pane**: selected item's full detail:
+  - Lead header (name + stage badge + score + company + queued-ago)
+  - ARIA callout with `ai_model` + `reason_for_review` + colored
+    confidence bar (green ≥75%, amber ≥50%, red < 50%)
+  - Drafted body (with subject for email channel)
+  - Actions: **Reject** (with reason input) · **Edit** (inline
+    subject/body → Save & send) · **Approve & send**
+- **Keyboard shortcuts** (Superhuman-style):
+  - `J` / `↓` next · `K` / `↑` prev · `E` approve · `R` reject ·
+    `/` focus search · `Esc` unfocus input · `Cmd/Ctrl+J` open ARIA
+  - Shortcuts don't fire while typing in inputs/textareas.
+- **Filter pills**: All (N) · High conf (≥75%) · Medium (50-74%) · Low
+  (<50%).
+- **Wired actions**: `POST /api/approvals/{id}/approve|edit-send|reject`.
+- **Kanban toggle + onboarding wizard**: parked per user instruction.
+
+### Verified (testing_agent iter165)
+- 100% pass on backend (5/5 endpoints) + frontend.
+- Duplicate-key console errors: **0** on /app/leads.
+- Triage page renders 3 pending approvals with correct pills.
+- Keyboard J/K/E/R/`/` shortcuts functional.
+- Edit + Reject inline flows verified.
+- Regression: ARIA drawer, light theme, demo mode switcher all intact.
+
+---
+
+
+
+## Iter 164 — "Calm Intelligence" Chunk B (Feb 2026)
+
+User: "Credits Recharged. Please Continue." (green-light for Chunk B).
+
+### Shipped
+- **ARIA Companion Drawer** (`AriaCompanionDrawer.js` — new):
+  - Floating primary-green orb bottom-right on every workspace page.
+  - Cmd/Ctrl+J shortcut toggles the drawer; Escape closes.
+  - Right-side backdrop-blur drawer with cards feed sourced from
+    `/api/insights/founder-command-center`.
+  - Card types with accent border-left: coral 'Aria noticed', primary
+    green 'Aria drafted' and 'Aria suggests'. CTAs deep-link to
+    `/app/instinct`, `/app/approvals`, `/app/conversations`.
+  - State persists in `localStorage.aria.companion.open`.
+  - Auto-refresh every 5 minutes + on tenant switch.
+  - Wired into `AppLayout.js`.
+- **Leads page** (`LeadFeed.js`) — removed all hardcoded purple hex; now
+  uses `var(--theme-primary)` and theme borders. 'Scan engaged leads'
+  button renders in primary green (no purple gradient).
+- **Conversations page** (`Conversations.js`) — same purple → theme
+  migration, plus new Superhuman-inspired keyboard-hints strip
+  (J/K navigate · E archive · / search · ⌘J ask Aria) rendered as kbd
+  tags below the header. Sentiment pills → rounded-full. 'Aria says'
+  callout on primary-dim background.
+
+### Verified (testing_agent iter164)
+- 100% pass on both backend + frontend.
+- Orb visible on all 5 workspace pages.
+- Cards populate with real intelligence data (95% pipeline risk +
+  49 overdue follow-ups).
+- Cmd/Ctrl+J + Escape shortcuts work.
+- localStorage persistence across reload verified.
+- CTA navigation closes drawer.
+- Scan button computed bg = `rgb(15,76,58)` (primary green).
+- Conversations kbd hints strip renders (5 kbd tags).
+- 1 non-blocking observation: React duplicate-key warning in console
+  (not from ARIA drawer — traced elsewhere, low priority).
+
+### Deferred from Chunk B (Chunk C)
+- Full Attio-style spreadsheet + Kanban toggle on Leads (P2 — current
+  dense table already looks Attio-esque post-migration).
+- Full Superhuman-style split-pane inbox on Conversations (P2 — keyboard
+  hints strip added, but not a two-pane read/reply layout yet).
+- Command Center greeting card (P3 — ARIA drawer already provides the
+  founder-hook greeting via "Aria noticed" cards).
+- Onboarding wizard polish (P3).
+
+---
+
+
+
+## Iter 163 — "Calm Intelligence" UI/UX overhaul (Chunk A) — Feb 2026
+
+User: "now work on UI UX of the demo dashboard and the app make it optimised
+and something founder and business owners would wanna get hooked on to and
+use it as their SSOT for all b2b, b2c and hybrid"
+
+### User preferences (verbatim)
+- Scope: Full app overhaul (dashboards + workspace pages)
+- Vibe: Calm intelligence (Notion/Attio) + ARIA-as-friend companion drawer
+- Visual: Light-first, warm founder palette + auto-adaptive dark toggle
+- Inspiration: Artisan.co
+- Must-preserve: nothing sacred
+
+### Design system shipped (design_agent brief → `/app/design_guidelines.json`)
+- Warm cream (#FDFBF7) light theme + warm espresso (#0C0A09) dark theme
+- Deep founder green primary (#0F4C3A) + coral secondary (#E06D53)
+- Outfit for display type + Manrope for body (Artisan-inspired)
+- Rounded-2xl bento cards, soft shadow-card + shadow-hover
+- New CSS utility classes: `.bento-card`, `.eyebrow`, calm hover animations
+
+### Chunk A shipped
+- **Global design tokens** in `frontend/src/index.css` — all `--theme-*` vars
+  rewritten. Existing components using CSS variables auto-inherit new palette.
+- **Default theme flipped** from dark → light in `ThemeContext.js`.
+- **AppLayout sidebar + header** now use theme-aware colors (cream sidebar in
+  light mode, warm espresso in dark). Search box + AI Summary button + mode
+  chip repainted to green/coral palette.
+- **DemoModeSwitcher** rebuilt as a Notion-style pill toggle inside a bordered
+  cream capsule. Active pill uses white background + primary green text.
+- **B2C / B2B Founder / B2B Sales dashboard headers** restyled with eyebrow
+  tag + 32px Outfit heading + neutral bordered refresh button (no more purple
+  gradient buttons).
+- **Integrations page** auto-inherited the new palette via CSS variables —
+  cards, filter pills, connect buttons all warm-cream + green.
+
+### Chunk A verified (testing_agent iter163)
+- Backend regression: 6/6 endpoints pass (login, tenants/me, dashboard/b2c,
+  b2b-founder, b2b-sales, integration-showcase).
+- Frontend: default light theme, theme toggle persistence, mode switcher
+  persistence, all 3 dashboards render, integrations grid renders, sidebar
+  nav works, no console errors, no missing CSS variables.
+- Only noise: pre-existing Recharts width/height=-1 warnings (unrelated).
+
+### Chunk B — next session
+- Leads page: Attio-style spreadsheet + Kanban toggle
+- Conversations: Superhuman-style triage inbox
+- ARIA companion drawer (persistent right-side, Cmd+J shortcut, brief AI
+  cards: "Aria noticed / drafted / suggests")
+- Command Center greeting card + founder-hook micro-interactions
+- Onboarding wizard polish
+
+---
+
+
+
+## Iter 162 — OAuth callback URL blocker fixed (Feb 2026)
+
+User: "OAuth callback URL blocker in oauth_integrations.py still open from the previous session — may block redeploy."
+
+### Root cause
+`_api_base()` in `/app/backend/routes/oauth_integrations.py` previously
+gave `PUBLIC_API_BASE_URL` env-var **priority over** the request-derived
+URL. Since `backend/.env` has `PUBLIC_API_BASE_URL=https://app.genleadai.com`
+hardcoded, every preview deploy was building OAuth callback URLs pointing
+to the production domain. Deployer Agent flagged this.
+
+### Shipped
+- **`_api_base(request)`** refactored to derive backend origin from
+  incoming request's `X-Forwarded-Proto` + `X-Forwarded-Host` headers
+  (set by Kubernetes ingress) **first**, then fall back to `request.base_url`,
+  then env vars (`PUBLIC_API_BASE_URL` → `BACKEND_URL` → `FRONTEND_URL`)
+  only when no request is available (e.g., background token-refresh loop).
+- **`_redirect_uri(provider, request)`** and
+  **`_calendly_register_webhooks(tenant_id, access_token, request)`**
+  updated to thread the request through.
+- **`oauth_callback`** endpoint now takes `request: Request` and passes
+  it to `_redirect_uri` for the token-exchange step (Meta GET + others POST).
+
+### Verified (testing_agent iter161 report)
+- 15/16 backend tests pass. Preview requests → preview callback URLs;
+  production requests → production callback URLs; no env-var leakage.
+- 6 provider `/connect` endpoints return HTTP 503 with correct
+  "not configured" messages (signatures work post-refactor).
+- Regression: login, tenants/me, integration-showcase, dashboard/b2c
+  all still work.
+- The 1 failure is an UNRELATED pre-existing route conflict on
+  `DELETE /api/integrations/{provider}` between `oauth_integrations.py`
+  and `oauth_providers.py` — documented for future cleanup, not a
+  blocker for redeploy.
+
+---
+
+
+
+## Iter 161 — Retire Pietential tenant (Feb 2026)
+
+User: "i want to delete pitential dashboard - and all its data (i just want genleadai demo dashboard to be there)"
+
+### Shipped
+- **Full purge** of the `ten_pietential` tenant + owner user (`megha@contentvista.com`)
+  + all `tenant_id=ten_pietential` documents across every collection (leads,
+  insights, memberships, ICPs, onboarding, outbound/inbound logs, activities).
+- **`backend/scripts/migrate_to_multi_tenant.py`** — no longer seeds Pietential
+  on startup. Instead, on every boot it performs a defensive purge of any
+  stray `ten_pietential` docs so the workspace stays permanently retired.
+  Only `ten_demo` (GenLeadAI Demo) is ensured.
+- **`backend/scripts/iter148_seed_demo_accounts.py::setup_pietential_owner()`**
+  neutralized to a no-op — running the script standalone no longer recreates
+  the account.
+- **`/app/memory/test_credentials.md`** updated: removed `megha@contentvista.com`
+  entry, marked as retired.
+
+### Verified
+- `POST /api/auth/login` with `megha@contentvista.com/Pietential2026!` → **HTTP 401** (user removed).
+- `GET /api/tenants/me` as `admin@demo.com` → returns **1 tenant only** (`ten_demo` — GenLeadAI Demo).
+- `GET /api/dashboard/b2c` under `X-Tenant-Id: ten_demo` → still returns full B2C demo widgets.
+- Frontend `/login` renders cleanly.
+
+### Note on the Pietential Intelligence Engine
+- The **feature-level** engine (routes `pietential_intel.py`, `pt_insights`,
+  `pt_leads`, decay loop) is UNTOUCHED — it powers the B2B intelligence
+  widgets that work for GenLeadAI Demo and any future tenant.
+- Only the tenant/workspace "Pietential" was deleted, not the engine feature.
+
+---
+
+
+
+## Iter 160 — Integration Showcase widget on demo dashboards (Feb 12, 2026)
+
+User: "now in Genleadai demo dashboard i wanna show all the backend integration options we have in each of these sub sections — check the backend integrations setup and tell me what all options we have! I need for all b2b, b2c and hybrid"
+
+### Shipped
+- **Audit of live + planned integrations** — pulled the catalog from `routes/integrations_hub.SUPPORTED_TYPES` (live truth) and combined with the future-roadmap items into a single curated list of **54 integrations** across 9 marketing-facing categories.
+- **Backend** `routes/integration_showcase.py` — `GET /api/dashboard/integration-showcase[?category=...]` returns `{categories[], integrations[], counts}` with per-integration status `live` (connected for this tenant) / `available` (supported but not connected) / `coming_soon` (future). Routes registered via `routes/__init__.py`.
+- **Frontend** `IntegrationShowcase.js` — pill-filtered grid matching the user's mockup. Categories: All · Outreach · Ads · Messaging · Enrichment · Scheduling · Productivity · Social · Email · Payments. Each card shows brand-colored initials avatar, name, and status badge. Live integrations get a green check.
+- **Wired into all 3 demo dashboards** (B2C, B2B Founder, B2B Sales) at the bottom — same data, same widget. Hybrid demo automatically inherits via the existing demo-mode-switcher.
+
+### Coverage by category
+- **Outreach** (9): Apollo, Instantly, Lemlist, Saleshandy, Smartlead, PhantomBuster, Sales Navigator, Snov.io, Hunter.io
+- **Ads** (7): Google Ads, Meta CAPI, Meta Pixel, LinkedIn Insight, Meta Lead Ads, GA4
+- **Messaging** (7): WhatsApp Business, Twilio SMS, MSG91, Website Chat, Telegram, Slack, MS Teams
+- **Enrichment** (6): Apollo, Snov.io, Hunter.io, Clearbit, ZoomInfo, RocketReach
+- **Scheduling** (7): Calendly, Google Calendar, Outlook Calendar, Cal.com, Zoom, Google Meet, MS Teams
+- **Productivity** (11): Notion, Google Sheets, Airtable, Zapier, Make.com, n8n, HubSpot, Salesforce, Zoho CRM, Pipedrive, Slack
+- **Social** (7): LinkedIn Lead Gen, Sales Navigator, Meta Lead Ads, LinkedIn Insight, Twitter/X, Instagram, PhantomBuster
+- **Email** (12): Gmail, Outlook, Zoho Mail, SendGrid, Resend, Mailchimp, Lemlist, Smartlead, Instantly, Snov.io, Hunter.io, Saleshandy
+- **Payments** (4): Stripe, Razorpay, PayPal, Square (all coming-soon for now)
+
+### Verified
+- Backend smoke: `/integration-showcase` returns 54 integrations with correct counts per pill.
+- Frontend smoke: rendered + screenshotted on all 3 demo dashboards; Payments filter narrows to 4 cards as expected.
+- Updated marketing screenshot pack at `/downloads/genleadai_dashboard_screenshots.zip` now includes 4 new integration-section captures.
+
+---
+
+
+## Iter 159 — Final 4-backlog drop: Winning Combos + Sparkline tooltip + Conversations migration + Per-mode aliases (Feb 12, 2026)
+
+User: "do this" (all 4 remaining backlog items)
+
+### Shipped
+- **Winning Channel Combos leaderboard (B2C dashboard)**
+  - Backend `_winning_channel_combos()` — joins `pt_leads.source_channels` × `booking_events.lead_id` to compute the top-3 channel combos by real booked-meeting count. Sorts by bookings desc → close_rate desc → leads desc.
+  - New endpoint `POST /api/dashboard/sequences/duplicate-from-combo` — inserts a draft `lemlist_sequences` row with the channel mix, status='draft', source='winning_combo_duplicate', author email.
+  - Frontend `WinningCombos.js` — 3-card ranked grid (gold/silver/lavender) with channel name, close-rate %, bookings/leads count, and "Duplicate to sequence" button per card. Sonner toast on success.
+- **Sparkline hover-popover** (`dashboard_charts.js::Sparkline`)
+  - Accepts both `number[]` and `{date,value}[]` inputs (auto-fills dates as today-(N-i) days).
+  - Recharts `<Tooltip>` shows "<value> on YYYY-MM-DD" via `labelFormatter` (date) + `formatter` (value); suppressed series name + separator for clean output.
+- **Conversations migration** (`routes/conversations.py`)
+  - New `_merge_leads_for_threads()` helper unions `pt_leads` + legacy `leads` deduped by `id`. Legacy rows win for conversation-specific fields (latest_sentiment, aria_active, etc); pt_leads fills gaps.
+  - All 10 demo leads now appear on `/api/conversations/threads` without losing any legacy Pietential thread data.
+- **Per-mode alias files** (`B2CDashboard.js`, `B2BFounderDashboard.js`, `B2BSalesDashboard.js`)
+  - Each is a 3-line re-export from `./Dashboards`. Callers can now `import B2CDashboard from './B2CDashboard'` (sub-module style) without the physical-split risk.
+
+### Verified (iter159, 100% backend + 100% frontend)
+- 4 backend pytests pass (`/app/backend/tests/test_iter159_backlog.py`).
+- Frontend: Winning Combos cards render with all 3 duplicate buttons, sparkline tooltip shows clean "<value> on YYYY-MM-DD", Conversations page shows all 10 demo names + Pietential isolation intact.
+- Sparkline tooltip cosmetic polish applied post-test (suppress "name :" prefix that initially leaked through).
+
+### Known follow-ups
+- Physical per-mode file split (move B2CDashboard body out of Dashboards.js) — still deferred. Alias files satisfy the import API today.
+- The carry-over React duplicate-key warning from earlier iters is now resolved as of iter158 composite-key fixes.
+
+---
+
+
+## Iter 158 — Four-backlog drop: Sales sparklines + Multi-touch tracking + ICP Drift modal + shared split + UX sweep (Feb 12, 2026)
+
+User: "do this" (all 4 items + (e) all three UX sweep lanes)
+
+### Shipped
+- **B2B Sales KPI sparklines** — `followups_today`, `meetings_today`, `approvals_pending`, `pipeline_value` now return `{value, spark[7]}`; frontend tiles render the inline area chart.
+- **Phase B Step 4 — Multi-touch channel tracking**:
+  - `services/lead_channels.py::register_channel_touch(tenant_id, lead_id, channel)` → `$addToSet` on `pt_leads.source_channels` AND `leads.source_channels` (dual write for legacy compat). Case-folds via `.strip().lower()`.
+  - Called from `services/outreach_dispatch.py` after every outbound_log insert (even logged-only attempts count as a touch).
+  - Called from `routes/inbound_reply.py` after every inbound_messages insert.
+  - Idempotent — re-firing for the same channel is a no-op.
+- **Phase B Step 5 — ICP Drift Modal** (`workspace/pages/ICPDriftModal.js`):
+  - 30-day ICP distribution as a recharts donut (PieChart + Legend + Tooltip).
+  - Per-channel drift breakdown via shared `HBars` (red ≥50%, amber ≥25%, green otherwise).
+  - "ARIA recommends" callout for any channel ≥30% unknown with ≥3 leads.
+  - Snooze button → `POST /api/dashboard/icp-drift/snooze?days=7` (clamped 1–30; stored on tenant doc with `icp_drift_snoozed_by` audit). While snoozed, `drift_detected` returns false regardless of actual numbers.
+  - a11y: `role=dialog`, `aria-modal`, `aria-labelledby`, Escape-key close, body-scroll lock.
+- **Shared split** — `dashboard_shared.js` exports `KpiTile`, `ComingSoon`, `SectionCard`, `StatusPill`, `HealthBadge`, `useDashboard`, `fmtMoney`, `DashboardSkeleton`. `Dashboards.js` shrunk from 824 → 738 lines (saves ~100 LOC; further per-mode split deferred — high risk, low payoff vs current cleanup).
+- **UX Sweep (all three lanes)**:
+  - **a11y**: every KPI tile has `role=group` + `aria-label`; KPI strips wrapped in labeled groups; demo-mode-switcher is `role=tablist` with `aria-selected` per pill; all icon-only buttons have `aria-label`; ICP modal has `role=dialog` on the correct element + Escape close.
+  - **Mobile**: KPI grids changed from `grid-cols-2 md:grid-cols-5` to `grid-cols-2 sm:grid-cols-3 lg:grid-cols-5` so the 375px breakpoint shows clean 2-cols (was squished 5-cols). Demo pills wrap with `flex-wrap`, min-height 32px for touch.
+  - **Micro-interactions**: hover lift on KPI tiles (`hover:-translate-y-0.5`); `active:scale-95` press feedback on all buttons; focus rings via `focus:ring-2 focus:ring-purple-400`; new `DashboardSkeleton` replaces static "Loading…" text with animated pulse skeleton (`aria-busy=true`).
+- **Bonus fixes**: React duplicate-key warning eliminated — switched 5 list keys from `lead_id` to `${lead_id}_${index}` composite (ghost leads, deal-risk, agenda, attribution_top3 on both B2B Founder and B2B Sales).
+
+### Verified (iter158, 100% backend + 100% frontend)
+- 6 backend pytests pass.
+- B2B Sales tiles all show sparklines, demo-mode-switcher tabs work with keyboard.
+- ICP drift modal opens / Escape closes / snooze flow flips `drift_detected` to false.
+- Multi-touch `$addToSet` dedups + case-folds correctly.
+- 2-col mobile layout verified at 375×667.
+- No console warnings.
+- Tenant isolation regression-clean.
+
+### Known follow-ups
+- Full per-mode split (B2CDashboard.js / B2BFounderDashboard.js / B2BSalesDashboard.js as separate files instead of one Dashboards.js) — deferred. Saves ~600 more lines but pure cosmetic, no behaviour change.
+
+---
+
+
+## Iter 157 — Chart-first dashboard upgrade (no redundancy) (Feb 12, 2026)
+
+User: "add graphical representation on genleadai demo dashboard for easy understanding where every you can and also remember we dont want redundancy in information just something that would make the user wanna come back on this again and agin"
+
+### Design rule applied
+Charts **REPLACE** text/numbers (never sit alongside). Tiny inline indicators (e.g. the +/-N% delta in a KPI tile's top-right) are kept because they read different info than the sparkline trajectory.
+
+### Shipped
+- **Backend** `_timeseries_count` + `_timeseries_sum` helpers (single $bucket aggregate; reusable across B2C + B2B Founder KPIs). Added `spark: number[7]` to:
+  - B2C KPIs: `leads_today`, `active_convos`, `bookings_week`, `revenue_pipeline`
+  - B2B Founder KPIs: `leads_month`, `high_intent`, `meetings`, `signals`
+- **Frontend** new `dashboard_charts.js` module exports:
+  - `Sparkline` (area chart, 28px) — embedded in every KPI tile with `spark` data; color shifts on delta direction.
+  - `RadialGauge` (recharts RadialBar 0–100) — replaces Momentum's emoji+text on B2C + B2B Founder.
+  - `TaperedFunnel` (SVG-ish CSS) — replaces the 5-column equal-box grid; trapezoid bars taper to actual volume per stage.
+  - `HBars` (gradient horizontal bars) — replaces text rows in **Sequences, Asset Performance, Multi-touch Leads, Signal Attribution**.
+  - `MiniBarChart` (recharts vertical bars + tooltip) — replaces the Channel Performance HTML table on B2B Founder.
+  - `InlineSparkline` (raw SVG polyline, ~56×18px) — available for inline-row use (not yet wired).
+
+### Verified (iter157, 100% backend + 100% frontend)
+- All `spark` arrays return exactly 7 numerics for both dashboards.
+- All chart components render without recharts `ResponsiveContainer width(0)` warnings.
+- Console: 0 errors, 0 warnings after switching pills between B2C / B2B Founder / B2B Sales / Hybrid.
+- Pietential tenant unaffected — `/api/dashboard/b2b-founder` returns 200.
+- No "vs prev N%" or duplicate trend text remains.
+
+### Known follow-ups (P2)
+- B2B Sales KPI tiles don't yet show sparklines (out of scope this iter; data shape supports easy addition next).
+- `Dashboards.js` now ~840 lines — overdue for split into per-mode files.
+
+---
+
+
 ## Iter 156 — Auto-bootstrap demo seed on backend startup (Feb 12, 2026)
 
 User: "i can not see them in production" (referring to the demo leads from iter154)
