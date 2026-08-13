@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"fbedf495ec654ba9b8cb2e7f3479dede","collectionName":"aria_settings","type":"collection"}

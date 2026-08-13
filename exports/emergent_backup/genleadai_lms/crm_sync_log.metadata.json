@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"60c27f904c0943c89e859504d6680d08","collectionName":"crm_sync_log","type":"collection"}

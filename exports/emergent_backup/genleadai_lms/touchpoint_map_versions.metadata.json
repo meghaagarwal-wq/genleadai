@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"a4589411f7554ea5869db45f8b577d95","collectionName":"touchpoint_map_versions","type":"collection"}

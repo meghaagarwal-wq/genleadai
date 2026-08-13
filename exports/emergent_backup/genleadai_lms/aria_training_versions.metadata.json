@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"e89d032f2fea4f3ba007066be833cbe0","collectionName":"aria_training_versions","type":"collection"}

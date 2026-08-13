@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"created_at":{"$numberInt":"-1"}},"name":"created_at_-1"}],"uuid":"7c9f0b9f5a3548edade94388f070a792","collectionName":"email_delivery_log","type":"collection"}

@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"tenant_id":{"$numberInt":"1"},"lead_id":{"$numberInt":"1"}},"name":"tenant_id_1_lead_id_1"}],"uuid":"129316c2783046138c2d31cfc983793d","collectionName":"prospect_crawl_log","type":"collection"}

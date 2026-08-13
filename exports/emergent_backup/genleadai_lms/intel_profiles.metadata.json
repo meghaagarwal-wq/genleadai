@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"tenant_id":{"$numberInt":"1"},"lead_id":{"$numberInt":"1"}},"name":"tenant_id_1_lead_id_1","unique":true}],"uuid":"0ddf9ca9b75a4bd788b7ed416bc1b923","collectionName":"intel_profiles","type":"collection"}

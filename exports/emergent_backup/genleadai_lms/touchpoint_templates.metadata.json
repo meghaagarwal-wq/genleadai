@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"39f7367116b34a88a65c1b9ce1fe50de","collectionName":"touchpoint_templates","type":"collection"}

@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"0f8b762ba0f1476faf079b603c633144","collectionName":"pt_training_signals","type":"collection"}

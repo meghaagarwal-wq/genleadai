@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"01fb8f4748924f63b0654b120e159dcc","collectionName":"voice_seeds","type":"collection"}

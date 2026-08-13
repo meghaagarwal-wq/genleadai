@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"36a303c6ed0f42e5a20b7e510c83626c","collectionName":"contact_rate_limit","type":"collection"}

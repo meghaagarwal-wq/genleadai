@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"cc041f0acea0442da8ecf387fcfb2745","collectionName":"workspace_touchpoint_maps","type":"collection"}

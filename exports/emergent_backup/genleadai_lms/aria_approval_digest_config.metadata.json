@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"e351b4bd57b443749098f7322cbc6fd9","collectionName":"aria_approval_digest_config","type":"collection"}
