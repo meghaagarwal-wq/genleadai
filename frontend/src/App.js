@@ -26,7 +26,7 @@ import { Toaster } from 'sonner';
 // Public & auth
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import AriaLanding from './pages/landing/AriaLanding';
+import AriaGateway from './pages/landing/AriaGateway';
 import InviteAccept from './pages/InviteAccept';
 import { Privacy, Terms, DPA } from './pages/legal/Legal';
 import AriaHome from './public/pages/AriaHome';
@@ -121,7 +121,7 @@ function ProtectedRoute({ children, requireOnboarded = true, requireRole = null 
     );
   }
   if (!user) {
-    if (location.pathname === '/' || location.pathname === '') return <AriaLanding />;
+    if (location.pathname === '/' || location.pathname === '') return <AriaGateway />;
     return <Navigate to="/login" replace />;
   }
   if (requireOnboarded && !gateState.completed) return <Navigate to="/onboarding" replace />;
