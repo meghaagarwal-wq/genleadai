@@ -1,3 +1,38 @@
+## Iter 174 — Demo v4: Copy Link · Ask ARIA · JSON-LD · Session Recording (Feb 2026)
+
+User asked to ship all 4 iter173 next-actions in one pass.
+
+### What was built
+1. **Deep-Link Generator** — `Copy link` button in the top bar packages current `?company=`, `?mode=`, `?scenario=` state to the clipboard. `data-testid='copy-link-btn'`.
+2. **Ask ARIA bar** — 3 canned smart questions rendered on Command Center (`Which channel is wasting money?`, `Who should I call today?`, `What's my biggest LTV lever?`). Each opens a modal with a specific, data-backed reply (headline + bullets) and a **drafted action card** the presenter injects into Approvals with one click. Content per mode (b2c/b2b/hybrid) in `demoData/askAriaQA.js`.
+3. **JSON-LD Organization reader** — `_extract_jsonld_org()` in `demo_enrich.py` walks `@graph` and array payloads for `Organization`/`Corporation`/`LocalBusiness`/`WebSite` blocks; prefers `Organization.name`/`description`/`logo` over `<title>`/`og:image`. Result: real brand logos (e.g. HubSpot's `HSLogo_color.svg`).
+4. **Session Recording** — `Record` button in the top bar uses `getDisplayMedia` + `getUserMedia` + `MediaRecorder` to capture screen+mic. Stop → preview modal with video + email/note fields → uploads via new `POST /api/demo-recording/upload` (Emergent Object Storage) → `POST /api/demo-recording/send` emails a share link via Resend (falls back gracefully when RESEND_API_KEY is not set). Graceful non-support fallback for browsers without `getDisplayMedia`.
+
+### Verified (testing_agent iter174) — **100% pass, backend + frontend**
+- Enrich: HubSpot → real logo via JSON-LD ✓ · Stripe → correct ✓ · non-existent → 200 fallback ✓.
+- Recording: upload → serve → send round-trip works. Delivered:false when Resend not configured (graceful).
+- UI: Copy Link flashes "Copied" and writes correct URL. Ask ARIA opens modal, injects action into Approvals. Record button starts recording without errors.
+
+### Files added / touched
+- `backend/routes/demo_recording.py` (NEW · 180 LOC).
+- `backend/routes/demo_enrich.py` — JSON-LD parser (+80 LOC).
+- `backend/routes/__init__.py` — registered demo_recording_router.
+- `frontend/src/workspace/demoData/askAriaQA.js` (NEW · 165 LOC).
+- `frontend/src/workspace/pages/demo/AskAriaBar.js` (NEW · 130 LOC).
+- `frontend/src/workspace/pages/demo/RecordDemoButton.js` (NEW · 265 LOC).
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` — wired handlers + top-bar buttons.
+- Test file: `/app/backend/tests/test_iter174.py` (created by testing agent).
+
+### Backlog
+- P2 — Set `PUBLIC_URL` in production so recording share URLs are absolute (testing agent flagged this).
+- P2 — Set `RESEND_API_KEY` + `RESEND_FROM` in production for real email delivery.
+- P2 — Split `UniversalDemoDashboard.js` into subcomponent files (>1200 LOC).
+- P3 — REACT_APP_CALENDLY_URL in production for AriaGateway CTA.
+- P3 — Prod SSL fix (Entri — user-side).
+
+---
+
+
 ## Iter 173 — Demo v3: Personalisation + Command Center + Live Instinct Feed (Feb 2026)
 
 User asked for two big wow features on the public `/aria-demo`: (A) prospect-specific personalisation via site enrichment, and (B) a live-feeling Command Center + Approvals + streaming Instinct Feed. Theme migrated to dark/violet to match marketing + real product.
