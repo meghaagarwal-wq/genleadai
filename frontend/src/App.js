@@ -55,6 +55,7 @@ import AdminLayout from './admin/AdminLayout';
 import AppLayout from './components/AppLayout';
 import CommandCenter from './workspace/pages/CommandCenter';
 import { DashboardRouter, B2CDashboard, B2BFounderDashboard, B2BSalesDashboard } from './workspace/pages/Dashboards';
+import UniversalDemoDashboard from './workspace/pages/UniversalDemoDashboard';
 import LeadFeed from './workspace/pages/LeadFeed';
 import LeadDetail from './workspace/pages/LeadDetail';
 import Lead360 from './workspace/pages/Lead360';
@@ -177,6 +178,8 @@ function App() {
                   <Route path="/signup" element={<Signup />} />
                   <Route path="/demo" element={<InteractiveDemo />} />
                   <Route path="/demo-sandbox" element={<DemoSandbox />} />
+                  {/* Public universal sales demo dashboard — no auth required */}
+                  <Route path="/aria-demo" element={<UniversalDemoDashboard />} />
                   <Route path="/apply" element={<Apply />} />
                   <Route path="/apply/thank-you" element={<ApplyThankYou />} />
                   <Route path="/invite/:token" element={<InviteAccept />} />
@@ -259,6 +262,7 @@ function App() {
                         <AppLayout>
                           <Routes>
                             <Route path="/" element={<DashboardRouter />} />
+                            <Route path="/demo" element={<UniversalDemoDashboard />} />
                             <Route path="/command-center-legacy" element={<CommandCenter />} />
                             <Route path="/dashboard/automation" element={<B2CDashboard />} />
                             <Route path="/dashboard/founder" element={<B2BFounderDashboard />} />

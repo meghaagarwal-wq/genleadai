@@ -1,0 +1,850 @@
+/**
+ * ARIA Universal Demo Dashboard — iter171
+ *
+ * A fully-mocked, offline sales-demo dashboard. Zero backend calls.
+ *
+ * Layout:
+ *   [top bar]  brand · Industry Mode pill · "Live demo" badge · date · theme
+ *   [tabs]     Overview · Channels · Journey · Automation · Revenue · Data Health
+ *   [content]  6 screens, each rebuilt from a persona-scoped mock dataset
+ *
+ * Design tokens (locked, no dark-mode variants — this is a sales surface):
+ *   Canvas:  #F7F7F4  Cards: #FFFFFF  Accent: #2E3A63
+ *   Ink:     #17181C  Muted: #6B7280  Line:  #E7E5DE
+ *   Chart palette: warm neutrals + a single deep-navy accent.
+ */
+import React, { useMemo, useState } from 'react';
+import { ResponsiveSankey } from '@nivo/sankey';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
+  LineChart, Line, Area, AreaChart, Legend,
+} from 'recharts';
+import {
+  ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
+  Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
+  CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight,
+} from 'lucide-react';
+import { PERSONAS, PERSONA_ORDER, AUTOMATION_FLOWS } from '../demoData/mockPersonas';
+
+// ───── design tokens ─────
+const T = {
+  canvas: '#F7F7F4',
+  card:   '#FFFFFF',
+  accent: '#2E3A63',
+  accentSoft: '#EEF0F7',
+  ink:    '#17181C',
+  muted:  '#6B7280',
+  line:   '#E7E5DE',
+  success:'#3D8F5A',
+  warn:   '#B87F2A',
+  danger: '#B0473E',
+  chartPalette: ['#2E3A63', '#7BC58F', '#EA9A54', '#B892E8', '#5FB1B8', '#F2B84B', '#E38FB0'],
+  fontDisplay: '"Fraunces", "Plus Jakarta Sans", ui-serif, serif',
+  fontUi:      '"Plus Jakarta Sans", "Inter", system-ui, sans-serif',
+};
+
+const TABS = [
+  { key: 'overview',   label: 'Overview',   icon: Sparkles },
+  { key: 'channels',   label: 'Channels',   icon: Activity },
+  { key: 'journey',    label: 'Journey',    icon: GitBranch },
+  { key: 'automation', label: 'Automation', icon: Zap },
+  { key: 'revenue',    label: 'Revenue',    icon: DollarSign },
+  { key: 'health',     label: 'Data Health', icon: Database },
+];
+
+// ─────────────────────────────────────────────────────────────────
+// Root
+// ─────────────────────────────────────────────────────────────────
+export default function UniversalDemoDashboard() {
+  const [mode, setMode] = useState('b2c');
+  const [tab, setTab]   = useState('overview');
+  const persona = PERSONAS[mode];
+
+  return (
+    <div
+      className="min-h-screen"
+      style={{ background: T.canvas, color: T.ink, fontFamily: T.fontUi }}
+      data-testid="universal-demo-dashboard"
+    >
+      <TopBar mode={mode} setMode={setMode} persona={persona} />
+      <TabBar tab={tab} setTab={setTab} />
+      <main className="max-w-[1400px] mx-auto px-6 pb-16">
+        {tab === 'overview'   && <OverviewScreen persona={persona} />}
+        {tab === 'channels'   && <ChannelsScreen persona={persona} />}
+        {tab === 'journey'    && <JourneyScreen persona={persona} />}
+        {tab === 'automation' && <AutomationScreen persona={persona} />}
+        {tab === 'revenue'    && <RevenueScreen persona={persona} />}
+        {tab === 'health'     && <HealthScreen persona={persona} />}
+      </main>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Top bar — brand + Industry Mode pill
+// ─────────────────────────────────────────────────────────────────
+function TopBar({ mode, setMode, persona }) {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+  return (
+    <header
+      className="w-full border-b sticky top-0 z-30 backdrop-blur"
+      style={{ background: 'rgba(247,247,244,0.85)', borderColor: T.line }}
+    >
+      <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between gap-6 flex-wrap">
+        <div className="flex items-center gap-4 min-w-0">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: T.accent, color: '#fff' }}
+          >
+            <Sparkles size={18} strokeWidth={2.2} />
+          </div>
+          <div className="min-w-0">
+            <div
+              className="text-[22px] leading-none tracking-tight font-semibold truncate"
+              style={{ fontFamily: T.fontDisplay, letterSpacing: '-0.01em' }}
+              data-testid="demo-brand-name"
+            >
+              {persona.brand.name}
+            </div>
+            <div className="text-xs mt-1" style={{ color: T.muted }}>
+              {persona.brand.tagline} · Live demo workspace
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <IndustryModePill mode={mode} setMode={setMode} />
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+            style={{ background: '#EEF6F0', color: T.success, border: `1px solid ${T.line}` }}
+          >
+            <CircleDot size={10} strokeWidth={3} /> Live demo
+          </div>
+          <div
+            className="hidden md:inline-flex items-center gap-2 text-xs"
+            style={{ color: T.muted }}
+          >
+            <Calendar size={12} /> {today}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function IndustryModePill({ mode, setMode }) {
+  return (
+    <div
+      className="inline-flex items-center rounded-full p-1"
+      style={{ background: '#EFEEE8', border: `1px solid ${T.line}` }}
+      role="tablist"
+      aria-label="Industry mode"
+      data-testid="industry-mode-toggle"
+    >
+      {PERSONA_ORDER.map((k) => {
+        const active = k === mode;
+        return (
+          <button
+            key={k}
+            onClick={() => setMode(k)}
+            role="tab"
+            aria-selected={active}
+            data-testid={`mode-${k}`}
+            className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
+            style={{
+              background: active ? T.card : 'transparent',
+              color: active ? T.ink : T.muted,
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              fontWeight: active ? 600 : 500,
+            }}
+          >
+            {PERSONAS[k].label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Tab bar
+// ─────────────────────────────────────────────────────────────────
+function TabBar({ tab, setTab }) {
+  return (
+    <div className="w-full border-b" style={{ borderColor: T.line, background: T.canvas }}>
+      <div className="max-w-[1400px] mx-auto px-6 flex items-center gap-1 overflow-x-auto">
+        {TABS.map(({ key, label, icon: Icon }) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              data-testid={`tab-${key}`}
+              className="relative px-4 py-3 text-sm inline-flex items-center gap-2 whitespace-nowrap transition-colors"
+              style={{
+                color: active ? T.ink : T.muted,
+                fontWeight: active ? 600 : 500,
+              }}
+            >
+              <Icon size={14} strokeWidth={2} /> {label}
+              {active && (
+                <span
+                  className="absolute left-2 right-2 -bottom-px h-[2px] rounded-full"
+                  style={{ background: T.accent }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Shared UI primitives
+// ─────────────────────────────────────────────────────────────────
+function Card({ children, className = '', style = {}, padded = true, testid }) {
+  return (
+    <div
+      data-testid={testid}
+      className={`rounded-2xl ${className}`}
+      style={{
+        background: T.card,
+        border: `1px solid ${T.line}`,
+        boxShadow: '0 1px 2px rgba(23,24,28,0.04)',
+        padding: padded ? 20 : 0,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title, sub, right }) {
+  return (
+    <div className="flex items-end justify-between gap-4 mb-4 flex-wrap">
+      <div>
+        {eyebrow && (
+          <div className="uppercase text-[11px] tracking-[0.14em] mb-2" style={{ color: T.accent, fontWeight: 600 }}>
+            {eyebrow}
+          </div>
+        )}
+        <h2
+          className="text-[22px] leading-tight tracking-tight font-semibold"
+          style={{ fontFamily: T.fontDisplay }}
+        >
+          {title}
+        </h2>
+        {sub && <p className="text-sm mt-1" style={{ color: T.muted }}>{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function Kpi({ item }) {
+  const up = item.tone === 'up';
+  const Ico = up ? TrendingUp : TrendingDown;
+  return (
+    <Card testid={`kpi-${item.key}`} className="h-full">
+      <div className="text-xs" style={{ color: T.muted, letterSpacing: '0.02em' }}>{item.label}</div>
+      <div
+        className="mt-2 text-[28px] leading-none font-semibold tabular-nums"
+        style={{ fontFamily: T.fontDisplay, letterSpacing: '-0.01em' }}
+      >
+        {item.value}
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md"
+          style={{ background: up ? '#EEF6F0' : '#FBEDEA', color: up ? T.success : T.danger, fontWeight: 600 }}
+        >
+          <Ico size={12} strokeWidth={2.5} /> {item.delta}
+        </span>
+        <span style={{ color: T.muted }}>{item.sub}</span>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 1 — Overview (KPIs + Sankey + top movers)
+// ─────────────────────────────────────────────────────────────────
+function OverviewScreen({ persona }) {
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-overview">
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {persona.header.kpis.map((k) => <Kpi key={k.key} item={k} />)}
+      </div>
+
+      {/* Sankey — Source → Revenue */}
+      <Card padded={false}>
+        <div className="p-5 pb-0">
+          <SectionTitle
+            eyebrow="Attribution"
+            title="Source → Revenue flow"
+            sub="Every acquisition path, from first touch to booked revenue."
+            right={
+              <div className="flex items-center gap-1.5 text-xs" style={{ color: T.muted }}>
+                <Sparkles size={12} /> ARIA-attributed · last 30 days
+              </div>
+            }
+          />
+        </div>
+        <div style={{ height: 460 }} data-testid="sankey-chart">
+          <ResponsiveSankey
+            data={persona.sankey}
+            margin={{ top: 20, right: 160, bottom: 20, left: 60 }}
+            align="justify"
+            colors={T.chartPalette}
+            nodeOpacity={1}
+            nodeThickness={14}
+            nodeInnerPadding={3}
+            nodeSpacing={16}
+            nodeBorderWidth={0}
+            nodeBorderRadius={3}
+            linkOpacity={0.35}
+            linkHoverOpacity={0.6}
+            linkContract={2}
+            enableLinkGradient
+            labelPosition="outside"
+            labelPadding={12}
+            labelTextColor={T.ink}
+            theme={{
+              labels: { text: { fontFamily: T.fontUi, fontSize: 12, fontWeight: 500 } },
+              tooltip: { container: { fontFamily: T.fontUi, fontSize: 12 } },
+            }}
+          />
+        </div>
+      </Card>
+
+      {/* Two-up: revenue trend + top movers */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2">
+          <SectionTitle eyebrow="Revenue" title="Trailing 30 days" sub="Daily booked revenue." />
+          <div style={{ height: 220 }}>
+            <ResponsiveContainer>
+              <AreaChart data={persona.header.revenueSpark}>
+                <defs>
+                  <linearGradient id="revfill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={T.accent} stopOpacity={0.24} />
+                    <stop offset="100%" stopColor={T.accent} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={T.line} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="day" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
+                <Tooltip
+                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                  formatter={(v) => [`$${Number(v).toLocaleString()}`, 'Revenue']}
+                  labelFormatter={(l) => `Day ${l}`}
+                />
+                <Area type="monotone" dataKey="value" stroke={T.accent} strokeWidth={2} fill="url(#revfill)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card>
+          <SectionTitle eyebrow="Top movers" title="This week" />
+          <ul className="space-y-3">
+            {persona.channels.slice(0, 5).map((c, i) => (
+              <li key={c.name} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="w-1.5 h-8 rounded-full shrink-0"
+                    style={{ background: T.chartPalette[i % T.chartPalette.length] }}
+                  />
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{c.name}</div>
+                    <div className="text-xs" style={{ color: T.muted }}>ROAS {c.roas} · {c.orders} conv</div>
+                  </div>
+                </div>
+                <div className="tabular-nums font-medium">${Number(c.revenue).toLocaleString()}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 2 — Channel & Ad Performance
+// ─────────────────────────────────────────────────────────────────
+function ChannelsScreen({ persona }) {
+  const barData = persona.channels.map((c) => ({
+    name: c.name,
+    Spend: c.spend,
+    Revenue: c.revenue,
+  }));
+
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-channels">
+      <SectionTitle
+        eyebrow="Acquisition"
+        title="Channel & ad performance"
+        sub="Spend, revenue, ROAS and CAC by channel."
+      />
+
+      <Card>
+        <div style={{ height: 320 }}>
+          <ResponsiveContainer>
+            <BarChart data={barData} barGap={4}>
+              <CartesianGrid stroke={T.line} strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip
+                contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                formatter={(v) => `$${Number(v).toLocaleString()}`}
+              />
+              <Legend wrapperStyle={{ fontFamily: T.fontUi, fontSize: 12 }} />
+              <Bar dataKey="Spend" fill={T.chartPalette[2]} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Revenue" fill={T.accent} radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      <Card padded={false}>
+        <table className="w-full text-sm" data-testid="channels-table">
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${T.line}` }}>
+              {['Channel', 'Spend', 'Revenue', 'ROAS', 'CAC', 'Conversions'].map((h) => (
+                <th
+                  key={h}
+                  className="text-left px-5 py-3 text-[11px] uppercase tracking-[0.12em]"
+                  style={{ color: T.muted, fontWeight: 600 }}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {persona.channels.map((c, i) => (
+              <tr key={c.name} style={{ borderBottom: `1px solid ${T.line}` }}>
+                <td className="px-5 py-3 font-medium">
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle"
+                    style={{ background: T.chartPalette[i % T.chartPalette.length] }}
+                  />
+                  {c.name}
+                </td>
+                <td className="px-5 py-3 tabular-nums">${c.spend.toLocaleString()}</td>
+                <td className="px-5 py-3 tabular-nums font-medium">${c.revenue.toLocaleString()}</td>
+                <td className="px-5 py-3 tabular-nums" style={{ color: T.accent, fontWeight: 600 }}>{c.roas}</td>
+                <td className="px-5 py-3 tabular-nums">{c.cac === 0 ? '—' : `$${c.cac}`}</td>
+                <td className="px-5 py-3 tabular-nums">{c.orders}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 3 — Journey (32-touchpoint timeline)
+// ─────────────────────────────────────────────────────────────────
+function JourneyScreen({ persona }) {
+  const stages = useMemo(() => {
+    const map = new Map();
+    persona.journey.forEach((t) => {
+      if (!map.has(t.stage)) map.set(t.stage, []);
+      map.get(t.stage).push(t);
+    });
+    return Array.from(map.entries()).map(([k, v]) => ({ stage: k, items: v }));
+  }, [persona]);
+
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-journey">
+      <SectionTitle
+        eyebrow="Account journey"
+        title="32 touchpoints, first touch to advocacy"
+        sub="Every signal ARIA reads or emits across the buyer path."
+      />
+
+      <Card>
+        <div className="flex items-center gap-3 flex-wrap text-xs mb-4">
+          {stages.map((s, i) => (
+            <div key={s.stage} className="inline-flex items-center gap-2">
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full"
+                style={{ background: T.chartPalette[i % T.chartPalette.length] }}
+              />
+              <span style={{ color: T.muted }}>{s.stage} · {s.items.length}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-6">
+          {stages.map((s, si) => (
+            <div key={s.stage}>
+              <div
+                className="uppercase text-[11px] tracking-[0.14em] mb-3"
+                style={{ color: T.accent, fontWeight: 600 }}
+              >
+                {s.stage}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                {s.items.map((t) => (
+                  <div
+                    key={t.idx}
+                    className="rounded-xl px-3 py-2.5 flex items-start gap-3"
+                    style={{ background: T.canvas, border: `1px solid ${T.line}` }}
+                    data-testid={`touchpoint-${t.idx}`}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[11px] font-semibold tabular-nums"
+                      style={{ background: T.accentSoft, color: T.accent }}
+                    >
+                      {t.idx}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{t.name}</div>
+                      <div className="text-xs mt-0.5 flex items-center gap-1.5" style={{ color: T.muted }}>
+                        <span>{t.channel}</span>
+                        <span>·</span>
+                        <span>day +{t.dayOffset}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 4 — Automation
+// ─────────────────────────────────────────────────────────────────
+function AutomationScreen({ persona }) {
+  const flow = AUTOMATION_FLOWS[persona.key];
+
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-automation">
+      <SectionTitle
+        eyebrow="Automation"
+        title="Flows currently running"
+        sub="ARIA-managed sequences with live volumes and outcomes."
+      />
+
+      {/* Flow builder */}
+      <Card>
+        <SectionTitle
+          eyebrow="Flow"
+          title={flow.title}
+          right={
+            <div className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full"
+              style={{ background: '#EEF6F0', color: T.success, fontWeight: 600 }}>
+              <Play size={11} strokeWidth={3} /> Running
+            </div>
+          }
+        />
+        <FlowCanvas flow={flow} />
+      </Card>
+
+      {/* Automation list */}
+      <Card padded={false}>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: `1px solid ${T.line}` }}>
+              {['Automation', 'Status', 'Sent', 'Opened', 'Clicked', 'Revenue', ''].map((h) => (
+                <th key={h} className="text-left px-5 py-3 text-[11px] uppercase tracking-[0.12em]"
+                    style={{ color: T.muted, fontWeight: 600 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {persona.automations.map((a) => {
+              const live = a.status === 'live';
+              return (
+                <tr key={a.id} style={{ borderBottom: `1px solid ${T.line}` }} data-testid={`auto-${a.id}`}>
+                  <td className="px-5 py-3 font-medium">{a.name}</td>
+                  <td className="px-5 py-3">
+                    <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
+                      style={{
+                        background: live ? '#EEF6F0' : '#F3F1EA',
+                        color: live ? T.success : T.muted,
+                        fontWeight: 600,
+                      }}>
+                      {live ? <Play size={10} strokeWidth={3} /> : <Pause size={10} strokeWidth={3} />}
+                      {live ? 'Live' : 'Draft'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 tabular-nums">{a.sent.toLocaleString()}</td>
+                  <td className="px-5 py-3 tabular-nums">{a.opened}</td>
+                  <td className="px-5 py-3 tabular-nums">{a.clicked}</td>
+                  <td className="px-5 py-3 tabular-nums font-medium" style={{ color: T.accent }}>{a.revenue}</td>
+                  <td className="px-5 py-3 text-right">
+                    <ChevronRight size={14} style={{ color: T.muted }} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+function FlowCanvas({ flow }) {
+  const W = 1080, H = 200;
+  const nodeW = 132, nodeH = 56;
+  const nodeById = Object.fromEntries(flow.nodes.map((n) => [n.id, n]));
+  const style = (type) => ({
+    trigger: { bg: T.accent,    fg: '#fff', border: T.accent },
+    action:  { bg: T.card,      fg: T.ink,  border: T.line },
+    wait:    { bg: '#F3F1EA',   fg: T.muted, border: T.line },
+    branch:  { bg: '#FFF6E6',   fg: T.warn, border: '#F3E1BE' },
+    end:     { bg: '#EEF6F0',   fg: T.success, border: '#CFE4D7' },
+  }[type] || { bg: T.card, fg: T.ink, border: T.line });
+
+  return (
+    <div className="overflow-x-auto -mx-2 px-2" data-testid="flow-canvas">
+      <svg width={W + nodeW} height={H} style={{ minWidth: W + nodeW }}>
+        {/* edges */}
+        {flow.edges.map((e, i) => {
+          const a = nodeById[e.from], b = nodeById[e.to];
+          const x1 = a.x + nodeW, y1 = a.y + nodeH / 2;
+          const x2 = b.x,          y2 = b.y + nodeH / 2;
+          const mx = (x1 + x2) / 2;
+          const d = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+          return (
+            <g key={i}>
+              <path d={d} fill="none" stroke={T.line} strokeWidth={1.5} />
+              {e.label && (
+                <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 4} textAnchor="middle"
+                  fontSize="10" fontFamily={T.fontUi} fill={T.muted}>
+                  {e.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {/* nodes */}
+        {flow.nodes.map((n) => {
+          const s = style(n.type);
+          return (
+            <g key={n.id} transform={`translate(${n.x}, ${n.y})`}>
+              <rect width={nodeW} height={nodeH} rx="10" fill={s.bg} stroke={s.border} />
+              <text x="12" y="20" fontSize="11" fontFamily={T.fontUi} fill={s.fg} fontWeight="600">
+                {n.label}
+              </text>
+              <text x="12" y="38" fontSize="10" fontFamily={T.fontUi} fill={s.fg} opacity="0.75">
+                {n.sub}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 5 — Revenue & Outcomes
+// ─────────────────────────────────────────────────────────────────
+function RevenueScreen({ persona }) {
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-revenue">
+      <SectionTitle
+        eyebrow="Outcomes"
+        title="Revenue & retention"
+        sub="Cohort retention, LTV expansion, and product mix."
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Cohort */}
+        <Card className="lg:col-span-2" padded={false}>
+          <div className="p-5 pb-3">
+            <SectionTitle eyebrow="Cohort" title="Retention by month" />
+          </div>
+          <table className="w-full text-sm" data-testid="cohort-table">
+            <thead>
+              <tr style={{ borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
+                <th className="text-left px-5 py-2 text-[11px] uppercase tracking-[0.12em]" style={{ color: T.muted }}>Cohort</th>
+                {['M0', 'M1', 'M2', 'M3', 'M4', 'M5'].map((h) => (
+                  <th key={h} className="text-center px-3 py-2 text-[11px] uppercase tracking-[0.12em]" style={{ color: T.muted }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {persona.revenue.cohorts.map((row) => (
+                <tr key={row.cohort} style={{ borderBottom: `1px solid ${T.line}` }}>
+                  <td className="px-5 py-2 font-medium">{row.cohort}</td>
+                  {[row.m0, row.m1, row.m2, row.m3, row.m4, row.m5].map((v, i) => (
+                    <td key={i} className="text-center px-3 py-2">
+                      {v === null || v === undefined ? (
+                        <span style={{ color: T.line }}>—</span>
+                      ) : (
+                        <span
+                          className="inline-block px-2 py-1 rounded-md tabular-nums text-xs font-medium"
+                          style={{
+                            background: `rgba(46,58,99,${Math.min(0.85, v / 100)})`,
+                            color: v > 45 ? '#fff' : T.ink,
+                          }}
+                        >
+                          {v}%
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+
+        {/* LTV curve */}
+        <Card>
+          <SectionTitle eyebrow="LTV" title="Customer lifetime value" />
+          <div style={{ height: 240 }}>
+            <ResponsiveContainer>
+              <LineChart data={persona.revenue.ltvCurve}>
+                <CartesianGrid stroke={T.line} strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="day" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+                <Tooltip
+                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                  formatter={(v) => `$${Number(v).toLocaleString()}`}
+                  labelFormatter={(l) => `Day ${l}`}
+                />
+                <Line type="monotone" dataKey="ltv" stroke={T.accent} strokeWidth={2.5} dot={{ r: 3, fill: T.accent }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      </div>
+
+      {/* Products */}
+      <Card padded={false}>
+        <div className="p-5 pb-3">
+          <SectionTitle eyebrow="Mix" title="Top products / plans" />
+        </div>
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderTop: `1px solid ${T.line}`, borderBottom: `1px solid ${T.line}` }}>
+              {['Product', 'Units', 'Revenue', 'Margin'].map((h) => (
+                <th key={h} className="text-left px-5 py-2 text-[11px] uppercase tracking-[0.12em]" style={{ color: T.muted }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {persona.revenue.products.map((p, i) => (
+              <tr key={p.name} style={{ borderBottom: `1px solid ${T.line}` }}>
+                <td className="px-5 py-3 font-medium">
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full mr-2 align-middle"
+                    style={{ background: T.chartPalette[i % T.chartPalette.length] }}
+                  />
+                  {p.name}
+                </td>
+                <td className="px-5 py-3 tabular-nums">{p.units.toLocaleString()}</td>
+                <td className="px-5 py-3 tabular-nums font-medium">{p.revenue}</td>
+                <td className="px-5 py-3 tabular-nums" style={{ color: T.accent, fontWeight: 600 }}>{p.margin}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Screen 6 — Data Health
+// ─────────────────────────────────────────────────────────────────
+function HealthScreen({ persona }) {
+  return (
+    <div className="pt-6 space-y-6" data-testid="screen-health">
+      <SectionTitle
+        eyebrow="Foundation"
+        title="Data health"
+        sub="Freshness, completeness, and integration status."
+        right={
+          <div className="text-sm" style={{ color: T.muted }}>
+            Overall <span className="font-semibold" style={{ color: T.accent }}>{persona.dataHealth.overall}%</span>
+          </div>
+        }
+      />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {persona.dataHealth.dials.map((d, i) => (
+          <Card key={i} testid={`health-${d.label}`}>
+            <div className="flex items-center gap-4">
+              <HealthDial value={d.health} />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold truncate">{d.label}</div>
+                <div className="text-xs mt-0.5 flex items-center gap-1.5" style={{ color: T.muted }}>
+                  <Clock size={11} /> Synced {d.sync}
+                </div>
+                <div className="text-xs mt-1.5 flex items-center gap-1.5"
+                  style={{ color: d.health >= 90 ? T.success : d.health >= 80 ? T.warn : T.danger }}>
+                  {d.health >= 90 ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                  {d.note}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <SectionTitle eyebrow="Recommendations" title="Next best actions" />
+        <ul className="space-y-3 text-sm">
+          {persona.dataHealth.dials
+            .filter((d) => d.health < 95)
+            .slice(0, 4)
+            .map((d, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <ArrowUpRight size={16} style={{ color: T.accent, marginTop: 2 }} />
+                <div>
+                  <span className="font-medium">Refresh {d.label}</span>
+                  <span style={{ color: T.muted }}> — {d.note}. Reconnecting takes under 30 seconds.</span>
+                </div>
+              </li>
+            ))}
+          {persona.dataHealth.dials.filter((d) => d.health < 95).length === 0 && (
+            <li className="text-sm" style={{ color: T.muted }}>All integrations are healthy. Nothing to fix.</li>
+          )}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function HealthDial({ value }) {
+  const size = 56, stroke = 6, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const dash = (value / 100) * c;
+  const color = value >= 90 ? T.success : value >= 80 ? T.warn : T.danger;
+  return (
+    <svg width={size} height={size} className="shrink-0" style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.line} strokeWidth={stroke} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${dash} ${c}`} strokeLinecap="round" />
+      <text
+        x={size/2} y={size/2}
+        textAnchor="middle" dominantBaseline="central"
+        fontSize="12" fontWeight="700" fill={T.ink}
+        fontFamily={T.fontUi}
+        transform={`rotate(90 ${size/2} ${size/2})`}
+      >
+        {value}
+      </text>
+    </svg>
+  );
+}

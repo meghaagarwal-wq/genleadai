@@ -22,7 +22,7 @@ import {
   House, Brain, ChatCircle, Target, GraduationCap, Lightning,
   Plug, ChartLineUp, GearSix, SignOut, List, X, MagnifyingGlass,
   CaretDown, Buildings, CalendarBlank, Robot, Sun, Moon, MapTrifold, CheckCircle,
-  Sparkle, ArrowsClockwise,
+  Sparkle, ArrowsClockwise, Presentation,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
@@ -42,6 +42,7 @@ import api from '../config/api';
 // Approvals is rendered SEPARATELY (V11) — only shown when pending > 0.
 const NAV_PRIMARY = [
   { to: '/app',                label: 'Command Center', icon: House },
+  { to: '/app/demo',           label: 'Demo Dashboard', icon: Presentation, badge: 'sales' },
   { to: '/app/sales-view',     label: 'Sales View',     icon: ChartLineUp,  modes: ['b2b', 'hybrid'] },
   { to: '/app/instinct',       label: 'Instinct Feed',  icon: Brain,        modes: ['b2b', 'hybrid'] },
   { to: '/app/automation',     label: 'Automation',     icon: Lightning,    modes: ['b2c', 'hybrid'] },
@@ -506,6 +507,15 @@ const AppLayout = ({ children }) => {
                   style={{ background: 'var(--theme-secondary)' }}
                 >
                   {approvalsCount > 99 ? '99+' : approvalsCount}
+                </span>
+              )}
+              {item.badge === 'sales' && (
+                <span
+                  data-testid="nav-demo-badge"
+                  className="ml-auto inline-flex items-center justify-center px-1.5 h-4 rounded-full text-[9px] font-bold uppercase tracking-wider"
+                  style={{ background: '#2E3A63', color: '#fff', letterSpacing: '0.08em' }}
+                >
+                  Sales
                 </span>
               )}
             </NavLink>

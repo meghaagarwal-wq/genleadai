@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Query, UploadFile, File, BackgroundTasks, Response, Header, Form, Request
+from fastapi import FastAPI, HTTPException, Depends, status as http_status, Query, UploadFile, File, BackgroundTasks, Response, Header, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, FileResponse
@@ -59,6 +59,10 @@ from security.helpers import safe_filter_value, safe_query_param  # iter80 — S
 import re as _re_s95  # iter80 — S9.5: escape user input in $regex queries
 
 load_dotenv()
+
+# iter171 — UPLOADS_DIR shared by outbound email + attachment helpers
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR") or "/app/backend/uploads"
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 app = FastAPI(title="GenLeadAI LMS API")
 
@@ -435,7 +439,7 @@ async def get_your_five_today_route(current_user: dict = Depends(get_current_use
             try:
                 lc = datetime.fromisoformat(last_contact.replace("Z", "+00:00"))
                 days_since = (now - lc).days
-            except:
+            except Exception:
                 days_since = 30
         else:
             reasons.append("Never been contacted — fresh opportunity")
@@ -880,6 +884,7 @@ def get_aria_settings():
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         aria_settings_collection.insert_one(default)
+        default.pop("_id", None)
         return default
     return settings
 
@@ -1693,7 +1698,7 @@ async def create_broadcast(request: BroadcastRequest, current_user: dict = Depen
                         "html": f"<div style='font-family:sans-serif;max-width:600px'><p>{personalized.replace(chr(10),'<br>')}</p></div>",
                     }
                     await asyncio.to_thread(resend.Emails.send, params)
-                except:
+                except Exception:
                     pass
 
             if request.channel in ["whatsapp", "both"]:
@@ -1707,7 +1712,7 @@ async def create_broadcast(request: BroadcastRequest, current_user: dict = Depen
                 })
 
             results["sent"] += 1
-        except:
+        except Exception:
             results["failed"] += 1
 
     return results
