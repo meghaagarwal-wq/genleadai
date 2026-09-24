@@ -3,10 +3,11 @@
 Endpoint: `GET /api/enrich?domain=example.com`
 
 Fetches the target site's `<title>`, `<meta description>`, `og:image`, and a
-short keyword list (from meta keywords / title / description). Everything
-has a 3-second timeout. On any failure — DNS, TLS, HTTP error, timeout —
-we return a graceful fallback derived from the domain so the demo never
-shows an error to a prospect.
+short keyword list (from meta keywords / title / description). Also parses
+JSON-LD `Organization` blocks (iter174) — highest-quality signal for well-
+marked sites. Everything has a 3-second timeout. On any failure — DNS, TLS,
+HTTP error, timeout — we return a graceful fallback derived from the domain
+so the demo never shows an error to a prospect.
 
 Results are cached in MongoDB (`demo_enrichment` collection) for 24h so
 repeat demos of the same company are instant.
@@ -18,6 +19,7 @@ response body capped at 512 KB before parsing.
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 import socket
 from datetime import datetime, timedelta, timezone
@@ -108,12 +110,66 @@ def _extract_meta(html: str) -> dict:
     meta_desc = _first(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']+)["\']')
     meta_kw   = _first(r'<meta[^>]+name=["\']keywords["\'][^>]*content=["\']([^"\']+)["\']')
 
+    # iter174 — JSON-LD Organization / WebSite (highest-quality signal)
+    ld_org = _extract_jsonld_org(html)
+
     return {
         "title":        og_title or title,
         "description":  og_desc  or meta_desc,
         "og_image":     og_image,
         "keywords_raw": meta_kw,
+        "ld_org":       ld_org,
     }
+
+
+def _extract_jsonld_org(html: str) -> Optional[dict]:
+    """Find the first JSON-LD block with @type Organization / Corporation /
+    LocalBusiness / WebSite and return its useful fields.
+
+    Robust to lists (`@graph`), nested arrays, and malformed JSON — we
+    never throw, we just return None.
+    """
+    if not html:
+        return None
+    for m in re.finditer(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.I | re.S,
+    ):
+        raw = m.group(1).strip()
+        # Some sites wrap in HTML comments or leave trailing commas — normalise a bit
+        raw = re.sub(r"^<!--|-->$", "", raw).strip()
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        for candidate in _walk_ld(data):
+            t = candidate.get("@type")
+            types = t if isinstance(t, list) else [t] if t else []
+            if not any(x in {"Organization", "Corporation", "LocalBusiness", "WebSite", "OnlineBusiness"} for x in types):
+                continue
+            name = candidate.get("name") or candidate.get("legalName")
+            desc = candidate.get("description") or candidate.get("slogan")
+            logo = candidate.get("logo")
+            if isinstance(logo, dict):
+                logo = logo.get("url")
+            if isinstance(name, str) and 2 <= len(name) <= 80:
+                return {
+                    "name":        name.strip(),
+                    "description": (desc if isinstance(desc, str) else None),
+                    "logo":        (logo if isinstance(logo, str) and logo.startswith("http") else None),
+                }
+    return None
+
+
+def _walk_ld(node):
+    """Yield every dict inside a JSON-LD payload (handles @graph + arrays)."""
+    if isinstance(node, dict):
+        yield node
+        for v in node.values():
+            yield from _walk_ld(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _walk_ld(v)
 
 
 def _derive_keywords(meta: dict, fallback_text: str) -> list[str]:
@@ -222,24 +278,29 @@ def enrich(domain: str = Query(..., min_length=3, max_length=253)):
         html = ""
 
     meta = _extract_meta(html) if html else {}
+    ld = meta.get("ld_org") or {}
+
     company_name = None
+    # iter174 — JSON-LD Organization wins over <title> when present.
+    if ld.get("name") and 2 <= len(ld["name"]) <= 80:
+        company_name = ld["name"]
     t = ""
-    if meta.get("title"):
+    if not company_name and meta.get("title"):
         # Strip common "Home | Foo" / "Foo — About" noise
         t = meta["title"]
         for sep in (" | ", " — ", " – ", " - ", " :: "):
             if sep in t:
                 t = t.split(sep, 1)[0].strip()
                 break
-    if (t and 2 <= len(t) <= 60 and t.lower() not in {"home", "welcome", "index"}
+    if not company_name and (t and 2 <= len(t) <= 60 and t.lower() not in {"home", "welcome", "index"}
             and any(c.isalnum() for c in t) and len(re.sub(r'[^A-Za-z0-9]', '', t)) >= 3):
         company_name = t
 
     if not company_name:
         company_name = _title_case_from_domain(norm)
 
-    tagline    = _clean_tagline(meta.get("description"), meta.get("title"))
-    og_image   = meta.get("og_image")
+    tagline    = _clean_tagline(ld.get("description") or meta.get("description"), meta.get("title"))
+    og_image   = ld.get("logo") or meta.get("og_image")
     if og_image and og_image.startswith("//"):
         og_image = "https:" + og_image
     elif og_image and og_image.startswith("/"):

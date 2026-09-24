@@ -23,7 +23,7 @@ import {
   ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
   Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
   CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight, Download,
-  ChevronDown, Home, Radar, Edit2,
+  ChevronDown, Home, Radar, Edit2, Link2,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -34,6 +34,8 @@ import {
 import PersonalizationOverlay from './demo/PersonalizationOverlay';
 import CommandCenterScreen  from './demo/CommandCenterScreen';
 import InstinctFeedScreen   from './demo/InstinctFeedScreen';
+import AskAriaBar           from './demo/AskAriaBar';
+import RecordDemoButton     from './demo/RecordDemoButton';
 
 // ───── dark/violet design tokens ─────
 const T = {
@@ -222,6 +224,29 @@ export default function UniversalDemoDashboard() {
     setSavedHours((v) => v + 0.4 + Math.random() * 0.6);
   }, []);
 
+  // iter174 — Ask ARIA injects a drafted-action card at the top of Approvals.
+  const handleAddAction = useCallback((card) => {
+    setApprovals((prev) => [{ ...card, _new: true }, ...prev]);
+    setTab('command');
+    setSavedMoney((v) => v + Math.round(40 + Math.random() * 80));
+    setSavedHours((v) => v + 0.1);
+  }, []);
+
+  // iter174 — Copy shareable demo link with current mode/scenario/company.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const handleCopyLink = useCallback(() => {
+    const u = new URL(window.location.href);
+    // Ensure current state is captured even if the URL is stale
+    u.searchParams.set('mode', mode);
+    if (scenario && scenario !== 'default') u.searchParams.set('scenario', scenario);
+    else u.searchParams.delete('scenario');
+    if (enrichment?.domain) u.searchParams.set('company', enrichment.domain);
+    else if (companyParam) u.searchParams.set('company', companyParam);
+    navigator.clipboard.writeText(u.toString());
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 1600);
+  }, [mode, scenario, enrichment, companyParam]);
+
   const handleNewSignal = useCallback(() => {
     // A streamed signal is small credit — reads as "ARIA caught this for you"
     setSavedMoney((v) => v + Math.round(24 + Math.random() * 60));
@@ -307,19 +332,25 @@ export default function UniversalDemoDashboard() {
         onExport={handleExportPDF}
         exporting={exporting}
         onPersonalise={() => setShowOverlay(true)}
+        onCopyLink={handleCopyLink}
+        linkCopied={linkCopied}
+        apiUrl={apiUrl}
       />
       <TabBar tab={tab} setTab={setTab} />
       <main ref={captureRef} className="max-w-[1400px] mx-auto px-6 pb-16">
         {tab === 'command'    && (
-          <CommandCenterScreen
-            persona={persona}
-            approvals={approvals}
-            brand={brand}
-            savedMoney={savedMoney}
-            savedHours={savedHours}
-            onApprove={handleApprove}
-            T={T}
-          />
+          <>
+            <div className="pt-6"><AskAriaBar mode={mode} onAddAction={handleAddAction} T={T} /></div>
+            <CommandCenterScreen
+              persona={persona}
+              approvals={approvals}
+              brand={brand}
+              savedMoney={savedMoney}
+              savedHours={savedHours}
+              onApprove={handleApprove}
+              T={T}
+            />
+          </>
         )}
         {tab === 'instinct'   && (
           <InstinctFeedScreen
@@ -344,7 +375,7 @@ export default function UniversalDemoDashboard() {
 // ─────────────────────────────────────────────────────────────────
 // Top bar — brand + Industry Mode pill + Scenario + Export PDF
 // ─────────────────────────────────────────────────────────────────
-function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise }) {
+function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise, onCopyLink, linkCopied, apiUrl }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -395,9 +426,21 @@ function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporti
           </button>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <ScenarioPicker scenario={scenario} setScenario={setScenario} />
           <IndustryModePill mode={mode} setMode={setMode} />
+          <button
+            onClick={onCopyLink}
+            data-testid="copy-link-btn"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+            style={{ background: T.card, color: T.ink, border: `1px solid ${T.line}` }}
+            title="Copy a shareable demo link with current mode, scenario, and brand"
+          >
+            {linkCopied
+              ? <><CheckCircle2 size={12} strokeWidth={2.5} style={{ color: T.success }} /> Copied</>
+              : <><Link2 size={12} strokeWidth={2.5} /> Copy link</>}
+          </button>
+          <RecordDemoButton brand={brand} apiUrl={apiUrl} T={T} />
           <button
             data-testid="export-pdf-btn"
             onClick={onExport}
@@ -414,7 +457,7 @@ function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporti
             {exporting ? 'Exporting…' : 'Export PDF'}
           </button>
           <div
-            className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+            className="hidden lg:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
             style={{ background: 'rgba(74,222,128,0.12)', color: T.success, border: `1px solid ${T.line}` }}
           >
             <CircleDot size={10} strokeWidth={3} /> Live demo · sample data

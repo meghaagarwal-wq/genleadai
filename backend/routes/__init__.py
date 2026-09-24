@@ -204,6 +204,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter173 — Public site enrichment for the /aria-demo personalisation overlay
     from .demo_enrich import router as demo_enrich_router
 
+    # iter174 — Demo session recording upload + share
+    from .demo_recording import router as demo_recording_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -273,5 +276,6 @@ def register_all_routes(app: FastAPI) -> None:
         dashboards_router,
         integration_showcase_router,
         demo_enrich_router,
+        demo_recording_router,
     ):
         app.include_router(router)
