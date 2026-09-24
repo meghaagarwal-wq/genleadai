@@ -1,3 +1,46 @@
+## Iter 173 — Demo v3: Personalisation + Command Center + Live Instinct Feed (Feb 2026)
+
+User asked for two big wow features on the public `/aria-demo`: (A) prospect-specific personalisation via site enrichment, and (B) a live-feeling Command Center + Approvals + streaming Instinct Feed. Theme migrated to dark/violet to match marketing + real product.
+
+### What was built
+
+**A · Personalisation ("this is about MY company")**
+- New backend endpoint `GET /api/enrich?domain=` (public, no auth) — fetches `<title>`, meta description, OG image with 3s timeout; SSRF-guarded; 24h MongoDB cache; graceful domain-derived fallback on any failure. Body capped at 512KB. Junk titles (`..`, `Home`, `Welcome`, <3 alnum chars) rejected.
+- `PersonalizationOverlay` — entry moment on first visit: input for website/LinkedIn + 3 sample company cards (Lumen Skin / Cortex Labs / Northwind Coffee). Theatrical scan animation (5 ticking steps, ~4s) always completes regardless of network. Sample clicks bypass live enrichment entirely.
+- Deep-link support: `/aria-demo?company=<domain>&mode=<b2c|b2b|hybrid>&scenario=` pre-loads silently without overlay. URL is updated on personalisation so any prospect URL is instantly shareable.
+- Auto-inferred mode from keywords + inferred ICP appears in the top bar under the prospect's brand + logo.
+
+**B · Command Center + Live Instinct Feed**
+- `CommandCenterScreen` (new hero tab): live "ARIA impact" tile (money + hours saved, ambient increment every 3.2 s + spike on each approval); compact 4-KPI strip; **Approvals queue** with 3–4 cards per persona, each carrying real, sharp, personalised drafted messages (brand name substituted via `{{brand}}` templates). One-tap Approve = success chip → slide-out → counter tick. Inline Edit for tweaks. "Approve all" bulk action.
+- `InstinctFeedScreen` (new tab): 5 seeded signals on load, new signal streams in every 15–25 s with 'New signal' pulse. Cards typed by kind (Intent · Hiring · Funding · Competitor · Drift · Cold · Signal · Win · Field) with per-kind accent colors. Dismissable.
+- Theme migrated to dark/violet: `#0B0A14` canvas, `#16151F`/`#1F1D2E` cards, `#A46FE8`/`#7C35DC` accent, Fraunces display font. All 8 tabs (Command · Instinct · Overview · Channels · Journey · Automation · Revenue · Data Health) re-skinned.
+
+### Verified
+- Manual smoke on preview: stripe.com deep-link pulls real "Stripe" branding + logo + tagline + keywords; sample clicks show correct preset brands; approvals expand to show drafted messages with `{{brand}}` substituted correctly; Instinct Feed streams new cards; saved counter ticks up.
+- testing_agent iter173: **12/14 pass**. 2 issues found + fixed live:
+  - Sample-click race: URL push triggered re-enrichment that clobbered preset — fixed by guarding useEffect when `enrichment.source==='sample'`.
+  - Backend `t` variable NameError risk on empty HTML — fixed by initialising `t = ''`.
+  - Testability: added `data-active` + `aria-pressed` to Industry Mode pill.
+
+### Files added / touched
+- `backend/routes/demo_enrich.py` (NEW · 250 LOC)
+- `backend/routes/__init__.py` — registered `demo_enrich_router`
+- `frontend/src/workspace/demoData/liveContent.js` (NEW · 300 LOC) — approvals, instinct templates, samples, mode/ICP inference
+- `frontend/src/workspace/pages/demo/PersonalizationOverlay.js` (NEW · 200 LOC)
+- `frontend/src/workspace/pages/demo/CommandCenterScreen.js` (NEW · 260 LOC)
+- `frontend/src/workspace/pages/demo/InstinctFeedScreen.js` (NEW · 170 LOC)
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` — dark/violet tokens, new tabs, overlay wiring, deep-link, live counters (~1200 LOC · earmarked for split next iter)
+
+### Backlog
+- P2 — Split `UniversalDemoDashboard.js` into subcomponent files (>700 LOC).
+- P2 — Enrichment: extract JSON-LD `Organization` name for higher-quality companyName.
+- P3 — Optional "Ask ARIA…" bar (canned questions on the demo).
+- P3 — Prod SSL fix (Entri — user-side).
+- P3 — REACT_APP_CALENDLY_URL setup in production `.env`.
+
+---
+
+
 ## Iter 172 — Demo Dashboard v2: Branding, Scenarios, PDF, Calendly (Feb 2026)
 
 User asked to build all 4 iter171 next-actions in one pass.

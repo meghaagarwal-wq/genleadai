@@ -223,6 +223,7 @@ def enrich(domain: str = Query(..., min_length=3, max_length=253)):
 
     meta = _extract_meta(html) if html else {}
     company_name = None
+    t = ""
     if meta.get("title"):
         # Strip common "Home | Foo" / "Foo — About" noise
         t = meta["title"]
@@ -230,7 +231,7 @@ def enrich(domain: str = Query(..., min_length=3, max_length=253)):
             if sep in t:
                 t = t.split(sep, 1)[0].strip()
                 break
-    if (2 <= len(t) <= 60 and t.lower() not in {"home", "welcome", "index"}
+    if (t and 2 <= len(t) <= 60 and t.lower() not in {"home", "welcome", "index"}
             and any(c.isalnum() for c in t) and len(re.sub(r'[^A-Za-z0-9]', '', t)) >= 3):
         company_name = t
 

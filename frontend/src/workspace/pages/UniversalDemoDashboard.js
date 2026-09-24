@@ -145,8 +145,11 @@ export default function UniversalDemoDashboard() {
   const apiUrl = process.env.REACT_APP_BACKEND_URL || '';
 
   // Deep-link: if ?company=<domain> is present, hit /api/enrich silently.
+  // Skip if enrichment already came from a sample click (source==='sample'),
+  // so we don't clobber preset data with lower-quality scraped data.
   useEffect(() => {
     if (!companyParam) return;
+    if (enrichment?.source === 'sample' && enrichment?.domain === companyParam) return;
     let cancelled = false;
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 4000);
@@ -494,6 +497,8 @@ function IndustryModePill({ mode, setMode }) {
             onClick={() => setMode(k)}
             role="tab"
             aria-selected={active}
+            aria-pressed={active}
+            data-active={active ? 'true' : 'false'}
             data-testid={`mode-${k}`}
             className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
             style={{
