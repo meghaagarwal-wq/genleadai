@@ -22,6 +22,18 @@ const AriaGateway = () => {
 
   const goto = (path) => navigate(path);
 
+  // iter171 — Calendly integration. If REACT_APP_CALENDLY_URL is set we open
+  // the Calendly booking page in a new tab; otherwise fall back to the
+  // classic /apply form so the CTA never breaks.
+  const calendlyUrl = process.env.REACT_APP_CALENDLY_URL;
+  const bookWalkthrough = () => {
+    if (calendlyUrl && /^https?:\/\//.test(calendlyUrl)) {
+      window.open(calendlyUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      goto('/apply');
+    }
+  };
+
   return (
     <div
       className="min-h-screen w-full flex flex-col md:flex-row"
@@ -162,7 +174,7 @@ const AriaGateway = () => {
 
           {/* Tertiary — Book a call */}
           <button
-            onClick={() => goto('/apply')}
+            onClick={bookWalkthrough}
             onMouseEnter={() => setHover('call')}
             onMouseLeave={() => setHover(null)}
             data-testid="gateway-bookcall-btn"
@@ -181,7 +193,9 @@ const AriaGateway = () => {
               </span>
               <span>
                 <span className="block text-[15px]">Book a walkthrough</span>
-                <span className="block text-[11px] font-normal" style={{ color: 'var(--theme-text-muted, #57534E)' }}>Founder-to-founder demo · 15 min · 48-hr response</span>
+                <span className="block text-[11px] font-normal" style={{ color: 'var(--theme-text-muted, #57534E)' }}>
+                  {calendlyUrl ? 'Founder-to-founder demo · 15 min · pick a slot' : 'Founder-to-founder demo · 15 min · 48-hr response'}
+                </span>
               </span>
             </span>
             <ArrowRight size={18} weight="bold" />

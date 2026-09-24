@@ -13,7 +13,8 @@
  *   Ink:     #17181C  Muted: #6B7280  Line:  #E7E5DE
  *   Chart palette: warm neutrals + a single deep-navy accent.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ResponsiveSankey } from '@nivo/sankey';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -22,8 +23,11 @@ import {
 import {
   ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
   Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
-  CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight,
+  CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight, Download,
+  ChevronDown,
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { PERSONAS, PERSONA_ORDER, AUTOMATION_FLOWS } from '../demoData/mockPersonas';
 
 // ───── design tokens ─────
@@ -52,13 +56,136 @@ const TABS = [
   { key: 'health',     label: 'Data Health', icon: Database },
 ];
 
+// ─── Scenario presets (revenue/orders multipliers per persona) ─────────
+const SCENARIOS = {
+  default:        { key: 'default',        label: 'Default',        blurb: 'Baseline numbers'         },
+  'just-launched': { key: 'just-launched', label: 'Just launched',  blurb: 'Small volume · high delta' },
+  scaling:        { key: 'scaling',        label: 'Scaling',        blurb: 'Growing · strong ROAS'     },
+  plateaued:      { key: 'plateaued',      label: 'Plateaued',      blurb: 'Flat · needs unlock'       },
+};
+
+// Multipliers applied to numeric-looking KPI values by matching the leading
+// unit ($, k, M, x, %, digits) and rescaling. Non-numeric strings pass through.
+const SCENARIO_TRANSFORMS = {
+  default:        { mul: 1.00, deltaMul: 1.00, tone: null },
+  'just-launched': { mul: 0.18, deltaMul: 1.8, tone: 'up' },
+  scaling:        { mul: 1.35, deltaMul: 1.4, tone: 'up' },
+  plateaued:      { mul: 0.92, deltaMul: 0.2, tone: 'down' },
+};
+
+function rescaleNumericString(s, mul) {
+  if (typeof s !== 'string') return s;
+  const m = s.match(/^(-?)(\$)?([\d,.]+)\s*(K|M|k|m|x|%|pt)?(.*)$/);
+  if (!m) return s;
+  const [, sign, dollar, num, unit, rest] = m;
+  const n = parseFloat(num.replace(/,/g, ''));
+  if (!isFinite(n)) return s;
+  const scaled = n * mul;
+  const formatted = scaled >= 1000
+    ? scaled.toLocaleString(undefined, { maximumFractionDigits: 0 })
+    : scaled.toLocaleString(undefined, { maximumFractionDigits: scaled < 10 ? 1 : 0 });
+  return `${sign || ''}${dollar || ''}${formatted}${unit || ''}${rest || ''}`;
+}
+
+function applyScenario(persona, scenarioKey) {
+  const t = SCENARIO_TRANSFORMS[scenarioKey] || SCENARIO_TRANSFORMS.default;
+  if (scenarioKey === 'default') return persona;
+  return {
+    ...persona,
+    header: {
+      ...persona.header,
+      kpis: persona.header.kpis.map((k) => ({
+        ...k,
+        value: rescaleNumericString(k.value, t.mul),
+        delta: t.tone === 'down' ? '−2%' : rescaleNumericString(k.delta, t.deltaMul),
+        tone: t.tone || k.tone,
+      })),
+      revenueSpark: persona.header.revenueSpark.map((p) => ({
+        ...p,
+        value: Math.round(p.value * t.mul),
+      })),
+    },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Root
 // ─────────────────────────────────────────────────────────────────
 export default function UniversalDemoDashboard() {
-  const [mode, setMode] = useState('b2c');
-  const [tab, setTab]   = useState('overview');
-  const persona = PERSONAS[mode];
+  const [params] = useSearchParams();
+  // ── URL branding overrides (?brand=Acme&tagline=...&mode=b2b&scenario=scaling) ──
+  const brandOverride    = params.get('brand') || null;
+  const taglineOverride  = params.get('tagline') || null;
+  const initialMode      = ['b2c', 'b2b', 'hybrid'].includes(params.get('mode')) ? params.get('mode') : 'b2c';
+  const initialScenario  = Object.keys(SCENARIOS).includes(params.get('scenario')) ? params.get('scenario') : 'default';
+
+  const [mode, setMode]         = useState(initialMode);
+  const [scenario, setScenario] = useState(initialScenario);
+  const [tab, setTab]           = useState('overview');
+  const [exporting, setExporting] = useState(false);
+  const captureRef = useRef(null);
+
+  // Compose persona: base persona → apply scenario → apply URL branding
+  const persona = useMemo(() => {
+    const base = PERSONAS[mode];
+    const scen = applyScenario(base, scenario);
+    if (!brandOverride && !taglineOverride) return scen;
+    return {
+      ...scen,
+      brand: {
+        ...scen.brand,
+        name:    brandOverride   || scen.brand.name,
+        tagline: taglineOverride || scen.brand.tagline,
+      },
+    };
+  }, [mode, scenario, brandOverride, taglineOverride]);
+
+  const handleExportPDF = async () => {
+    if (!captureRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const node = captureRef.current;
+      const canvas = await html2canvas(node, {
+        backgroundColor: T.canvas,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: node.scrollWidth,
+        windowHeight: node.scrollHeight,
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      // Landscape PDF, image scaled to fit width
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW - 40;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      let y = 20, remaining = imgH;
+      if (imgH <= pageH - 40) {
+        pdf.addImage(imgData, 'JPEG', 20, y, imgW, imgH);
+      } else {
+        // Slice across pages (single tall image)
+        let sy = 0;
+        const pxPerPage = ((pageH - 40) * canvas.width) / imgW;
+        while (sy < canvas.height) {
+          const sliceH = Math.min(pxPerPage, canvas.height - sy);
+          const slice = document.createElement('canvas');
+          slice.width = canvas.width;
+          slice.height = sliceH;
+          slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+          const sliceData = slice.toDataURL('image/jpeg', 0.92);
+          const sliceImgH = (sliceH * imgW) / canvas.width;
+          pdf.addImage(sliceData, 'JPEG', 20, 20, imgW, sliceImgH);
+          sy += sliceH;
+          if (sy < canvas.height) pdf.addPage();
+        }
+      }
+      const safe = (persona.brand.name || 'aria-demo').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+      pdf.save(`${safe}-demo-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div
@@ -66,9 +193,15 @@ export default function UniversalDemoDashboard() {
       style={{ background: T.canvas, color: T.ink, fontFamily: T.fontUi }}
       data-testid="universal-demo-dashboard"
     >
-      <TopBar mode={mode} setMode={setMode} persona={persona} />
+      <TopBar
+        mode={mode} setMode={setMode}
+        scenario={scenario} setScenario={setScenario}
+        persona={persona}
+        onExport={handleExportPDF}
+        exporting={exporting}
+      />
       <TabBar tab={tab} setTab={setTab} />
-      <main className="max-w-[1400px] mx-auto px-6 pb-16">
+      <main ref={captureRef} className="max-w-[1400px] mx-auto px-6 pb-16">
         {tab === 'overview'   && <OverviewScreen persona={persona} />}
         {tab === 'channels'   && <ChannelsScreen persona={persona} />}
         {tab === 'journey'    && <JourneyScreen persona={persona} />}
@@ -81,9 +214,9 @@ export default function UniversalDemoDashboard() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Top bar — brand + Industry Mode pill
+// Top bar — brand + Industry Mode pill + Scenario + Export PDF
 // ─────────────────────────────────────────────────────────────────
-function TopBar({ mode, setMode, persona }) {
+function TopBar({ mode, setMode, scenario, setScenario, persona, onExport, exporting }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -115,15 +248,31 @@ function TopBar({ mode, setMode, persona }) {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          <ScenarioPicker scenario={scenario} setScenario={setScenario} />
           <IndustryModePill mode={mode} setMode={setMode} />
+          <button
+            data-testid="export-pdf-btn"
+            onClick={onExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95 disabled:opacity-60"
+            style={{
+              background: T.accent, color: '#fff',
+              boxShadow: '0 1px 2px rgba(46,58,99,0.15)',
+              cursor: exporting ? 'wait' : 'pointer',
+            }}
+            aria-label="Export dashboard as PDF"
+          >
+            <Download size={12} strokeWidth={2.5} />
+            {exporting ? 'Exporting…' : 'Export PDF'}
+          </button>
           <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+            className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
             style={{ background: '#EEF6F0', color: T.success, border: `1px solid ${T.line}` }}
           >
             <CircleDot size={10} strokeWidth={3} /> Live demo
           </div>
           <div
-            className="hidden md:inline-flex items-center gap-2 text-xs"
+            className="hidden lg:inline-flex items-center gap-2 text-xs"
             style={{ color: T.muted }}
           >
             <Calendar size={12} /> {today}
@@ -131,6 +280,61 @@ function TopBar({ mode, setMode, persona }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function ScenarioPicker({ scenario, setScenario }) {
+  const [open, setOpen] = useState(false);
+  const active = SCENARIOS[scenario] || SCENARIOS.default;
+  return (
+    <div className="relative" data-testid="scenario-picker">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+        style={{ background: T.card, color: T.ink, border: `1px solid ${T.line}` }}
+        data-testid="scenario-toggle"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="uppercase text-[10px] tracking-[0.14em]" style={{ color: T.muted, fontWeight: 700 }}>
+          Scenario
+        </span>
+        <span>{active.label}</span>
+        <ChevronDown size={12} strokeWidth={2.5} style={{ color: T.muted }} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 mt-1.5 rounded-xl overflow-hidden z-40"
+          style={{
+            background: T.card, border: `1px solid ${T.line}`,
+            boxShadow: '0 10px 30px rgba(23,24,28,0.12)', minWidth: 220,
+          }}
+          role="listbox"
+        >
+          {Object.values(SCENARIOS).map((s) => {
+            const on = s.key === scenario;
+            return (
+              <button
+                key={s.key}
+                onMouseDown={(e) => { e.preventDefault(); setScenario(s.key); setOpen(false); }}
+                role="option"
+                aria-selected={on}
+                data-testid={`scenario-${s.key}`}
+                className="w-full text-left px-3 py-2.5 flex items-start gap-2 text-sm transition-colors hover:bg-[#F7F7F4]"
+                style={{ color: T.ink }}
+              >
+                <div className="w-1.5 h-1.5 mt-2 rounded-full shrink-0" style={{ background: on ? T.accent : T.line }} />
+                <div className="min-w-0">
+                  <div className="font-medium">{s.label}</div>
+                  <div className="text-xs" style={{ color: T.muted }}>{s.blurb}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
