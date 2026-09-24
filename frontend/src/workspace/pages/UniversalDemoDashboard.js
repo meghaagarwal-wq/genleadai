@@ -1,19 +1,18 @@
 /**
- * ARIA Universal Demo Dashboard — iter171
+ * ARIA Universal Demo Dashboard — iter173 (dark/violet)
  *
- * A fully-mocked, offline sales-demo dashboard. Zero backend calls.
+ * Public sales demo. Zero backend calls except optional /api/enrich.
  *
- * Layout:
- *   [top bar]  brand · Industry Mode pill · "Live demo" badge · date · theme
- *   [tabs]     Overview · Channels · Journey · Automation · Revenue · Data Health
- *   [content]  6 screens, each rebuilt from a persona-scoped mock dataset
- *
- * Design tokens (locked, no dark-mode variants — this is a sales surface):
- *   Canvas:  #F7F7F4  Cards: #FFFFFF  Accent: #2E3A63
- *   Ink:     #17181C  Muted: #6B7280  Line:  #E7E5DE
- *   Chart palette: warm neutrals + a single deep-navy accent.
+ * Iter173 upgrades:
+ *   - Theme migrated to dark/violet to match marketing + real product.
+ *   - Personalisation overlay: prospect pastes their domain → theatrical
+ *     scan → dashboard rebuilds around their company.
+ *   - Deep-link support: ?company=<domain>&mode=<b2c|b2b|hybrid>&scenario=
+ *   - Command Center tab: hero saved-counter + Approvals queue.
+ *   - Instinct Feed tab: live-streaming signal cards (every 15–25 s).
+ *   - Approvals + streaming feed increment a live "ARIA saved you" tile.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ResponsiveSankey } from '@nivo/sankey';
 import {
@@ -24,36 +23,46 @@ import {
   ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
   Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
   CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight, Download,
-  ChevronDown,
+  ChevronDown, Home, Radar, Edit2,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { PERSONAS, PERSONA_ORDER, AUTOMATION_FLOWS } from '../demoData/mockPersonas';
+import {
+  APPROVALS, INSTINCT_TEMPLATES, inferModeFromKeywords, inferICPFromKeywords,
+} from '../demoData/liveContent';
+import PersonalizationOverlay from './demo/PersonalizationOverlay';
+import CommandCenterScreen  from './demo/CommandCenterScreen';
+import InstinctFeedScreen   from './demo/InstinctFeedScreen';
 
-// ───── design tokens ─────
+// ───── dark/violet design tokens ─────
 const T = {
-  canvas: '#F7F7F4',
-  card:   '#FFFFFF',
-  accent: '#2E3A63',
-  accentSoft: '#EEF0F7',
-  ink:    '#17181C',
-  muted:  '#6B7280',
-  line:   '#E7E5DE',
-  success:'#3D8F5A',
-  warn:   '#B87F2A',
-  danger: '#B0473E',
-  chartPalette: ['#2E3A63', '#7BC58F', '#EA9A54', '#B892E8', '#5FB1B8', '#F2B84B', '#E38FB0'],
+  canvas:     '#0B0A14',
+  card:       '#16151F',
+  cardElev:   '#1F1D2E',
+  accent:     '#A46FE8',
+  accentDeep: '#7C35DC',
+  accentSoft: 'rgba(124,53,220,0.15)',
+  ink:        '#EAE7F5',
+  muted:      '#8B849E',
+  line:       '#28243A',
+  success:    '#4ADE80',
+  warn:       '#FBBF24',
+  danger:     '#F87171',
+  chartPalette: ['#A46FE8', '#7BC58F', '#F2B84B', '#F87171', '#5FB1B8', '#E38FB0', '#EA9A54'],
   fontDisplay: '"Fraunces", "Plus Jakarta Sans", ui-serif, serif',
   fontUi:      '"Plus Jakarta Sans", "Inter", system-ui, sans-serif',
 };
 
 const TABS = [
-  { key: 'overview',   label: 'Overview',   icon: Sparkles },
-  { key: 'channels',   label: 'Channels',   icon: Activity },
-  { key: 'journey',    label: 'Journey',    icon: GitBranch },
-  { key: 'automation', label: 'Automation', icon: Zap },
-  { key: 'revenue',    label: 'Revenue',    icon: DollarSign },
-  { key: 'health',     label: 'Data Health', icon: Database },
+  { key: 'command',    label: 'Command Center', icon: Home },
+  { key: 'instinct',   label: 'Instinct Feed',  icon: Radar },
+  { key: 'overview',   label: 'Overview',       icon: Sparkles },
+  { key: 'channels',   label: 'Channels',       icon: Activity },
+  { key: 'journey',    label: 'Journey',        icon: GitBranch },
+  { key: 'automation', label: 'Automation',     icon: Zap },
+  { key: 'revenue',    label: 'Revenue',        icon: DollarSign },
+  { key: 'health',     label: 'Data Health',    icon: Database },
 ];
 
 // ─── Scenario presets (revenue/orders multipliers per persona) ─────────
@@ -108,37 +117,113 @@ function applyScenario(persona, scenarioKey) {
   };
 }
 
+// Random within a range — used for initial saved-counter seed
+function randomBase(min, max) {
+  return min + Math.random() * (max - min);
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Root
 // ─────────────────────────────────────────────────────────────────
 export default function UniversalDemoDashboard() {
-  const [params] = useSearchParams();
-  // ── URL branding overrides (?brand=Acme&tagline=...&mode=b2b&scenario=scaling) ──
-  const brandOverride    = params.get('brand') || null;
-  const taglineOverride  = params.get('tagline') || null;
-  const initialMode      = ['b2c', 'b2b', 'hybrid'].includes(params.get('mode')) ? params.get('mode') : 'b2c';
-  const initialScenario  = Object.keys(SCENARIOS).includes(params.get('scenario')) ? params.get('scenario') : 'default';
+  const [params, setParams] = useSearchParams();
+  // ── URL params: ?company=<domain>&brand=&tagline=&mode=&scenario= ──
+  const companyParam    = params.get('company') || null;
+  const brandOverride   = params.get('brand')   || null;
+  const taglineOverride = params.get('tagline') || null;
+  const initialMode     = ['b2c', 'b2b', 'hybrid'].includes(params.get('mode')) ? params.get('mode') : 'b2c';
+  const initialScenario = Object.keys(SCENARIOS).includes(params.get('scenario')) ? params.get('scenario') : 'default';
 
   const [mode, setMode]         = useState(initialMode);
   const [scenario, setScenario] = useState(initialScenario);
-  const [tab, setTab]           = useState('overview');
+  const [tab, setTab]           = useState('command');
   const [exporting, setExporting] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(!companyParam && !brandOverride);
+  // enrichment holds the prospect's { companyName, tagline, logoUrl, keywords }.
+  const [enrichment, setEnrichment] = useState(null);
   const captureRef = useRef(null);
+  const apiUrl = process.env.REACT_APP_BACKEND_URL || '';
 
-  // Compose persona: base persona → apply scenario → apply URL branding
+  // Deep-link: if ?company=<domain> is present, hit /api/enrich silently.
+  useEffect(() => {
+    if (!companyParam) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 4000);
+    fetch(`${apiUrl}/api/enrich?domain=${encodeURIComponent(companyParam)}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setEnrichment(data); })
+      .catch(() => {
+        if (cancelled) return;
+        const clean = companyParam.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase();
+        const root = clean.split('.')[0].replace(/-/g, ' ');
+        setEnrichment({
+          domain: clean,
+          companyName: root.replace(/\b\w/g, (c) => c.toUpperCase()) || 'Your Company',
+          tagline: null,
+          logoUrl: `https://www.google.com/s2/favicons?domain=${clean}&sz=128`,
+          keywords: [],
+          source: 'fallback',
+        });
+      })
+      .finally(() => clearTimeout(timeout));
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timeout); };
+  }, [companyParam, apiUrl]);
+
+  // On enrichment, auto-infer mode from keywords if user hasn't set one via URL.
+  useEffect(() => {
+    if (!enrichment || params.get('mode')) return;
+    const inferred = inferModeFromKeywords(enrichment.keywords);
+    if (inferred && inferred !== mode) setMode(inferred);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enrichment]);
+
+  // Compose brand: enrichment → URL overrides → persona defaults
+  const brand = useMemo(() => {
+    const p = PERSONAS[mode].brand;
+    return {
+      companyName: enrichment?.companyName || brandOverride   || p.name,
+      tagline:     enrichment?.tagline     || taglineOverride || p.tagline,
+      logoUrl:     enrichment?.logoUrl     || null,
+      inferredICP: enrichment ? inferICPFromKeywords(enrichment.keywords, mode) : null,
+    };
+  }, [enrichment, brandOverride, taglineOverride, mode]);
+
+  // Compose persona: base → scenario → brand overlay
   const persona = useMemo(() => {
     const base = PERSONAS[mode];
     const scen = applyScenario(base, scenario);
-    if (!brandOverride && !taglineOverride) return scen;
     return {
       ...scen,
-      brand: {
-        ...scen.brand,
-        name:    brandOverride   || scen.brand.name,
-        tagline: taglineOverride || scen.brand.tagline,
-      },
+      brand: { ...scen.brand, name: brand.companyName, tagline: brand.tagline },
     };
-  }, [mode, scenario, brandOverride, taglineOverride]);
+  }, [mode, scenario, brand]);
+
+  // ── Approvals state + live saved counter ──────────────────────────
+  const [approvals, setApprovals] = useState(() => APPROVALS[initialMode] || []);
+  useEffect(() => { setApprovals(APPROVALS[mode] || []); }, [mode]);
+  const [savedMoney, setSavedMoney] = useState(() => randomBase(2400, 8200));
+  const [savedHours, setSavedHours] = useState(() => randomBase(6.4, 18.2));
+  // Slow ambient increment so the tile feels alive
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSavedMoney((v) => v + Math.round(3 + Math.random() * 12));
+      setSavedHours((v) => v + 0.02);
+    }, 3200);
+    return () => clearInterval(t);
+  }, []);
+
+  const handleApprove = useCallback((id) => {
+    setApprovals((prev) => prev.filter((a) => a.id !== id));
+    setSavedMoney((v) => v + Math.round(180 + Math.random() * 320));
+    setSavedHours((v) => v + 0.4 + Math.random() * 0.6);
+  }, []);
+
+  const handleNewSignal = useCallback(() => {
+    // A streamed signal is small credit — reads as "ARIA caught this for you"
+    setSavedMoney((v) => v + Math.round(24 + Math.random() * 60));
+    setSavedHours((v) => v + 0.05 + Math.random() * 0.1);
+  }, []);
 
   const handleExportPDF = async () => {
     if (!captureRef.current || exporting) return;
@@ -154,17 +239,14 @@ export default function UniversalDemoDashboard() {
         windowHeight: node.scrollHeight,
       });
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      // Landscape PDF, image scaled to fit width
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
       const imgW = pageW - 40;
       const imgH = (canvas.height * imgW) / canvas.width;
-      let y = 20, remaining = imgH;
       if (imgH <= pageH - 40) {
-        pdf.addImage(imgData, 'JPEG', 20, y, imgW, imgH);
+        pdf.addImage(imgData, 'JPEG', 20, 20, imgW, imgH);
       } else {
-        // Slice across pages (single tall image)
         let sy = 0;
         const pxPerPage = ((pageH - 40) * canvas.width) / imgW;
         while (sy < canvas.height) {
@@ -173,9 +255,7 @@ export default function UniversalDemoDashboard() {
           slice.width = canvas.width;
           slice.height = sliceH;
           slice.getContext('2d').drawImage(canvas, 0, sy, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-          const sliceData = slice.toDataURL('image/jpeg', 0.92);
-          const sliceImgH = (sliceH * imgW) / canvas.width;
-          pdf.addImage(sliceData, 'JPEG', 20, 20, imgW, sliceImgH);
+          pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 20, 20, imgW, (sliceH * imgW) / canvas.width);
           sy += sliceH;
           if (sy < canvas.height) pdf.addPage();
         }
@@ -187,21 +267,66 @@ export default function UniversalDemoDashboard() {
     }
   };
 
+  const handleOverlayComplete = (payload) => {
+    setEnrichment(payload);
+    // If overlay ships a mode (e.g. from a sample click), honour it.
+    if (payload?.mode && ['b2c', 'b2b', 'hybrid'].includes(payload.mode)) {
+      setMode(payload.mode);
+    }
+    setShowOverlay(false);
+    // Reflect the choice in the URL so the demo is now a shareable deep-link.
+    if (payload?.domain) {
+      const next = new URLSearchParams(params);
+      next.set('company', payload.domain);
+      if (payload.mode) next.set('mode', payload.mode);
+      setParams(next, { replace: true });
+    }
+  };
+
   return (
     <div
       className="min-h-screen"
       style={{ background: T.canvas, color: T.ink, fontFamily: T.fontUi }}
       data-testid="universal-demo-dashboard"
     >
+      <PersonalizationOverlay
+        open={showOverlay}
+        onCancel={() => setShowOverlay(false)}
+        onComplete={handleOverlayComplete}
+        apiUrl={apiUrl}
+        T={T}
+      />
+
       <TopBar
         mode={mode} setMode={setMode}
         scenario={scenario} setScenario={setScenario}
-        persona={persona}
+        brand={brand}
         onExport={handleExportPDF}
         exporting={exporting}
+        onPersonalise={() => setShowOverlay(true)}
       />
       <TabBar tab={tab} setTab={setTab} />
       <main ref={captureRef} className="max-w-[1400px] mx-auto px-6 pb-16">
+        {tab === 'command'    && (
+          <CommandCenterScreen
+            persona={persona}
+            approvals={approvals}
+            brand={brand}
+            savedMoney={savedMoney}
+            savedHours={savedHours}
+            onApprove={handleApprove}
+            T={T}
+          />
+        )}
+        {tab === 'instinct'   && (
+          <InstinctFeedScreen
+            templates={INSTINCT_TEMPLATES[mode] || INSTINCT_TEMPLATES.b2c}
+            brand={brand}
+            mode={mode}
+            onNewCard={handleNewSignal}
+            T={T}
+          />
+        )}
         {tab === 'overview'   && <OverviewScreen persona={persona} />}
         {tab === 'channels'   && <ChannelsScreen persona={persona} />}
         {tab === 'journey'    && <JourneyScreen persona={persona} />}
@@ -216,35 +341,55 @@ export default function UniversalDemoDashboard() {
 // ─────────────────────────────────────────────────────────────────
 // Top bar — brand + Industry Mode pill + Scenario + Export PDF
 // ─────────────────────────────────────────────────────────────────
-function TopBar({ mode, setMode, scenario, setScenario, persona, onExport, exporting }) {
+function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
   return (
     <header
       className="w-full border-b sticky top-0 z-30 backdrop-blur"
-      style={{ background: 'rgba(247,247,244,0.85)', borderColor: T.line }}
+      style={{ background: 'rgba(11,10,20,0.72)', borderColor: T.line }}
     >
       <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between gap-6 flex-wrap">
         <div className="flex items-center gap-4 min-w-0">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: T.accent, color: '#fff' }}
-          >
-            <Sparkles size={18} strokeWidth={2.2} />
-          </div>
+          {brand.logoUrl ? (
+            <img
+              src={brand.logoUrl}
+              alt=""
+              className="w-10 h-10 rounded-xl shrink-0 object-cover"
+              style={{ background: T.card, border: `1px solid ${T.line}` }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              data-testid="brand-logo"
+            />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: T.accentDeep, color: '#fff' }}
+            >
+              <Sparkles size={18} strokeWidth={2.2} />
+            </div>
+          )}
           <div className="min-w-0">
             <div
               className="text-[22px] leading-none tracking-tight font-semibold truncate"
-              style={{ fontFamily: T.fontDisplay, letterSpacing: '-0.01em' }}
+              style={{ fontFamily: T.fontDisplay, letterSpacing: '-0.01em', color: T.ink }}
               data-testid="demo-brand-name"
             >
-              {persona.brand.name}
+              {brand.companyName}
             </div>
-            <div className="text-xs mt-1" style={{ color: T.muted }}>
-              {persona.brand.tagline} · Live demo workspace
+            <div className="text-xs mt-1 truncate max-w-[420px]" style={{ color: T.muted }}>
+              {brand.tagline || 'Sample demo workspace'} · Live demo · sample data
             </div>
           </div>
+          <button
+            onClick={onPersonalise}
+            data-testid="personalise-btn"
+            className="ml-2 hidden sm:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full transition-colors"
+            style={{ background: T.accentSoft, color: T.accent, border: `1px solid ${T.line}`, fontWeight: 600 }}
+            title="Personalise this demo to your company"
+          >
+            <Edit2 size={10} /> Personalise
+          </button>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -256,8 +401,8 @@ function TopBar({ mode, setMode, scenario, setScenario, persona, onExport, expor
             disabled={exporting}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95 disabled:opacity-60"
             style={{
-              background: T.accent, color: '#fff',
-              boxShadow: '0 1px 2px rgba(46,58,99,0.15)',
+              background: T.accentDeep, color: '#fff',
+              boxShadow: '0 4px 14px rgba(124,53,220,0.28)',
               cursor: exporting ? 'wait' : 'pointer',
             }}
             aria-label="Export dashboard as PDF"
@@ -267,15 +412,9 @@ function TopBar({ mode, setMode, scenario, setScenario, persona, onExport, expor
           </button>
           <div
             className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
-            style={{ background: '#EEF6F0', color: T.success, border: `1px solid ${T.line}` }}
+            style={{ background: 'rgba(74,222,128,0.12)', color: T.success, border: `1px solid ${T.line}` }}
           >
-            <CircleDot size={10} strokeWidth={3} /> Live demo
-          </div>
-          <div
-            className="hidden lg:inline-flex items-center gap-2 text-xs"
-            style={{ color: T.muted }}
-          >
-            <Calendar size={12} /> {today}
+            <CircleDot size={10} strokeWidth={3} /> Live demo · sample data
           </div>
         </div>
       </div>
@@ -321,7 +460,7 @@ function ScenarioPicker({ scenario, setScenario }) {
                 role="option"
                 aria-selected={on}
                 data-testid={`scenario-${s.key}`}
-                className="w-full text-left px-3 py-2.5 flex items-start gap-2 text-sm transition-colors hover:bg-[#F7F7F4]"
+                className="w-full text-left px-3 py-2.5 flex items-start gap-2 text-sm transition-colors hover:opacity-90"
                 style={{ color: T.ink }}
               >
                 <div className="w-1.5 h-1.5 mt-2 rounded-full shrink-0" style={{ background: on ? T.accent : T.line }} />
@@ -342,7 +481,7 @@ function IndustryModePill({ mode, setMode }) {
   return (
     <div
       className="inline-flex items-center rounded-full p-1"
-      style={{ background: '#EFEEE8', border: `1px solid ${T.line}` }}
+      style={{ background: T.card, border: `1px solid ${T.line}` }}
       role="tablist"
       aria-label="Industry mode"
       data-testid="industry-mode-toggle"
@@ -358,9 +497,9 @@ function IndustryModePill({ mode, setMode }) {
             data-testid={`mode-${k}`}
             className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
             style={{
-              background: active ? T.card : 'transparent',
-              color: active ? T.ink : T.muted,
-              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              background: active ? T.accentDeep : 'transparent',
+              color: active ? '#fff' : T.muted,
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.2)' : 'none',
               fontWeight: active ? 600 : 500,
             }}
           >
@@ -465,7 +604,7 @@ function Kpi({ item }) {
       <div className="mt-3 flex items-center gap-2 text-xs">
         <span
           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md"
-          style={{ background: up ? '#EEF6F0' : '#FBEDEA', color: up ? T.success : T.danger, fontWeight: 600 }}
+          style={{ background: up ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: up ? T.success : T.danger, fontWeight: 600 }}
         >
           <Ico size={12} strokeWidth={2.5} /> {item.delta}
         </span>
@@ -544,7 +683,7 @@ function OverviewScreen({ persona }) {
                 <XAxis dataKey="day" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
                 <Tooltip
-                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink }}
                   formatter={(v) => [`$${Number(v).toLocaleString()}`, 'Revenue']}
                   labelFormatter={(l) => `Day ${l}`}
                 />
@@ -605,7 +744,7 @@ function ChannelsScreen({ persona }) {
               <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
               <Tooltip
-                contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink }}
                 formatter={(v) => `$${Number(v).toLocaleString()}`}
               />
               <Legend wrapperStyle={{ fontFamily: T.fontUi, fontSize: 12 }} />
@@ -752,7 +891,7 @@ function AutomationScreen({ persona }) {
           title={flow.title}
           right={
             <div className="inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full"
-              style={{ background: '#EEF6F0', color: T.success, fontWeight: 600 }}>
+              style={{ background: 'rgba(74,222,128,0.15)', color: T.success, fontWeight: 600 }}>
               <Play size={11} strokeWidth={3} /> Running
             </div>
           }
@@ -780,7 +919,7 @@ function AutomationScreen({ persona }) {
                   <td className="px-5 py-3">
                     <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
                       style={{
-                        background: live ? '#EEF6F0' : '#F3F1EA',
+                        background: live ? 'rgba(74,222,128,0.15)' : T.canvas,
                         color: live ? T.success : T.muted,
                         fontWeight: 600,
                       }}>
@@ -810,11 +949,11 @@ function FlowCanvas({ flow }) {
   const nodeW = 132, nodeH = 56;
   const nodeById = Object.fromEntries(flow.nodes.map((n) => [n.id, n]));
   const style = (type) => ({
-    trigger: { bg: T.accent,    fg: '#fff', border: T.accent },
-    action:  { bg: T.card,      fg: T.ink,  border: T.line },
-    wait:    { bg: '#F3F1EA',   fg: T.muted, border: T.line },
-    branch:  { bg: '#FFF6E6',   fg: T.warn, border: '#F3E1BE' },
-    end:     { bg: '#EEF6F0',   fg: T.success, border: '#CFE4D7' },
+    trigger: { bg: T.accentDeep,             fg: '#fff',   border: T.accentDeep },
+    action:  { bg: T.card,                   fg: T.ink,    border: T.line },
+    wait:    { bg: T.canvas,                 fg: T.muted,  border: T.line },
+    branch:  { bg: 'rgba(251,191,36,0.12)',  fg: T.warn,   border: 'rgba(251,191,36,0.35)' },
+    end:     { bg: 'rgba(74,222,128,0.12)',  fg: T.success,border: 'rgba(74,222,128,0.35)' },
   }[type] || { bg: T.card, fg: T.ink, border: T.line });
 
   return (
@@ -898,8 +1037,8 @@ function RevenueScreen({ persona }) {
                         <span
                           className="inline-block px-2 py-1 rounded-md tabular-nums text-xs font-medium"
                           style={{
-                            background: `rgba(46,58,99,${Math.min(0.85, v / 100)})`,
-                            color: v > 45 ? '#fff' : T.ink,
+                            background: `rgba(164,111,232,${Math.min(0.85, v / 100)})`,
+                            color: v > 45 ? '#0B0A14' : T.ink,
                           }}
                         >
                           {v}%
@@ -923,7 +1062,7 @@ function RevenueScreen({ persona }) {
                 <XAxis dataKey="day" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
                 <Tooltip
-                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}` }}
+                  contentStyle={{ fontFamily: T.fontUi, fontSize: 12, borderRadius: 8, border: `1px solid ${T.line}`, background: T.card, color: T.ink }}
                   formatter={(v) => `$${Number(v).toLocaleString()}`}
                   labelFormatter={(l) => `Day ${l}`}
                 />

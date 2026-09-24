@@ -201,6 +201,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter160 — Demo Integration Showcase widget
     from .integration_showcase import router as integration_showcase_router
 
+    # iter173 — Public site enrichment for the /aria-demo personalisation overlay
+    from .demo_enrich import router as demo_enrich_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -269,5 +272,6 @@ def register_all_routes(app: FastAPI) -> None:
         demo_reset_router,
         dashboards_router,
         integration_showcase_router,
+        demo_enrich_router,
     ):
         app.include_router(router)
