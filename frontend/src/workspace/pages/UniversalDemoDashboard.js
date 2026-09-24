@@ -783,8 +783,8 @@ function HealthScreen({ persona }) {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {persona.dataHealth.dials.map((d, i) => (
-          <Card key={i} testid={`health-${d.label}`}>
+        {persona.dataHealth.dials.map((d) => (
+          <Card key={d.label} testid={`health-${d.label}`}>
             <div className="flex items-center gap-4">
               <HealthDial value={d.health} />
               <div className="min-w-0">

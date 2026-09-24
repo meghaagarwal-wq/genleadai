@@ -336,7 +336,7 @@ const HYBRID = {
       { label: 'Shopify',       health: 100, sync: '1m ago',  note: 'Healthy' },
       { label: 'Klaviyo',       health:  94, sync: '3m ago',  note: 'Healthy' },
       { label: 'HubSpot (WS)',  health:  88, sync: '6m ago',  note: '2 sequences paused' },
-      { label: 'QuickBooks',    label2: 'QBO', health:  82, sync: '12m ago', note: 'Refresh recommended' },
+      { label: 'QuickBooks',    health:  82, sync: '12m ago', note: 'Refresh recommended' },
       { label: 'Meta Ads',      health:  96, sync: '2m ago',  note: 'Healthy' },
       { label: 'Google Ads',    health:  76, sync: '18m ago', note: 'Token expiring' },
     ],

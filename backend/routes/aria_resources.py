@@ -13,7 +13,8 @@ Model (`aria_resources` collection)
   category        str       — case_study | deck | one_pager | blog | demo | other
   type            "file" | "url"
   url             Optional[str]
-  file_id         Optional[str]  — stored under /app/backend/uploads
+  file_id         Optional[str]  — object-storage-safe id (uuid.<ext>), served
+                                   via GET /file/{file_id}
   file_name       Optional[str]
   size            Optional[int]
   tags            list[str]
@@ -31,8 +32,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import requests
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from deps import db
@@ -44,8 +46,45 @@ resources_col = db["aria_resources"]
 tenants_col = db["tenants"]
 leads_col = db["leads"]
 
-UPLOADS_DIR = "/app/backend/uploads/aria_resources"
-os.makedirs(UPLOADS_DIR, exist_ok=True)
+# ─── Emergent Object Storage (iter171 migration off pod disk) ────────────
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL  = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+APP_NAME     = "aria-lms"
+_STORAGE_PREFIX = f"{APP_NAME}/aria-resources"
+
+_storage_key: Optional[str] = None
+
+def _init_storage(force: bool = False) -> str:
+    global _storage_key
+    if _storage_key and not force:
+        return _storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+    resp.raise_for_status()
+    _storage_key = resp.json()["storage_key"]
+    return _storage_key
+
+def _storage_path(file_id: str) -> str:
+    return f"{_STORAGE_PREFIX}/{file_id}"
+
+def _put_object(file_id: str, data: bytes, content_type: str) -> dict:
+    key = _init_storage()
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{_storage_path(file_id)}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type or "application/octet-stream"},
+        data=data, timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def _get_object(file_id: str) -> tuple[bytes, str]:
+    key = _init_storage()
+    resp = requests.get(
+        f"{STORAGE_URL}/objects/{_storage_path(file_id)}",
+        headers={"X-Storage-Key": key}, timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MB
 ALLOWED_CATEGORIES = ("case_study", "deck", "one_pager", "blog", "demo", "other")
@@ -211,6 +250,8 @@ async def upload_resource_file(
 ):
     """Step 1 of file-type resource creation. Returns a `file_id` the
     caller then passes to `POST /api/aria/resources`.
+
+    Storage: Emergent Object Storage (iter171 — off pod disk).
     """
     content = await file.read()
     if not content:
@@ -218,13 +259,19 @@ async def upload_resource_file(
     if len(content) > MAX_FILE_BYTES:
         raise HTTPException(413, f"File too large (max {MAX_FILE_BYTES // (1024 * 1024)}MB).")
 
-    safe_name = _safe_filename(file.filename or "resource")
-    path = os.path.join(UPLOADS_DIR, safe_name)
-    with open(path, "wb") as f:
-        f.write(content)
+    ext = ""
+    if file.filename and "." in file.filename:
+        ext = "." + _safe_filename(file.filename.rsplit(".", 1)[-1])[:16]
+    file_id = f"{uuid.uuid4().hex}{ext}"
+
+    try:
+        _put_object(file_id, content, file.content_type or "application/octet-stream")
+    except Exception as e:
+        raise HTTPException(502, f"Storage upload failed: {e}")
+
     return {
         "ok":           True,
-        "file_id":      safe_name,
+        "file_id":      file_id,
         "file_name":    file.filename,
         "size":         len(content),
         "content_type": file.content_type,
@@ -235,14 +282,19 @@ async def upload_resource_file(
 async def serve_resource_file(file_id: str):
     """Public serve — resources are linked from emails so don't require auth.
 
-    Path-traversal guard via realpath + commonpath.
+    file_id is opaque (uuid.<ext>); path traversal is not possible because
+    we compose the storage path server-side from the sanitized id.
     """
-    full_path = os.path.join(UPLOADS_DIR, file_id)
-    real_uploads = os.path.realpath(UPLOADS_DIR)
-    real_full = os.path.realpath(full_path)
-    if not os.path.isfile(full_path) or os.path.commonpath([real_uploads, real_full]) != real_uploads:
+    # Reject anything that looks like a traversal or nested path attempt.
+    if "/" in file_id or ".." in file_id or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", file_id):
         raise HTTPException(404, "File not found")
-    return FileResponse(full_path)
+    try:
+        data, content_type = _get_object(file_id)
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 404:
+            raise HTTPException(404, "File not found")
+        raise HTTPException(502, f"Storage read failed: {e}")
+    return Response(content=data, media_type=content_type)
 
 
 # ─── ARIA matcher — pick the best resource for a lead ────────────────────

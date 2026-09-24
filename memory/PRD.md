@@ -1,3 +1,35 @@
+## Iter 171 — ARIA Universal Demo Dashboard (Feb 2026)
+
+User: build a fully mocked, offline, sales-demo dashboard with a top-bar Industry Mode toggle (B2C / B2B / Hybrid) reskinning 6 screens instantly. Premium Notion/Attio design tokens.
+
+### What was built
+- **New file** `frontend/src/workspace/pages/UniversalDemoDashboard.js` — single-component dashboard with 6 tab-switched screens (Overview, Channels, Journey, Automation, Revenue, Data Health).
+- **New file** `frontend/src/workspace/demoData/mockPersonas.js` — three fully-mocked personas (B2C=Lumen Skin, B2B=Cortex Labs, Hybrid=Northwind Coffee). All numbers, cohorts, LTV curves, 32-touchpoint journeys, automation flows hand-tuned per persona. Deterministic (seeded) trend generation.
+- **Charts**: `@nivo/sankey` for source→revenue flow (installed), Recharts for area/bar/line, custom SVG for the automation flow builder and health dials.
+- **Routes**: public `/aria-demo` (no auth — prospect-friendly) + protected `/app/demo`. Sidebar entry with `Sales` badge (data-testid `nav-demo-badge`).
+- **Design tokens locked**: Canvas #F7F7F4, Cards #FFFFFF, Accent #2E3A63, warm chart palette. Fraunces display + Plus Jakarta Sans UI.
+- Fixed 7 pre-existing backend lint blockers (bare excepts, `status` shadow import, missing UPLOADS_DIR, ObjectId serialization on aria_settings default insert).
+
+### Verified (testing_agent iter171)
+- 11/11 test cases pass · 100% frontend success · 0 console errors · 0 `/api/*` calls from the demo dashboard.
+- All 3 modes toggle instantly · all 6 tabs render · Sankey · 32 touchpoints · cohort table · LTV curve · health dials · sidebar link + badge.
+
+### Files touched
+- `frontend/src/App.js` — routes wired.
+- `frontend/src/components/AppLayout.js` — sidebar entry + `Presentation` icon + `Sales` badge.
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` (NEW).
+- `frontend/src/workspace/demoData/mockPersonas.js` (NEW).
+- `backend/server.py` — lint fixes only, no behavior change.
+- `frontend/package.json` — added `@nivo/sankey`, `@nivo/core`.
+
+### Backlog (unchanged from iter170)
+- P2 — Wire "Book a walkthrough" on `AriaGateway` to Calendly.
+- P3 — Settings page "ARIA Docs" download link.
+- Prod SSL fix — user-side Entri re-verification (not code).
+
+---
+
+
 ## Iter 168-169 — Security Audit Remediation (Feb 2026)
 
 User: "Run the Security Audit on the deployed app."
