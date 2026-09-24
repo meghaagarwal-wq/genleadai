@@ -1,3 +1,31 @@
+## Iter 172 — Demo Dashboard v2: Branding, Scenarios, PDF, Calendly (Feb 2026)
+
+User asked to build all 4 iter171 next-actions in one pass.
+
+### What was built
+- **URL prospect branding** on `/aria-demo?brand=X&tagline=Y&mode=b2b&scenario=scaling` — instant white-labeled demo per prospect.
+- **Preset scenarios** — Default / Just launched / Scaling / Plateaued dropdown in top bar. Values + trend + tone rescale via `SCENARIO_TRANSFORMS`. Rescale helper handles $, K, M, x, %, pt formats.
+- **PDF export** — `html2canvas` + `jspdf` in top bar. Multi-page slicing for tall content. Filename `<brand>-demo-YYYY-MM-DD.pdf`.
+- **Calendly CTA** on `AriaGateway` — reads `REACT_APP_CALENDLY_URL`; graceful fallback to `/apply` when not set (never breaks in preview).
+
+### Verified (testing_agent iter172)
+- 7/7 pass · PDF download intercepted (358KB) · URL branding, scenario dropdown, industry mode, all 6 tabs, and /app/demo regression all green.
+- Cosmetic: recharts `width=-1` console warning on rapid tab switches. Non-fatal.
+
+### Files touched
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` — expanded to ~1050 lines (approaching split threshold; earmarked for refactor next iter).
+- `frontend/src/pages/landing/AriaGateway.js` — Calendly wiring.
+- `frontend/package.json` — `html2canvas`, `jspdf`.
+
+### Backlog
+- P2 — Silence recharts `-1` width warnings (defer chart until visible).
+- P2 — Split `UniversalDemoDashboard.js` into `./screens/*` + `./scenarios.js` (>700 lines).
+- P3 — Settings page "ARIA Docs" download link.
+- P3 — Real Calendly URL: user sets `REACT_APP_CALENDLY_URL` in their deploy env.
+
+---
+
+
 ## Iter 171 — ARIA Universal Demo Dashboard (Feb 2026)
 
 User: build a fully mocked, offline, sales-demo dashboard with a top-bar Industry Mode toggle (B2C / B2B / Hybrid) reskinning 6 screens instantly. Premium Notion/Attio design tokens.
