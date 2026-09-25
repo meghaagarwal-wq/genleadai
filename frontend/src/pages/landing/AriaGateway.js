@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkle, ArrowRight, LinkedinLogo, EnvelopeSimple, ChatCircleText, CheckCircle } from '@phosphor-icons/react';
+import { openCalendlyPopup } from '../../lib/calendlyPopup';
 
 const HIGHLIGHTS = [
   { icon: Sparkle,          text: 'Drafts every outreach in your voice · human-approved by default' },
@@ -21,17 +22,33 @@ const AriaGateway = () => {
   const [hover, setHover] = useState(null);
 
   const goto = (path) => navigate(path);
-
-  // iter171 — Calendly integration. If REACT_APP_CALENDLY_URL is set we open
-  // the Calendly booking page in a new tab; otherwise fall back to the
-  // classic /apply form so the CTA never breaks.
+  const apiUrl = process.env.REACT_APP_BACKEND_URL || '';
   const calendlyUrl = process.env.REACT_APP_CALENDLY_URL;
+
+  // iter176 — Calendly opens as an inline popup (no new tab).
   const bookWalkthrough = () => {
     if (calendlyUrl && /^https?:\/\//.test(calendlyUrl)) {
-      window.open(calendlyUrl, '_blank', 'noopener,noreferrer');
+      openCalendlyPopup(calendlyUrl, { source: 'gateway' });
     } else {
       goto('/apply');
     }
+  };
+
+  // iter176 — Track when a prospect enters the demo via the gateway.
+  const enterDemo = () => {
+    try {
+      fetch(`${apiUrl}/api/demo-analytics/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source:   'gateway',
+          path:     '/aria-demo',
+          referrer: (typeof document !== 'undefined' ? document.referrer : '') || window.location.origin + '/',
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) { /* never block navigation */ }
+    goto('/aria-demo?source=gateway');
   };
 
   return (
@@ -121,7 +138,7 @@ const AriaGateway = () => {
 
           {/* Primary — Watch live demo (self-serve, sample data) */}
           <button
-            onClick={() => goto('/aria-demo')}
+            onClick={enterDemo}
             onMouseEnter={() => setHover('demo')}
             onMouseLeave={() => setHover(null)}
             data-testid="gateway-watchdemo-btn"

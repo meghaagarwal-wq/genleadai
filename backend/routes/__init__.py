@@ -207,6 +207,9 @@ def register_all_routes(app: FastAPI) -> None:
     # iter174 — Demo session recording upload + share
     from .demo_recording import router as demo_recording_router
 
+    # iter176 — Demo analytics (view logs)
+    from .demo_analytics import router as demo_analytics_router
+
     # ─── Registration order preserved from legacy server.py ──────────────
     for router in (
         auth_router, auth_extras_router,
@@ -277,5 +280,6 @@ def register_all_routes(app: FastAPI) -> None:
         integration_showcase_router,
         demo_enrich_router,
         demo_recording_router,
+        demo_analytics_router,
     ):
         app.include_router(router)

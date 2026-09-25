@@ -23,7 +23,7 @@ import {
   ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
   Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
   CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight, Download,
-  ChevronDown, Home, Radar, Edit2, Link2,
+  ChevronDown, Home, Radar, Edit2, Link2, CalendarClock,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -36,6 +36,7 @@ import CommandCenterScreen  from './demo/CommandCenterScreen';
 import InstinctFeedScreen   from './demo/InstinctFeedScreen';
 import AskAriaBar           from './demo/AskAriaBar';
 import RecordDemoButton     from './demo/RecordDemoButton';
+import { openCalendlyPopup } from '../../lib/calendlyPopup';
 
 // ───── dark/violet design tokens ─────
 const T = {
@@ -247,6 +248,50 @@ export default function UniversalDemoDashboard() {
     setTimeout(() => setLinkCopied(false), 1600);
   }, [mode, scenario, enrichment, companyParam]);
 
+  // iter176 — Book a walkthrough, passing the current demo URL to Calendly
+  // as UTM params so the founder sees the personalized dashboard on the
+  // Calendly booking notification.
+  const calendlyBase = process.env.REACT_APP_CALENDLY_URL;
+  const handleBookWalkthrough = useCallback(() => {
+    if (!calendlyBase) return;
+    const u = new URL(window.location.href);
+    u.searchParams.set('mode', mode);
+    if (scenario && scenario !== 'default') u.searchParams.set('scenario', scenario);
+    if (enrichment?.domain) u.searchParams.set('company', enrichment.domain);
+    openCalendlyPopup(calendlyBase, {
+      source:   'aria-demo',
+      demoUrl:  u.toString(),
+      company:  enrichment?.domain || brand?.companyName,
+      mode,
+      scenario,
+    });
+  }, [calendlyBase, mode, scenario, enrichment, brand]);
+
+  // iter176 — Log a demo view on mount + whenever mode/scenario/company changes.
+  // Deliberately fire-and-forget; never block the UI on this.
+  const lastLoggedRef = useRef('');
+  useEffect(() => {
+    const source = params.get('source') || 'direct';
+    const sig = `${enrichment?.domain || companyParam || ''}|${mode}|${scenario}|${source}`;
+    if (sig === lastLoggedRef.current) return;
+    lastLoggedRef.current = sig;
+    try {
+      fetch(`${apiUrl}/api/demo-analytics/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company:  enrichment?.domain || companyParam || null,
+          mode, scenario,
+          source,
+          path:     '/aria-demo',
+          referrer: (typeof document !== 'undefined' ? document.referrer : '') || null,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) { /* noop */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, scenario, enrichment, companyParam]);
+
   const handleNewSignal = useCallback(() => {
     // A streamed signal is small credit — reads as "ARIA caught this for you"
     setSavedMoney((v) => v + Math.round(24 + Math.random() * 60));
@@ -334,6 +379,7 @@ export default function UniversalDemoDashboard() {
         onPersonalise={() => setShowOverlay(true)}
         onCopyLink={handleCopyLink}
         linkCopied={linkCopied}
+        onBook={calendlyBase ? handleBookWalkthrough : null}
         apiUrl={apiUrl}
       />
       <TabBar tab={tab} setTab={setTab} />
@@ -375,7 +421,7 @@ export default function UniversalDemoDashboard() {
 // ─────────────────────────────────────────────────────────────────
 // Top bar — brand + Industry Mode pill + Scenario + Export PDF
 // ─────────────────────────────────────────────────────────────────
-function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise, onCopyLink, linkCopied, apiUrl }) {
+function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise, onCopyLink, linkCopied, onBook, apiUrl }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
@@ -441,6 +487,17 @@ function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporti
               : <><Link2 size={12} strokeWidth={2.5} /> Copy link</>}
           </button>
           <RecordDemoButton brand={brand} apiUrl={apiUrl} T={T} />
+          {onBook && (
+            <button
+              onClick={onBook}
+              data-testid="demo-book-btn"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all active:scale-95"
+              style={{ background: '#E06D53', color: '#fff', boxShadow: '0 4px 14px rgba(224,109,83,0.35)' }}
+              title="Book a walkthrough — your personalized demo URL is included"
+            >
+              <CalendarClock size={12} strokeWidth={2.5} /> Book a walkthrough
+            </button>
+          )}
           <button
             data-testid="export-pdf-btn"
             onClick={onExport}

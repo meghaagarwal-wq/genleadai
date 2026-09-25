@@ -1,3 +1,26 @@
+## Iter 176 — Calendly Inline · Demo Analytics · Walkthrough Preload (Sep 2026)
+
+Shipped all 3 iter175 next actions in one pass.
+
+### What was built
+1. **Calendly Inline Popup** — `frontend/src/lib/calendlyPopup.js` lazy-loads Calendly's `widget.js` + CSS once, then opens the booking as `initPopupWidget({url})`. AriaGateway "Book a walkthrough" and the new in-demo "Book a walkthrough" button both use it. Fallback: new-tab open if the script can't load.
+2. **Demo-from-Gateway Tracking** — New backend `POST /api/demo-analytics/view` + `GET /api/demo-analytics/recent`. Gateway posts on Watch-Demo click (source=`gateway`), demo dashboard posts on mount / mode-scenario-company change (source=`gateway|direct|shared|embed`). IPs are day-salted SHA256; referrer stripped to origin+first-path.
+3. **Walkthrough Context Preload** — In-demo "Book a walkthrough" button (orange, `data-testid="demo-book-btn"`) opens Calendly with UTM params carrying the current personalized demo URL. Founder sees `utm_content=<demoUrl>`, `utm_campaign=<company>`, `utm_term=mode:<x>|scenario:<y>` in the Calendly booking notification — one click and they're on the prospect's personalized dashboard.
+
+### Verified
+- Screenshot smoke: Calendly widget loaded inline (30 Minute Meeting by Megha Agarwal) from both `/` and `/aria-demo`. No new tabs.
+- `GET /recent`: 3 rows recorded end-to-end with correct `source=gateway`, `mode`, `referrer`.
+
+### Files touched
+- `frontend/src/lib/calendlyPopup.js` (NEW).
+- `frontend/src/pages/landing/AriaGateway.js` — popup wiring + analytics ping.
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` — `handleBookWalkthrough`, view-log useEffect, `demo-book-btn` in TopBar.
+- `backend/routes/demo_analytics.py` (NEW).
+- `backend/routes/__init__.py` — registered `demo_analytics_router`.
+
+---
+
+
 ## Iter 175 — Gateway: Prospect-Only Entry (Sep 2026)
 
 User: "REMOVE SIGN IN, REMOVE START A NEW WORKSPACE. I WANT WATCH DEMO OR LIVE DEMO DASHBOARD WITH SAMPLE DATA so people can go through it by themselves. AND I WANT BOOK A WALKTHROUGH THAT LINKS TO MY CALENDLY LINK."
