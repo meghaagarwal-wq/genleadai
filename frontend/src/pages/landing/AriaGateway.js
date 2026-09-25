@@ -108,27 +108,28 @@ const AriaGateway = () => {
           </div>
 
           <div className="text-[11px] uppercase tracking-[0.28em] mb-3" style={{ color: 'var(--theme-primary, #0F4C3A)', fontFamily: 'var(--font-display, Outfit)' }}>
-            Start here
+            See it live
           </div>
           <h2 className="text-[32px] leading-tight font-semibold tracking-tight mb-2"
               style={{ fontFamily: 'var(--font-display, Outfit)', color: 'var(--theme-text, #1C1917)' }}>
-            Pick your door.
+            Watch ARIA work.
           </h2>
           <p className="text-sm mb-8" style={{ color: 'var(--theme-text-muted, #57534E)' }}>
-            Sign in to your workspace, start a fresh one, or book a founder-to-founder walkthrough.
+            Open the live demo and explore it yourself — no sign-in needed, it runs on sample data.
+            Or book a 30-min founder walkthrough.
           </p>
 
-          {/* Primary — Sign in */}
+          {/* Primary — Watch live demo (self-serve, sample data) */}
           <button
-            onClick={() => goto('/login')}
-            onMouseEnter={() => setHover('login')}
+            onClick={() => goto('/aria-demo')}
+            onMouseEnter={() => setHover('demo')}
             onMouseLeave={() => setHover(null)}
-            data-testid="gateway-signin-btn"
+            data-testid="gateway-watchdemo-btn"
             className="w-full mb-3 px-5 py-4 rounded-2xl flex items-center justify-between text-white font-semibold transition-all active:scale-[0.98]"
             style={{
               background: '#0F4C3A',
-              boxShadow: hover === 'login' ? '0 12px 28px rgba(15,76,58,0.30)' : '0 6px 18px rgba(15,76,58,0.18)',
-              transform: hover === 'login' ? 'translateY(-1px)' : 'translateY(0)',
+              boxShadow: hover === 'demo' ? '0 12px 28px rgba(15,76,58,0.30)' : '0 6px 18px rgba(15,76,58,0.18)',
+              transform: hover === 'demo' ? 'translateY(-1px)' : 'translateY(0)',
               fontFamily: 'var(--font-display, Outfit)',
             }}
           >
@@ -137,52 +138,26 @@ const AriaGateway = () => {
                 <Sparkle size={14} weight="fill" />
               </span>
               <span>
-                <span className="block text-[15px]">Sign in</span>
-                <span className="block text-[11px] font-normal opacity-75">Existing workspace · admin login</span>
+                <span className="block text-[15px]">Watch the live demo</span>
+                <span className="block text-[11px] font-normal opacity-75">Self-serve · sample data · no sign-in</span>
               </span>
             </span>
             <ArrowRight size={18} weight="bold" />
           </button>
 
-          {/* Secondary — Sign up */}
-          <button
-            onClick={() => goto('/signup')}
-            onMouseEnter={() => setHover('signup')}
-            onMouseLeave={() => setHover(null)}
-            data-testid="gateway-signup-btn"
-            className="w-full mb-3 px-5 py-4 rounded-2xl flex items-center justify-between font-semibold border transition-all active:scale-[0.98]"
-            style={{
-              background: 'var(--theme-surface, #ffffff)',
-              borderColor: hover === 'signup' ? '#0F4C3A' : 'var(--theme-border, #E7E5E4)',
-              color: 'var(--theme-text, #1C1917)',
-              boxShadow: hover === 'signup' ? '0 8px 22px rgba(28,25,23,0.08)' : '0 2px 8px rgba(28,25,23,0.04)',
-              transform: hover === 'signup' ? 'translateY(-1px)' : 'translateY(0)',
-              fontFamily: 'var(--font-display, Outfit)',
-            }}
-          >
-            <span className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--theme-primary-dim, rgba(15,76,58,0.10))', color: 'var(--theme-primary, #0F4C3A)' }}>
-                <ArrowRight size={14} weight="bold" />
-              </span>
-              <span>
-                <span className="block text-[15px]">Start a new workspace</span>
-                <span className="block text-[11px] font-normal" style={{ color: 'var(--theme-text-muted, #57534E)' }}>5-min setup · trained on your site in the first hour</span>
-              </span>
-            </span>
-            <ArrowRight size={18} weight="bold" style={{ color: 'var(--theme-text-muted, #57534E)' }} />
-          </button>
-
-          {/* Tertiary — Book a call */}
+          {/* Secondary — Book a walkthrough (Calendly) */}
           <button
             onClick={bookWalkthrough}
             onMouseEnter={() => setHover('call')}
             onMouseLeave={() => setHover(null)}
             data-testid="gateway-bookcall-btn"
-            className="w-full px-5 py-4 rounded-2xl flex items-center justify-between font-semibold border-2 border-dashed transition-all active:scale-[0.98]"
+            className="w-full px-5 py-4 rounded-2xl flex items-center justify-between font-semibold border-2 transition-all active:scale-[0.98]"
             style={{
-              background: 'transparent',
+              background: 'var(--theme-surface, #ffffff)',
               borderColor: hover === 'call' ? '#E06D53' : 'var(--theme-border-strong, #D6D3D1)',
               color: hover === 'call' ? '#E06D53' : 'var(--theme-text, #1C1917)',
+              boxShadow: hover === 'call' ? '0 8px 22px rgba(224,109,83,0.14)' : '0 2px 8px rgba(28,25,23,0.04)',
+              transform: hover === 'call' ? 'translateY(-1px)' : 'translateY(0)',
               fontFamily: 'var(--font-display, Outfit)',
             }}
           >
@@ -194,7 +169,7 @@ const AriaGateway = () => {
               <span>
                 <span className="block text-[15px]">Book a walkthrough</span>
                 <span className="block text-[11px] font-normal" style={{ color: 'var(--theme-text-muted, #57534E)' }}>
-                  {calendlyUrl ? 'Founder-to-founder demo · 15 min · pick a slot' : 'Founder-to-founder demo · 15 min · 48-hr response'}
+                  Founder-to-founder demo · 30 min · pick a slot on Calendly
                 </span>
               </span>
             </span>

@@ -1,3 +1,25 @@
+## Iter 175 — Gateway: Prospect-Only Entry (Sep 2026)
+
+User: "REMOVE SIGN IN, REMOVE START A NEW WORKSPACE. I WANT WATCH DEMO OR LIVE DEMO DASHBOARD WITH SAMPLE DATA so people can go through it by themselves. AND I WANT BOOK A WALKTHROUGH THAT LINKS TO MY CALENDLY LINK."
+
+### What changed
+- **AriaGateway** (`/`) now has exactly TWO actions:
+  - **Watch the live demo** (primary, dark-green) → `/aria-demo` — self-serve, sample data, no sign-in.
+  - **Book a walkthrough** (secondary) → opens `https://calendly.com/meghaagarwaljain2015/30min` in a new tab.
+- Removed: Sign In button, Start a New Workspace button. (`/login`, `/signup` routes still exist — just not surfaced on the gateway.)
+- **Calendly link sourced from the user's real account**: used the existing `CALENDLY_API_KEY` PAT in backend/.env to query `GET /users/me` → `event_types` → the active "30 Minute Meeting" scheduling URL. Set as `REACT_APP_CALENDLY_URL` in `frontend/.env` (the AriaGateway CTA already read this var with an `/apply` fallback).
+
+### Verified (smoke screenshot)
+- Sign-in + signup buttons absent; watch-demo + book-walkthrough present.
+- "Watch the live demo" navigates to `/aria-demo` (public demo loads).
+
+### Files touched
+- `frontend/src/pages/landing/AriaGateway.js` — right panel rewritten (2 CTAs).
+- `frontend/.env` — added `REACT_APP_CALENDLY_URL=https://calendly.com/meghaagarwaljain2015/30min`.
+
+---
+
+
 ## Iter 174 — Demo v4: Copy Link · Ask ARIA · JSON-LD · Session Recording (Feb 2026)
 
 User asked to ship all 4 iter173 next-actions in one pass.
