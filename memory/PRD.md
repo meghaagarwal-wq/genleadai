@@ -1,3 +1,23 @@
+## Iter 177 — Light Mode Theme Toggle (Oct 2026)
+
+User: "give me a light mode so that my flows are properly visible". Interrupted the in-flight analytics upgrade (that WIP still saved to backend/demo_analytics.py — endpoints work; frontend wiring is still queued).
+
+### What shipped
+- `/aria-demo` now has a **light + dark theme toggle** in the top bar (Sun / Moon icon, `data-testid="theme-toggle"`).
+- **Light tokens**: canvas `#F7F6F1`, cards `#FFFFFF`, accent `#7C35DC` (violet still), ink `#1C1917`, line `#E7E5DE`, success `#15803D`, chart palette shifted to deeper high-contrast hues (`#7C35DC`, `#15803D`, `#D97706`, `#B91C1C`, `#0E7490`, `#DB2777`, `#C2410C`) so Sankey/bars/journey nodes are perfectly readable on cream.
+- Preference persists in `localStorage['aria-demo-theme']` + respects `?theme=light` / `?theme=dark` deep links.
+- Default is now **light** (first-time visitors).
+- Technique: mutated shared `T` tokens object + state-driven re-render — zero refactor of the 18 inner components (all pick up new tokens via closure on next render).
+
+### Files touched
+- `frontend/src/workspace/pages/UniversalDemoDashboard.js` — added `LIGHT_T`, `DARK_T`, `applyThemeTokens`, theme state + toggle button, Sun/Moon icons, header bg per-theme.
+
+### Still-queued (iter177 analytics work, in-flight)
+- `backend/routes/demo_analytics.py` already upgraded with sessions + heartbeat + identify + event + pulse endpoints (backend-only; frontend wiring + Pulse page + prefill prompt not yet shipped).
+
+---
+
+
 ## Iter 176 — Calendly Inline · Demo Analytics · Walkthrough Preload (Sep 2026)
 
 Shipped all 3 iter175 next actions in one pass.

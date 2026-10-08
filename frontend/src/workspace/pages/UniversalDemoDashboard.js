@@ -23,7 +23,7 @@ import {
   ArrowRight, TrendingUp, TrendingDown, CircleDot, Sparkles, Zap, Calendar,
   Database, Activity, Users, DollarSign, ChevronRight, Play, Pause,
   CheckCircle2, AlertTriangle, Clock, GitBranch, ArrowUpRight, Download,
-  ChevronDown, Home, Radar, Edit2, Link2, CalendarClock,
+  ChevronDown, Home, Radar, Edit2, Link2, CalendarClock, Sun, Moon,
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -38,8 +38,8 @@ import AskAriaBar           from './demo/AskAriaBar';
 import RecordDemoButton     from './demo/RecordDemoButton';
 import { openCalendlyPopup } from '../../lib/calendlyPopup';
 
-// ───── dark/violet design tokens ─────
-const T = {
+// ───── theme tokens — mutable so existing closures see the active theme ─────
+const DARK_T = {
   canvas:     '#0B0A14',
   card:       '#16151F',
   cardElev:   '#1F1D2E',
@@ -56,6 +56,32 @@ const T = {
   fontDisplay: '"Fraunces", "Plus Jakarta Sans", ui-serif, serif',
   fontUi:      '"Plus Jakarta Sans", "Inter", system-ui, sans-serif',
 };
+const LIGHT_T = {
+  canvas:     '#F7F6F1',
+  card:       '#FFFFFF',
+  cardElev:   '#FDFBF5',
+  accent:     '#7C35DC',
+  accentDeep: '#6D28D9',
+  accentSoft: 'rgba(124,53,220,0.10)',
+  ink:        '#1C1917',
+  muted:      '#78716C',
+  line:       '#E7E5DE',
+  success:    '#15803D',
+  warn:       '#B45309',
+  danger:     '#B91C1C',
+  chartPalette: ['#7C35DC', '#15803D', '#D97706', '#B91C1C', '#0E7490', '#DB2777', '#C2410C'],
+  fontDisplay: '"Fraunces", "Plus Jakarta Sans", ui-serif, serif',
+  fontUi:      '"Plus Jakarta Sans", "Inter", system-ui, sans-serif',
+};
+// `T` is referenced throughout this module via closure; mutating its
+// properties when the theme toggles means every component picks up the
+// new tokens on its next render (which the state change below triggers).
+const T = { ...DARK_T };
+function applyThemeTokens(theme) {
+  const src = theme === 'light' ? LIGHT_T : DARK_T;
+  Object.keys(T).forEach((k) => { delete T[k]; });
+  Object.assign(T, src);
+}
 
 const TABS = [
   { key: 'command',    label: 'Command Center', icon: Home },
@@ -144,6 +170,20 @@ export default function UniversalDemoDashboard() {
   const [showOverlay, setShowOverlay] = useState(!companyParam && !brandOverride);
   // enrichment holds the prospect's { companyName, tagline, logoUrl, keywords }.
   const [enrichment, setEnrichment] = useState(null);
+  // Theme — light or dark. Persisted in localStorage. Mutating module-level
+  // T lets every closure in this file see the new tokens on the next render.
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'dark';
+    const q = new URL(window.location.href).searchParams.get('theme');
+    if (q === 'light' || q === 'dark') return q;
+    return window.localStorage.getItem('aria-demo-theme') || 'light';
+  });
+  // Apply synchronously BEFORE first render so initial paint matches.
+  applyThemeTokens(theme);
+  useEffect(() => {
+    applyThemeTokens(theme);
+    try { window.localStorage.setItem('aria-demo-theme', theme); } catch (_) {}
+  }, [theme]);
   const captureRef = useRef(null);
   const apiUrl = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -380,6 +420,8 @@ export default function UniversalDemoDashboard() {
         onCopyLink={handleCopyLink}
         linkCopied={linkCopied}
         onBook={calendlyBase ? handleBookWalkthrough : null}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
         apiUrl={apiUrl}
       />
       <TabBar tab={tab} setTab={setTab} />
@@ -421,14 +463,15 @@ export default function UniversalDemoDashboard() {
 // ─────────────────────────────────────────────────────────────────
 // Top bar — brand + Industry Mode pill + Scenario + Export PDF
 // ─────────────────────────────────────────────────────────────────
-function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise, onCopyLink, linkCopied, onBook, apiUrl }) {
+function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporting, onPersonalise, onCopyLink, linkCopied, onBook, theme, onToggleTheme, apiUrl }) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
+  const headerBg = theme === 'light' ? 'rgba(247,246,241,0.82)' : 'rgba(11,10,20,0.72)';
   return (
     <header
       className="w-full border-b sticky top-0 z-30 backdrop-blur"
-      style={{ background: 'rgba(11,10,20,0.72)', borderColor: T.line }}
+      style={{ background: headerBg, borderColor: T.line }}
     >
       <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between gap-6 flex-wrap">
         <div className="flex items-center gap-4 min-w-0">
@@ -475,6 +518,16 @@ function TopBar({ mode, setMode, scenario, setScenario, brand, onExport, exporti
         <div className="flex items-center gap-2 flex-wrap">
           <ScenarioPicker scenario={scenario} setScenario={setScenario} />
           <IndustryModePill mode={mode} setMode={setMode} />
+          <button
+            onClick={onToggleTheme}
+            data-testid="theme-toggle"
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full transition-colors"
+            style={{ background: T.card, color: T.ink, border: `1px solid ${T.line}` }}
+          >
+            {theme === 'light' ? <Moon size={14} strokeWidth={2.2} /> : <Sun size={14} strokeWidth={2.2} />}
+          </button>
           <button
             onClick={onCopyLink}
             data-testid="copy-link-btn"
