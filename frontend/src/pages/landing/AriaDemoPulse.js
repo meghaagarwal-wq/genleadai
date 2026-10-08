@@ -37,7 +37,15 @@ export default function AriaDemoPulse() {
 
   async function load() {
     try {
-      const res = await fetch(`${apiUrl}/api/demo-analytics/pulse?limit=200`);
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token') || '';
+      const qs = token ? `?limit=200&token=${encodeURIComponent(token)}` : '?limit=200';
+      const res = await fetch(`${apiUrl}/api/demo-analytics/pulse${qs}`);
+      if (res.status === 401) {
+        setError('This page is protected. Add ?token=<your-pulse-token> to the URL.');
+        setLoading(false);
+        return;
+      }
       const j = await res.json();
       setData(j); setError('');
     } catch (e) { setError(e?.message || 'Failed to load'); }

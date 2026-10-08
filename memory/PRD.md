@@ -1,3 +1,29 @@
+## Iter 178 — Analytics Build Complete: Pulse page · Prefill prompt · Calendly handoff (Oct 2026)
+
+Finished the session-analytics upgrade that was queued during the light-mode interrupt.
+
+### What shipped
+- **Session-aware tracking**: `getOrCreateSessionId()` writes a stable UUID to `localStorage['aria-demo-sid']`. Every analytics call carries it. Heartbeat fires every 30 s while the tab is visible → real dwell time server-side.
+- **2-min soft Prefill Prompt** (`PrefillPrompt.js`): after 120 s dwell, a non-intrusive modal asks for name + email. Identity saved to `localStorage` + posted to `/api/demo-analytics/identify`. Dismiss remembers for 7 days.
+- **Calendly prefill handoff**: when the prospect clicks "Book a walkthrough" (gateway or in-demo), the Calendly popup opens with `name=` and `email=` params prefilled from their identity → booking becomes a single click. Also posts a `book_clicked` event so the founder sees it in Pulse.
+- **Founder Pulse page** at `/aria-demo/pulse`: light-themed table showing recent sessions (company, mode, dwell, source, identity, Warm/Booked badges). Auto-refresh every 30 s. 4 filter pills (All / Warm / Identified / Booked). Soft `PULSE_ACCESS_TOKEN` guard — public by default, enable by setting the env var.
+
+### Verified (testing_agent iter177) — **100% backend + frontend**
+- 12/12 pytest cases pass. End-to-end: fresh browser opens demo → sid stored → view+heartbeat land → session appears in Pulse with correct company/mode/scenario/source.
+- Fixed: `/view` upsert now `$set`s source even if heartbeat raced in first (so source is never null).
+
+### Files
+- NEW: `frontend/src/lib/demoSession.js`, `frontend/src/workspace/pages/demo/PrefillPrompt.js`, `frontend/src/pages/landing/AriaDemoPulse.js`, `backend/tests/test_iter177_demo_analytics.py`.
+- UPDATED: `backend/routes/demo_analytics.py` (sessions/heartbeat/identify/event/pulse + token guard), `backend/routes/__init__.py` (registered), `frontend/src/lib/calendlyPopup.js` (name/email prefill), `frontend/src/workspace/pages/UniversalDemoDashboard.js` (session wiring, heartbeat, prefill mount, identity in Calendly), `frontend/src/App.js` (route).
+
+### Backlog
+- P2 — `PULSE_ACCESS_TOKEN` not yet set in prod; add via Emergent env panel if you want the page gated.
+- P2 — Add TTL on `demo_sessions` (90 days) to keep collection bounded.
+- P3 — Slack digest of today's warm prospects.
+
+---
+
+
 ## Iter 177 — Light Mode Theme Toggle (Oct 2026)
 
 User: "give me a light mode so that my flows are properly visible". Interrupted the in-flight analytics upgrade (that WIP still saved to backend/demo_analytics.py — endpoints work; frontend wiring is still queued).

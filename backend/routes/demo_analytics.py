@@ -234,9 +234,20 @@ async def event(req: EventReq):
 
 
 # ─── /pulse — founder-facing feed ────────────────────────────────
+# Soft token guard — if PULSE_ACCESS_TOKEN is set in env, require it as
+# ?token=<value>. Keeps the page friction-less when the env isn't set.
+_PULSE_TOKEN = os.environ.get("PULSE_ACCESS_TOKEN", "").strip()
+
+
 @router.get("/pulse")
-def pulse(limit: int = Query(50, ge=1, le=500)):
-    """Session digest for the founder dashboard. Newest first."""
+def pulse(limit: int = Query(50, ge=1, le=500), token: Optional[str] = Query(None)):
+    """Session digest for the founder dashboard. Newest first.
+
+    If PULSE_ACCESS_TOKEN is set in the environment, a matching `?token=`
+    query param is required. If not set, the endpoint is public (demo mode).
+    """
+    if _PULSE_TOKEN and token != _PULSE_TOKEN:
+        raise HTTPException(401, "Pulse access token missing or invalid.")
     try:
         rows = list(_sessions.find({}, {"_id": 1, "started_at": 1, "last_seen_at": 1,
                                         "dwell_sec": 1, "company": 1, "mode": 1,
