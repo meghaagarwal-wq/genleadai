@@ -36,7 +36,9 @@ import CommandCenterScreen  from './demo/CommandCenterScreen';
 import InstinctFeedScreen   from './demo/InstinctFeedScreen';
 import AskAriaBar           from './demo/AskAriaBar';
 import RecordDemoButton     from './demo/RecordDemoButton';
+import PrefillPrompt        from './demo/PrefillPrompt';
 import { openCalendlyPopup } from '../../lib/calendlyPopup';
+import { getOrCreateSessionId, getIdentity, setIdentity, postAnalytics } from '../../lib/demoSession';
 
 // ───── theme tokens — mutable so existing closures see the active theme ─────
 const DARK_T = {
@@ -187,6 +189,12 @@ export default function UniversalDemoDashboard() {
   const captureRef = useRef(null);
   const apiUrl = process.env.REACT_APP_BACKEND_URL || '';
 
+  // iter177 — Stable per-browser session id + identity (prefilled Calendly later)
+  const sessionIdRef = useRef(null);
+  if (sessionIdRef.current === null) sessionIdRef.current = getOrCreateSessionId();
+  const sessionId = sessionIdRef.current;
+  const [identity, setIdentityState] = useState(() => getIdentity());
+
   // Deep-link: if ?company=<domain> is present, hit /api/enrich silently.
   // Skip if enrichment already came from a sample click (source==='sample'),
   // so we don't clobber preset data with lower-quality scraped data.
@@ -288,9 +296,8 @@ export default function UniversalDemoDashboard() {
     setTimeout(() => setLinkCopied(false), 1600);
   }, [mode, scenario, enrichment, companyParam]);
 
-  // iter176 — Book a walkthrough, passing the current demo URL to Calendly
-  // as UTM params so the founder sees the personalized dashboard on the
-  // Calendly booking notification.
+  // iter176 — Book a walkthrough, passing the current demo URL + prospect
+  // identity to Calendly so the booking form is prefilled.
   const calendlyBase = process.env.REACT_APP_CALENDLY_URL;
   const handleBookWalkthrough = useCallback(() => {
     if (!calendlyBase) return;
@@ -298,39 +305,77 @@ export default function UniversalDemoDashboard() {
     u.searchParams.set('mode', mode);
     if (scenario && scenario !== 'default') u.searchParams.set('scenario', scenario);
     if (enrichment?.domain) u.searchParams.set('company', enrichment.domain);
+    postAnalytics(apiUrl, 'event', { session_id: sessionId, kind: 'book_clicked', data: { from: 'demo' } });
     openCalendlyPopup(calendlyBase, {
       source:   'aria-demo',
       demoUrl:  u.toString(),
       company:  enrichment?.domain || brand?.companyName,
       mode,
       scenario,
+      name:     identity?.name  || '',
+      email:    identity?.email || '',
     });
-  }, [calendlyBase, mode, scenario, enrichment, brand]);
+  }, [calendlyBase, mode, scenario, enrichment, brand, identity, apiUrl, sessionId]);
 
-  // iter176 — Log a demo view on mount + whenever mode/scenario/company changes.
-  // Deliberately fire-and-forget; never block the UI on this.
+  // iter176/177 — Log a demo view (now session-aware) on mount + on
+  // mode/scenario/company change. Fire-and-forget.
   const lastLoggedRef = useRef('');
   useEffect(() => {
     const source = params.get('source') || 'direct';
     const sig = `${enrichment?.domain || companyParam || ''}|${mode}|${scenario}|${source}`;
     if (sig === lastLoggedRef.current) return;
     lastLoggedRef.current = sig;
-    try {
-      fetch(`${apiUrl}/api/demo-analytics/view`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company:  enrichment?.domain || companyParam || null,
-          mode, scenario,
-          source,
-          path:     '/aria-demo',
-          referrer: (typeof document !== 'undefined' ? document.referrer : '') || null,
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    } catch (_) { /* noop */ }
+    postAnalytics(apiUrl, 'view', {
+      session_id: sessionId,
+      company:    enrichment?.domain || companyParam || null,
+      mode, scenario, source,
+      path:       '/aria-demo',
+      referrer:   (typeof document !== 'undefined' ? document.referrer : '') || null,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, scenario, enrichment, companyParam]);
+
+  // iter177 — Heartbeat every 30s so we can compute real dwell time. We
+  // skip beats while the tab is hidden so idle open tabs don't inflate dwell.
+  useEffect(() => {
+    const beat = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      postAnalytics(apiUrl, 'heartbeat', {
+        session_id: sessionId,
+        company:    enrichment?.domain || companyParam || null,
+        mode, scenario, tab,
+      });
+    };
+    beat(); // one immediate beat so the server knows we're here
+    const id = setInterval(beat, 30_000);
+    return () => clearInterval(id);
+  }, [apiUrl, sessionId, enrichment, companyParam, mode, scenario, tab]);
+
+  // iter177 — Prefill prompt: open once after 120s if we don't have identity
+  // and the prospect hasn't dismissed in the last 7 days.
+  const [showPrefill, setShowPrefill] = useState(false);
+  useEffect(() => {
+    if (identity) return;
+    const dismissedAt = (() => {
+      try { return parseInt(window.localStorage.getItem('aria-demo-prefill-dismissed') || '0', 10); }
+      catch (_) { return 0; }
+    })();
+    if (dismissedAt && Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) return;
+    const id = setTimeout(() => setShowPrefill(true), 120_000);
+    return () => clearTimeout(id);
+  }, [identity]);
+
+  const onPrefillSubmit = useCallback((ident) => {
+    setIdentity(ident);
+    setIdentityState(ident);
+    postAnalytics(apiUrl, 'identify', { session_id: sessionId, ...ident });
+  }, [apiUrl, sessionId]);
+  const onPrefillClose = useCallback((submitted) => {
+    setShowPrefill(false);
+    if (!submitted) {
+      try { window.localStorage.setItem('aria-demo-prefill-dismissed', String(Date.now())); } catch (_) {}
+    }
+  }, []);
 
   const handleNewSignal = useCallback(() => {
     // A streamed signal is small credit — reads as "ARIA caught this for you"
@@ -407,6 +452,13 @@ export default function UniversalDemoDashboard() {
         onCancel={() => setShowOverlay(false)}
         onComplete={handleOverlayComplete}
         apiUrl={apiUrl}
+        T={T}
+      />
+      <PrefillPrompt
+        open={showPrefill}
+        onClose={onPrefillClose}
+        onSubmit={onPrefillSubmit}
+        brand={brand}
         T={T}
       />
 

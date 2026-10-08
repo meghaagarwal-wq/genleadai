@@ -62,6 +62,10 @@ export async function openCalendlyPopup(baseUrl, context = {}) {
   if (context.company)  params.set('utm_campaign', String(context.company).slice(0, 120));
   if (context.mode)     params.set('utm_term',     `mode:${context.mode}${context.scenario ? '|scenario:' + context.scenario : ''}`.slice(0, 120));
 
+  // Prefill questions on the Calendly booking form (optional).
+  if (context.name)     params.set('name',  String(context.name).slice(0, 120));
+  if (context.email)    params.set('email', String(context.email).slice(0, 200));
+
   // Calendly also renders `name` + `email` prefill if we pass them; skip PII.
   const finalUrl = u.toString();
 
